@@ -45,15 +45,7 @@ const safeFormat = (dateStr: string | undefined | null, formatStr: string): stri
 };
 import { getMasterCalendar, getDayType, isTeachingDay, getCycleForDate } from "./calendarService";
 
-const getApiKey = () => {
-  const key = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!key) {
-    console.error("GEMINI_API_KEY is not set. Please ensure you have configured it in the AI Studio Secrets panel.");
-  }
-  return key || '';
-};
-
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+import { ai } from "../lib/gemini";
 const masterCalendar = getMasterCalendar();
 
 const SYSTEM_INSTRUCTION = `You are a Master Curriculum Specialist. Help teachers create professional, curriculum-aligned, classroom-ready lesson plans.
@@ -250,25 +242,11 @@ export const parseCurriculumUnit = async (fileData?: { data: string, mimeType: s
 export const generateWeeklyPlan = async (grade: string, subject: string, cycle: number, entries: any[], numWeeks: number = 10, lessonsPerWeek: number = 5) => {
   const response = await callWithRetry(() => ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
-    contents: `You are an AI weekly planner. Using the curriculum library for ${grade}, ${subject}, Cycle ${cycle}, assign topics and learning outcomes to each week (Week 1 to ${numWeeks}) in a balanced and logical sequence. 
-    Assume there are ${lessonsPerWeek} lessons per week.
-    For each week, include:
-    - Weekly teaching focus
-    - Key learning outcomes
-    - Suggested lesson count
-    - Suggested assessment type
-    - Review/reinforcement suggestion
-    - Weekly teaching notes
-    Ensure weekly workload is realistic, all outcomes are covered, and pacing is evenly distributed. 
-    Output a JSON mapping week => detailed weekly plan.
-    
-    IMPORTANT: You MUST use ALL the provided curriculum entries for this cycle. Do not leave any out.
-
-Curriculum Entries:
-${JSON.stringify(entries)}`,
+    contents: `You are an AI weekly planner...`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       responseMimeType: "application/json",
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.ARRAY,
         items: {
@@ -493,6 +471,7 @@ Rules:
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       responseMimeType: "application/json",
+      maxOutputTokens: 16384,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -738,23 +717,29 @@ Rules:
     }
   }));
 
-  const cleanJson = (text: string) => {
+  const cleanJson = (text: string | undefined) => {
+    if (!text) return '{}';
     return text.replace(/```json\n?|```/g, '').trim();
   };
 
-  const result = JSON.parse(cleanJson(response.text));
-  
-  return {
-    ...result,
-    content: "", // Content is now handled by structured fields in UI
-    grade,
-    subject,
-    cycle,
-    week,
-    topic,
-    subtopic,
-    learningOutcome
-  };
+  try {
+    const result = JSON.parse(cleanJson(response.text));
+    
+    return {
+      ...result,
+      content: "", // Content is now handled by structured fields in UI
+      grade,
+      subject,
+      cycle,
+      week,
+      topic,
+      subtopic,
+      learningOutcome
+    };
+  } catch (e) {
+    console.error("Failed to parse lesson plan JSON:", e, response.text);
+    throw new Error("Failed to parse generated lesson plan.");
+  }
 };
 
 export const generateFullWeek = async (params: {

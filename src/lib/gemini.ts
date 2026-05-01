@@ -2,14 +2,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { LessonResourcesResponse } from "../types/index";
 
 const getApiKey = () => {
-  const key = import.meta.env.VITE_GEMINI_API_KEY;
+  const key = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!key) {
     console.error("GEMINI_API_KEY is not set. Please ensure you have configured it in the AI Studio Secrets panel.");
   }
   return key || '';
 };
 
-const ai = new GoogleGenAI({
+export const ai = new GoogleGenAI({
   apiKey: getApiKey()
 });
 

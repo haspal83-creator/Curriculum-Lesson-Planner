@@ -19,15 +19,7 @@ import {
   Subject 
 } from "../types";
 
-const getApiKey = () => {
-  const key = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!key) {
-    console.error("GEMINI_API_KEY is not set. Please ensure you have configured it in the AI Studio Secrets panel.");
-  }
-  return key || '';
-};
-
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+import { ai } from "../lib/gemini";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
