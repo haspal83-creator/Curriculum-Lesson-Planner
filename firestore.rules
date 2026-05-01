@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: name (string), email (string), role (string)
+    //
+    // Collection: user_settings
+    // Fields: various teacher preferences
+    //
+    // Collection: curriculum
+    // Fields: grade, subject, topic, learning_outcomes, createdBy, userId
+    //
+    // Collection: saved_lessons
+    // Fields: title, subject, topic, userId, createdBy, status
+    //
+    // [And other collections following similar patterns with userId/createdBy]
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && 
+             resource != null && 
+             (request.auth.uid == resource.data.createdBy || 
+              request.auth.uid == resource.data.teacher_id ||
+              request.auth.uid == resource.data.user_id ||
+              request.auth.uid == resource.data.userId);
+    }
+    
+    function uidUnchanged() {
+      return !('createdBy' in request.resource.data || 'userId' in request.resource.data) || 
+             (request.resource.data.get('createdBy', null) == request.auth.uid ||
+              request.resource.data.get('userId', null) == request.auth.uid);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "haspal83@gmail.com" && request.auth.token.email_verified == true) ||
+          (request.auth.token.email == "fingerfoodsdelightz@gmail.com" && request.auth.token.email_verified == true) ||
+          (request.auth.token.email == "galampu@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // Test Connection
+    match /test/connection {
+      allow read: if isAuthenticated();
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // User Settings
+    match /user_settings/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Generic rule for all other collections
+    match /{collectionName}/{docId} {
+      allow read: if isAuthenticated() && (
+        collectionName == 'curriculum' || 
+        (resource != null && (
+          resource.data.get('createdBy', '') == request.auth.uid || 
+          resource.data.get('userId', '') == request.auth.uid || 
+          resource.data.get('teacher_id', '') == request.auth.uid ||
+          resource.data.get('user_id', '') == request.auth.uid ||
+          resource.data.get('isPublic', false) == true
+        )) || 
+        isAdmin()
+      );
+      
+      allow create: if isAuthenticated() && (
+        request.resource.data.get('createdBy', request.auth.uid) == request.auth.uid ||
+        request.resource.data.get('userId', request.auth.uid) == request.auth.uid
+      );
+      
+      allow update, delete: if isDocOwner() || isAdmin();
+    }
+  }
+}

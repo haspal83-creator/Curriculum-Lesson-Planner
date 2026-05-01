@@ -1,0 +1,129 @@
+{
+  "schoolYear": "2025-2026",
+  "teachingPeriod": {
+    "start": "2025-09-01",
+    "end": "2026-06-26",
+    "weeks": 38,
+    "schoolDays": 182
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "start": "2025-09-01",
+      "end": "2025-10-31",
+      "weeks": 9,
+      "days": 42
+    },
+    {
+      "cycle": 2,
+      "start": "2025-11-03",
+      "end": "2026-01-23",
+      "weeks": 9,
+      "days": 43
+    },
+    {
+      "cycle": 3,
+      "start": "2026-01-26",
+      "end": "2026-03-27",
+      "weeks": 9,
+      "days": 44
+    },
+    {
+      "cycle": 4,
+      "start": "2026-04-13",
+      "end": "2026-06-26",
+      "weeks": 11,
+      "days": 53
+    }
+  ],
+  "vacations": [
+    {
+      "name": "Christmas Vacation",
+      "start": "2025-12-15",
+      "end": "2026-01-02",
+      "weeks": 3
+    },
+    {
+      "name": "Easter Vacation",
+      "start": "2026-03-30",
+      "end": "2026-04-10",
+      "weeks": 2
+    },
+    {
+      "name": "End-of-School-Year Vacation",
+      "start": "2026-06-29",
+      "end": "2026-07-31",
+      "weeks": 5
+    }
+  ],
+  "nonTeachingPeriods": [
+    {
+      "name": "Continuous Professional Development",
+      "start": "2025-08-04",
+      "end": "2025-08-15",
+      "weeks": 2
+    },
+    {
+      "name": "Teachers on Call / School Planning",
+      "start": "2025-08-18",
+      "end": "2025-08-29",
+      "weeks": 2
+    }
+  ],
+  "holidays": [
+    {
+      "name": "Emancipation Day",
+      "date": "2025-08-01",
+      "observed": "2025-08-01"
+    },
+    {
+      "name": "St. George's Caye Day",
+      "date": "2025-09-10",
+      "observed": "2025-09-10"
+    },
+    {
+      "name": "Independence Day",
+      "date": "2025-09-21",
+      "observed": "2025-09-22"
+    },
+    {
+      "name": "Indigenous Peoples' Resistance Day",
+      "date": "2025-10-12",
+      "observed": "2025-10-13"
+    },
+    {
+      "name": "Garifuna Settlement Day",
+      "date": "2025-11-19",
+      "observed": "2025-11-19"
+    },
+    {
+      "name": "George Price Day",
+      "date": "2026-01-15",
+      "observed": "2026-01-15"
+    },
+    {
+      "name": "National Heroes & Benefactors' Day",
+      "date": "2026-03-09",
+      "observed": "2026-03-09"
+    },
+    {
+      "name": "Labour Day",
+      "date": "2026-05-01",
+      "observed": "2026-05-01"
+    }
+  ],
+  "optionalSchoolDays": [
+    {
+      "name": "Patronal Feast",
+      "management": "Catholic"
+    },
+    {
+      "name": "Patronal Feast",
+      "management": "Anglican"
+    },
+    {
+      "name": "Whit Monday",
+      "management": "Methodist"
+    }
+  ]
+}
