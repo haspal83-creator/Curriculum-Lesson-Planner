@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   addDoc, 
@@ -6,20 +5,17 @@ import {
   doc, 
   getDocs, 
   query, 
-  where, 
-  serverTimestamp 
+  where
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
-
+import { stripUndefined, callWithRetry } from "../lib/utils";
 import { 
   SavedLesson, 
   LessonResourceNew, 
-  LessonResourceType, 
-  GradeLevel, 
-  Subject 
+  LessonResourceType
 } from "../types";
 
-import { ai } from "../lib/gemini";
+import { generateResource as generateAiResource } from "./gemini";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -59,53 +55,36 @@ export const lessonDeliveryService = {
     }
   },
 
- async generateResource(lesson: SavedLesson, type: LessonResourceType): Promise<void> {
-  const prompt = `Generate a ${type.replace('_', ' ')} for the following lesson:
-Title: ${lesson.title}
-Topic: ${lesson.topic}
-Sub-topic: ${lesson.sub_topic || ''}
-Grade: ${lesson.class_id}
-Subject: ${lesson.subject}
-Objectives: ${lesson.objectives?.join(', ') || ''}
-Learning Outcomes: ${lesson.learning_outcomes?.join(', ') || ''}
+  async getLessonResources(lessonId: string): Promise<LessonResourceNew[]> {
+    const q = query(collection(db, 'lesson_resources_new'), where('lesson_id', '==', lessonId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as LessonResourceNew));
+  },
 
-Provide the content in a structured JSON format suitable for a teacher dashboard.`;
+  async generateResource(lesson: SavedLesson, type: LessonResourceType): Promise<void> {
+    const aiContent = await generateAiResource(type, lesson);
 
-  // ✅ CALL YOUR NETLIFY BACKEND INSTEAD OF GEMINI SDK
-  const response = await fetch("/.netlify/functions/generate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ prompt }),
-  });
+    const resource: Omit<LessonResourceNew, 'id'> = {
+      lesson_id: lesson.id!,
+      resource_type: type,
+      title: type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      content: aiContent,
+      generated_by_ai: true,
+      editable: true,
+      version: 1,
+      updated_at: new Date().toISOString(),
+      createdBy: auth.currentUser?.uid || lesson.createdBy,
+      createdAt: new Date().toISOString()
+    };
 
-  const data = await response.json();
+    await addDoc(collection(db, 'lesson_resources_new'), stripUndefined(resource));
+  },
 
-  // Some APIs return text, some return object
-  const content =
-    typeof data === "string"
-      ? JSON.parse(data)
-      : data?.candidates?.[0]?.content || data;
-
-  const resource: Omit<LessonResourceNew, 'id'> = {
-    lesson_id: lesson.id!,
-    resource_type: type,
-    title: type
-      .split('_')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' '),
-    content: content,
-    generated_by_ai: true,
-    editable: true,
-    version: 1,
-    updated_at: new Date().toISOString(),
-    createdBy: auth.currentUser?.uid || lesson.createdBy,
-    createdAt: new Date().toISOString()
-  };
-
-  await addDoc(
-    collection(db, 'lesson_resources_new'),
-    stripUndefined(resource)
-  );
-}
+  async updateResource(resourceId: string, updates: Partial<LessonResourceNew>) {
+    const ref = doc(db, 'lesson_resources_new', resourceId);
+    await updateDoc(ref, {
+      ...updates,
+      updated_at: new Date().toISOString()
+    });
+  }
+};
