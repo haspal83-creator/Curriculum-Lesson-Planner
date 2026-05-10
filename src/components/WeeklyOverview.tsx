@@ -60,7 +60,7 @@ export function WeeklyOverview({ plan }: { plan: WeeklyCurriculumPlan }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {plan.daily_breakdown_table.map((day) => (
+              {(plan.daily_breakdown_table || []).map((day) => (
                 <tr key={day.day}>
                   <td className="py-4 px-4 font-bold text-gray-600">Day {day.day}</td>
                   <td className="py-4 px-4 font-bold text-gray-900">{day.lessonTitle}</td>

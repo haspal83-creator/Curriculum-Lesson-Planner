@@ -5,8 +5,25 @@ import { fileURLToPath } from "url";
 import * as geminiService from "./src/services/gemini.implementation";
 import { generateLessonResources } from "./src/lib/gemini";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Use a safe way to derive __dirname and __filename that works in both ESM and CJS
+let __filename = '';
+let __dirname = '';
+
+try {
+  // @ts-ignore
+  if (typeof __filename !== 'undefined') {
+    // @ts-ignore
+    __filename = __filename;
+    // @ts-ignore
+    __dirname = __dirname;
+  } else {
+    __filename = fileURLToPath(import.meta.url);
+    __dirname = path.dirname(__filename);
+  }
+} catch (e) {
+  __dirname = process.cwd();
+  __filename = path.join(__dirname, 'server.ts');
+}
 
 async function startServer() {
   const app = express();

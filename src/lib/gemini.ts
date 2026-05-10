@@ -17,17 +17,24 @@ const getApiKey = () => {
  * This prevents obscure SDK errors and provides clear feedback.
  */
 export function validateGeminiConfig() {
-  if (!getApiKey()) {
-    throw new Error("Gemini API key is missing. Please configure it in the project settings.");
-  }
+  getGenAI();
 }
 
-export const ai = new GoogleGenAI({
-  apiKey: getApiKey()
-});
+let genAI: GoogleGenAI | null = null;
+
+export function getGenAI(): GoogleGenAI {
+  if (!genAI) {
+    const key = getApiKey();
+    if (!key) {
+      throw new Error("GEMINI_API_KEY environment variable is required. Please set it in the AI Studio Secrets panel.");
+    }
+    genAI = new GoogleGenAI({ apiKey: key });
+  }
+  return genAI;
+}
 
 export async function generateLessonResources(grade: string, topic: string) {
-  validateGeminiConfig();
+  const ai = getGenAI();
   
   try {
     const prompt = `Generate educational resources for a ${grade} lesson on "${topic}". 

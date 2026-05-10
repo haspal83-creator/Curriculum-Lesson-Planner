@@ -130,7 +130,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
               Weekly Learning Outcomes
             </h3>
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {plan.learningOutcomes.map((outcome, i) => (
+              {(plan.learningOutcomes || []).map((outcome, i) => (
                 <li key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
                   <span className="text-gray-700 font-medium">{outcome}</span>
@@ -144,7 +144,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
               <thead>
                 <tr className="bg-gray-50 border-bottom border-gray-200">
                   <th className="p-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-r border-gray-200 w-24">Day</th>
-                  {plan.days[0].strands.map((s, i) => (
+                  {(plan.days?.[0]?.strands || []).map((s, i) => (
                     <th key={i} className="p-4 text-[10px] font-black uppercase tracking-widest text-gray-400">
                       {s.strand} ({s.timeAllocation})
                     </th>
@@ -152,7 +152,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {plan.days.map((day) => (
+                {(plan.days || []).map((day) => (
                   <tr key={day.day} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="p-4 border-r border-gray-200 bg-gray-50/50">
                       <div className="space-y-1">
@@ -160,12 +160,12 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                         <p className="text-[10px] text-gray-500 font-bold uppercase">{day.date}</p>
                       </div>
                     </td>
-                    {day.strands.map((strand, i) => (
+                    {(day.strands || []).map((strand, i) => (
                       <td key={i} className="p-4 align-top">
                         <div className="space-y-2">
                           <p className="text-xs font-bold text-gray-900 line-clamp-2">{strand.objective}</p>
                           <div className="flex flex-wrap gap-1">
-                            {strand.activities.slice(0, 2).map((act, j) => (
+                            {(strand.activities || []).slice(0, 2).map((act, j) => (
                               <span key={j} className="text-[9px] bg-white border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
                                 {act.length > 20 ? act.substring(0, 20) + '...' : act}
                               </span>
@@ -185,7 +185,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
       {/* Daily Lesson Plans View */}
       {activeView === 'daily' && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-          {plan.days.map((day) => (
+          {(plan.days || []).map((day) => (
             <Card key={day.day} className="overflow-hidden border-2 border-gray-100">
               <button 
                 onClick={() => toggleDay(day.day)}
@@ -212,7 +212,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                     className="border-t border-gray-100"
                   >
                     <div className="p-6 space-y-8">
-                      {day.strands.map((strand, i) => (
+                      {(day.strands || []).map((strand, i) => (
                         <div key={i} className="space-y-4">
                           <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
                             <div className="flex items-center gap-3">
@@ -235,7 +235,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                               <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Activities</label>
                                 <ul className="space-y-2">
-                                  {strand.activities.map((act, j) => (
+                                  {(strand.activities || []).map((act, j) => (
                                     <li key={j} className="flex items-start gap-3 text-sm text-gray-700">
                                       <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                                       {act}
@@ -257,7 +257,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                                     Resources
                                   </h5>
                                   <div className="flex flex-wrap gap-1.5">
-                                    {strand.resources.map((res, j) => (
+                                    {(strand.resources || []).map((res, j) => (
                                       <span key={j} className="text-[9px] bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-bold">
                                         {res}
                                       </span>
@@ -285,7 +285,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                                   <div className="space-y-1.5">
                                     <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Examples</p>
                                     <div className="flex flex-wrap gap-1.5">
-                                      {strand.teacherGuidance.examples.map((ex, j) => (
+                                      {(strand.teacherGuidance?.examples || []).map((ex, j) => (
                                         <span key={j} className="text-[10px] bg-white text-amber-800 px-2 py-1 rounded-lg border border-amber-200 font-medium">
                                           {ex}
                                         </span>
@@ -366,7 +366,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                     <div className="space-y-2">
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vocabulary Words</p>
                       <div className="flex flex-wrap gap-2">
-                        {plan.resourcePack.vocabularyList.map((word, i) => (
+                        {(plan.resourcePack?.vocabularyList || []).map((word, i) => (
                           <Badge key={i} variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100">
                             {word}
                           </Badge>
@@ -376,7 +376,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                     <div className="space-y-2">
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">High Frequency Words</p>
                       <div className="flex flex-wrap gap-2">
-                        {plan.resourcePack.highFrequencyWords.map((word, i) => (
+                        {(plan.resourcePack?.highFrequencyWords || []).map((word, i) => (
                           <Badge key={i} variant="outline" className="border-indigo-200 text-indigo-700">
                             {word}
                           </Badge>
@@ -425,7 +425,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Comprehension Questions</p>
                     <ul className="space-y-2">
-                      {plan.resourcePack.comprehensionQuestions.map((q, i) => (
+                      {(plan.resourcePack?.comprehensionQuestions || []).map((q, i) => (
                         <li key={i} className="text-xs text-gray-700 flex gap-2">
                           <span className="font-bold text-amber-600">{i+1}.</span>
                           {q}
@@ -436,7 +436,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Oral Prompts</p>
                     <ul className="space-y-2">
-                      {plan.resourcePack.oralQuestioningPrompts.map((q, i) => (
+                      {(plan.resourcePack?.oralQuestioningPrompts || []).map((q, i) => (
                         <li key={i} className="text-xs text-gray-700 flex gap-2">
                           <span className="font-bold text-indigo-600">•</span>
                           {q}
@@ -456,7 +456,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Anchor Charts</p>
                     <ul className="space-y-1">
-                      {plan.resourcePack.anchorChartSuggestions.map((s, i) => (
+                      {(plan.resourcePack?.anchorChartSuggestions || []).map((s, i) => (
                         <li key={i} className="text-xs text-gray-700">• {s}</li>
                       ))}
                     </ul>
@@ -464,7 +464,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Worksheet Ideas</p>
                     <ul className="space-y-1">
-                      {plan.resourcePack.worksheetIdeas.map((s, i) => (
+                      {(plan.resourcePack?.worksheetIdeas || []).map((s, i) => (
                         <li key={i} className="text-xs text-gray-700">• {s}</li>
                       ))}
                     </ul>

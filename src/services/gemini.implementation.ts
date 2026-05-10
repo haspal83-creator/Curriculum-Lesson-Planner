@@ -45,7 +45,7 @@ const safeFormat = (dateStr: string | undefined | null, formatStr: string): stri
 };
 import { getMasterCalendar, getDayType, isTeachingDay, getCycleForDate } from "./calendarService";
 
-import { ai, validateGeminiConfig } from "../lib/gemini";
+import { getGenAI, validateGeminiConfig } from "../lib/gemini";
 const masterCalendar = getMasterCalendar();
 
 const SYSTEM_INSTRUCTION = `You are a Master Curriculum Specialist. Help teachers create professional, curriculum-aligned, classroom-ready lesson plans.
@@ -98,7 +98,7 @@ export const parseCurriculum = async (fileData?: { data: string, mimeType: strin
     });
   }
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3-flash-preview",
     contents: { parts },
     config: {
@@ -187,7 +187,7 @@ export const parseCurriculumUnit = async (fileData?: { data: string, mimeType: s
     });
   }
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3-flash-preview",
     contents: { parts },
     config: {
@@ -243,7 +243,7 @@ export const parseCurriculumUnit = async (fileData?: { data: string, mimeType: s
 
 export const generateWeeklyPlan = async (grade: string, subject: string, cycle: number, entries: any[], numWeeks: number = 10, lessonsPerWeek: number = 5) => {
   validateGeminiConfig();
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `You are an AI weekly planner...`,
     config: {
@@ -344,7 +344,7 @@ export const generateWeeklyBreakdown = async (params: {
   
   Output a JSON object matching the WeeklyCurriculumPlan structure.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -470,7 +470,7 @@ Rules:
 - Materials must be precise and organized by stage.
 - Adapt complexity for ${grade}.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -871,7 +871,7 @@ export const generateCyclePacingMap = async (params: PacingMapParams) => {
   - warnings: Array of strings.
   - distributionMethod: "${distributionMethod}"`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1034,7 +1034,7 @@ For each strand, provide "AI Teaching Assistant" style guidance:
 
 Ensure the content is age-appropriate for ${grade} and aligns with the Belizean curriculum standards.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1142,7 +1142,7 @@ Include Answer Key: ${options.includeAnswerKey ? 'Yes' : 'No'}
 
 Output the content in Markdown format.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1176,7 +1176,7 @@ RETEACH REQUIREMENTS:
 
 Output a full lesson package in JSON format.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1229,7 +1229,7 @@ Generate:
 
 Output in Markdown format.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1256,7 +1256,7 @@ Include:
 
 Output in Markdown format.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1284,7 +1284,7 @@ Generate a 5-day revision plan. Each day should include:
 
 Output as a JSON array of 5 days.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1333,7 +1333,7 @@ export const generateYearlyCurriculumMap = async (grade: GradeLevel, subject: Su
   
   Output as a JSON object matching the YearlyCurriculumMap interface.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1406,7 +1406,7 @@ export const generateCyclePlan = async (map: YearlyCurriculumMap, cycleNumber: n
   
   Output as a JSON object matching the CyclePlan interface.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1463,7 +1463,7 @@ export const generateWeeklyTeachingPlan = async (cyclePlan: CyclePlan, weekNumbe
   
   Output as a JSON object matching the WeeklyTeachingPlan interface.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1511,7 +1511,7 @@ Context: ${JSON.stringify(context)}
 
 Maintain the professional educational tone and ensure the output is classroom-ready.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1533,7 +1533,7 @@ Objectives: ${lessonContext.specificObjectives.join(', ')}
 
 Ensure the new content is high-quality, detailed, and classroom-ready.`;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1589,7 +1589,7 @@ export const generateVideoScript = async (
     Return ONLY the script text.
   `;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt
   }));
@@ -1623,7 +1623,7 @@ export const generateVideoScenes = async (
     Structure the response as a JSON array of objects matching the VideoScene interface.
   `;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
@@ -1661,7 +1661,7 @@ export const generateSceneAudio = async (
   validateGeminiConfig();
   const voiceName = voiceSettings.gender === 'Female' ? 'Kore' : 'Zephyr';
   
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-flash-tts-preview",
     contents: [{ parts: [{ text: `Say in a ${voiceSettings.tone.toLowerCase()} tone at a ${voiceSettings.pace.toLowerCase()} pace: ${text}` }] }],
     config: {
@@ -1683,7 +1683,7 @@ export const generateSceneVisual = async (
   grade: GradeLevel
 ): Promise<string> => {
   validateGeminiConfig();
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-2.5-flash-image",
     contents: {
       parts: [
@@ -1749,7 +1749,7 @@ export const generateLessonVideo = async (
   Ensure the language is age-appropriate for ${lesson.grade} students.
   `;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -1811,7 +1811,7 @@ export const generateLessonVideo = async (
     }
   };
 
-  const result = JSON.parse(cleanJson(response.text));
+  const result = JSON.parse(cleanJson((response as any).text));
   const now = new Date().toISOString();
   
   return {
@@ -2070,7 +2070,7 @@ export const generateWeeklyLessonPlan = async (params: {
     ]
   };
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {
@@ -2110,7 +2110,7 @@ export const generateWeeklyLessonPlan = async (params: {
     return text.replace(/```json\n?|```/g, '').trim();
   };
 
-  const result = JSON.parse(cleanJson(response.text));
+  const result = JSON.parse(cleanJson((response as any).text));
   
   // Post-process to ensure daily lessons have basic metadata
   const processedDays = result.week.days.map((d: any) => ({
@@ -2159,7 +2159,7 @@ export const generateVideoResourcePack = async (
   Structure the response as a JSON object matching the resourcePack structure.
   `;
 
-  const response = await callWithRetry(() => ai.models.generateContent({
+  const response = await callWithRetry(() => getGenAI().models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: prompt,
     config: {

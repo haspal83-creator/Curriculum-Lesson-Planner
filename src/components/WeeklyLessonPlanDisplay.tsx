@@ -33,7 +33,7 @@ export function WeeklyLessonPlanDisplay({
   };
 
   const handleCopyMonday = () => {
-    if (!onUpdateDayPlan) return;
+    if (!onUpdateDayPlan || !plan.week?.days?.[0]) return;
     const mondayPlan = plan.week.days[0].lesson;
     // Copy Monday to Tues-Fri
     for (let i = 1; i < 5; i++) {
@@ -41,7 +41,7 @@ export function WeeklyLessonPlanDisplay({
     }
   };
 
-  const activeDay = plan.week.days[activeDayIndex];
+  const activeDay = plan.week?.days?.[activeDayIndex];
 
   return (
     <div className="space-y-6">
@@ -58,8 +58,8 @@ export function WeeklyLessonPlanDisplay({
                 <Calendar className="w-4 h-4" />
                 <span className="text-[10px] font-black uppercase tracking-widest">Weekly Planning Mode</span>
               </div>
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">{plan.week.topic}</h2>
-              <p className="text-gray-500 font-medium">{plan.week.grade} • {plan.week.subject}</p>
+              <h2 className="text-3xl font-black text-gray-900 tracking-tight">{plan.week?.topic || 'Weekly Plan'}</h2>
+              <p className="text-gray-500 font-medium">{plan.week?.grade || '-'} • {plan.week?.subject || '-'}</p>
             </div>
             
             <div className="flex gap-2">
@@ -91,7 +91,7 @@ export function WeeklyLessonPlanDisplay({
           </div>
 
           <div className="grid grid-cols-5 gap-3 pt-4">
-            {plan.week.days.map((d, idx) => (
+            {plan.week?.days?.map((d, idx) => (
               <button
                 key={d.day}
                 onClick={() => setActiveDayIndex(idx)}
