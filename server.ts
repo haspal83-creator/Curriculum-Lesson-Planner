@@ -41,6 +41,9 @@ async function startServer() {
         case 'generateLessonPlan':
           result = await geminiService.generateLessonPlan(params);
           break;
+        case 'generateLanguageArtsDailyPlan':
+          result = await geminiService.generateLanguageArtsDailyPlan(params);
+          break;
         case 'generateWeeklyPlan':
           const { grade, subject, cycle, entries, numWeeks, lessonsPerWeek } = params;
           result = await geminiService.generateWeeklyPlan(grade, subject, cycle, entries, numWeeks, lessonsPerWeek);

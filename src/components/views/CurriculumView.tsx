@@ -21,6 +21,7 @@ import { CurriculumEntry, GradeLevel, Subject } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CurriculumViewProps {
+  activeClass?: GradeLevel | null;
   curriculum: CurriculumEntry[];
   onDelete: (id: string) => Promise<void>;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
@@ -35,6 +36,7 @@ interface CurriculumViewProps {
 import { useToasts } from '../../context/ToastContext';
 
 export function CurriculumView({ 
+  activeClass,
   curriculum, 
   onDelete, 
   onUpload, 
@@ -50,11 +52,11 @@ export function CurriculumView({
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterGrade, setFilterGrade] = useState<GradeLevel | 'All'>('All');
+  const [filterGrade, setFilterGrade] = useState<GradeLevel | 'All'>(activeClass || 'All');
   const [filterSubject, setFilterSubject] = useState<Subject | 'All'>('All');
 
   const [newEntry, setNewEntry] = useState<Partial<CurriculumEntry>>({
-    grade: 'Standard 1',
+    grade: activeClass || 'Standard 4',
     subject: 'Mathematics',
     cycle: 1,
     strand: '',
@@ -126,8 +128,19 @@ export function CurriculumView({
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="space-y-1">
-          <h2 className="text-xl font-bold">Curriculum Repository</h2>
-          <p className="text-sm text-gray-500">Manage official ministry curriculum strands, topics, and learning outcomes.</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold">Curriculum Repository</h2>
+            {activeClass && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {activeClass}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500">
+            {activeClass 
+              ? `Manage official ministry curriculum strands, topics, and learning outcomes for ${activeClass}.`
+              : "Manage official ministry curriculum strands, topics, and learning outcomes."}
+          </p>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" onClick={onLoadSample}>
@@ -237,6 +250,7 @@ export function CurriculumView({
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade</label>
                   <Select 
+                    disabled={!!activeClass}
                     options={[
                       { label: 'Infant 1', value: 'Infant 1' },
                       { label: 'Infant 2', value: 'Infant 2' },
@@ -250,6 +264,9 @@ export function CurriculumView({
                     value={newEntry.grade} 
                     onChange={(val) => setNewEntry({ ...newEntry, grade: val as GradeLevel })} 
                   />
+                  {activeClass && (
+                    <span className="text-[9px] text-indigo-600 font-bold block">Locked to active class</span>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subject</label>

@@ -41,9 +41,25 @@ import {
   CalendarDayType,
   LanguageArtsWeeklyPlan,
   LanguageArtsWeeklyStructure,
-  WeeklyLessonPlan
+  WeeklyLessonPlan,
+  LanguageArtsComponent,
+  LANGUAGE_ARTS_5_COMPONENTS
 } from '../../types';
-import { generateLessonPlan, improveContent, generateLanguageArtsWeeklyPlan, generateWeeklyLessonPlan } from '../../services/gemini';
+import { 
+  generateLessonPlan, 
+  generateLanguageArtsDailyPlan,
+  improveContent, 
+  generateLanguageArtsWeeklyPlan, 
+  generateWeeklyLessonPlan 
+} from '../../services/gemini';
+import { 
+  getFilteredTopics, 
+  getFilteredSubtopics, 
+  getFilteredOutcomes, 
+  validateTopicInContext, 
+  validateGeneratedLesson, 
+  getCurriculumEmptyStateMessage 
+} from '../../services/curriculumFilterService';
 import { useToasts } from '../../context/ToastContext';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
@@ -75,6 +91,9 @@ export function PlannerView({
   onGenerateResource 
 }: PlannerViewProps) {
   const { showToast } = useToasts();
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(
+    prefillData?.academicYear || userSettings.defaultAcademicYear || '2025-2026'
+  );
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(prefillData?.grade || activeClass || userSettings.defaultGrade);
 
   useEffect(() => {
@@ -83,9 +102,10 @@ export function PlannerView({
     }
   }, [activeClass]);
 
-  // Handle prefill updates when returning from Yearly Calendar
+  // Handle prefill updates when returning from Yearly Calendar or Saved Plans
   useEffect(() => {
     if (prefillData) {
+      if (prefillData.academicYear) setSelectedAcademicYear(prefillData.academicYear);
       if (prefillData.grade) setSelectedGrade(prefillData.grade);
       if (prefillData.subject) setSelectedSubject(prefillData.subject);
       if (prefillData.cycle) setSelectedCycle(prefillData.cycle);
@@ -112,15 +132,11 @@ export function PlannerView({
   const [laWeeklyStructure, setLAWeeklyStructure] = useState<LanguageArtsWeeklyStructure>('Recommended');
   const [generatedLAWeeklyPlan, setGeneratedLAWeeklyPlan] = useState<LanguageArtsWeeklyPlan | null>(null);
   const [generatedWeeklyPlan, setGeneratedWeeklyPlan] = useState<WeeklyLessonPlan | null>(null);
-
-  // Reset selections when grade or subject changes, unless it's the initial prefill
-  useEffect(() => {
-    if (!prefillData) {
-      setSelectedTopic('');
-      setSelectedSubtopic('');
-      setSelectedOutcome('');
-    }
-  }, [selectedGrade, selectedSubject]);
+  const [selectedLAComponents, setSelectedLAComponents] = useState<LanguageArtsComponent[]>([
+    'Comprehension — Oral Expression and Listening',
+    'Production and Language Structure — Writing and Composition'
+  ]);
+  const [autoSelectLAComponents, setAutoSelectLAComponents] = useState<boolean>(true);
 
   const activeCalendar = useMemo(() => {
     return yearlyCalendars.find(c => c.grade === selectedGrade && c.subject === selectedSubject) || null;
@@ -148,9 +164,41 @@ export function PlannerView({
     return activeMap.weeks.find(w => w.weekNumber === selectedWeek) || null;
   }, [activeMap, selectedWeek]);
 
-  // Auto-fill from pacing map when week changes
+  // SYSTEM-WIDE CURRICULUM FILTERING RULE:
+  // Strictly filter by Academic Year + Class + Subject + Cycle
+  const filteredTopics = useMemo(() => {
+    return getFilteredTopics(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject,
+      cycle: selectedCycle
+    });
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle]);
+
+  const filteredSubtopics = useMemo(() => {
+    return getFilteredSubtopics(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject,
+      cycle: selectedCycle,
+      topic: selectedTopic
+    });
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic]);
+
+  const filteredOutcomes = useMemo(() => {
+    return getFilteredOutcomes(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject,
+      cycle: selectedCycle,
+      topic: selectedTopic,
+      subtopic: selectedSubtopic
+    });
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, selectedSubtopic]);
+
+  // Auto-fill from pacing map only if mapped topic belongs to the filtered curriculum
   useEffect(() => {
-    if (activeWeekData) {
+    if (activeWeekData && filteredTopics.includes(activeWeekData.topic)) {
       setSelectedTopic(activeWeekData.topic);
       if (activeWeekData.subtopics.length > 0) {
         setSelectedSubtopic(activeWeekData.subtopics[0]);
@@ -159,41 +207,30 @@ export function PlannerView({
         setSelectedOutcome(activeWeekData.learningOutcomes[0]);
       }
     }
-  }, [activeWeekData]);
+  }, [activeWeekData, filteredTopics]);
 
-  const filteredTopics = useMemo(() => {
-    const curriculumTopics = curriculum
-      .filter(c => c.grade === selectedGrade && c.subject === selectedSubject)
-      .map(c => c.topic);
-    
-    const uniqueCurriculumTopics = Array.from(new Set(curriculumTopics));
-
-    if (activeMap && activeMap.weeks.length > 0) {
-      const mapTopics = activeMap.weeks.map(w => w.topic);
-      const uniqueMapTopics = Array.from(new Set(mapTopics));
-      // Merge them, prioritizing map topics but ensuring all curriculum topics are available
-      return Array.from(new Set([...uniqueMapTopics, ...uniqueCurriculumTopics]));
+  // RESET / CLEAR INVALID DOWNSTREAM SELECTIONS:
+  // When any selector (academicYear, class, subject, cycle) changes, reset downstream topics if no longer valid
+  useEffect(() => {
+    if (selectedTopic && !filteredTopics.includes(selectedTopic)) {
+      setSelectedTopic('');
+      setSelectedSubtopic('');
+      setSelectedOutcome('');
     }
-    
-    return uniqueCurriculumTopics;
-  }, [curriculum, selectedGrade, selectedSubject, activeMap]);
+  }, [filteredTopics, selectedTopic]);
 
-  const filteredSubtopics = useMemo(() => {
-    if (activeWeekData && activeWeekData.topic === selectedTopic) {
-      return activeWeekData.subtopics;
+  useEffect(() => {
+    if (selectedSubtopic && !filteredSubtopics.includes(selectedSubtopic)) {
+      setSelectedSubtopic('');
+      setSelectedOutcome('');
     }
-    return Array.from(new Set(curriculum.filter(c => c.grade === selectedGrade && c.subject === selectedSubject && c.topic === selectedTopic).map(c => c.subtopic)));
-  }, [curriculum, selectedGrade, selectedSubject, selectedTopic, activeWeekData]);
+  }, [filteredSubtopics, selectedSubtopic]);
 
-  const filteredOutcomes = useMemo(() => {
-    if (activeWeekData && activeWeekData.topic === selectedTopic) {
-      return activeWeekData.learningOutcomes;
+  useEffect(() => {
+    if (selectedOutcome && !filteredOutcomes.includes(selectedOutcome)) {
+      setSelectedOutcome('');
     }
-    const entries = curriculum.filter(c => c.grade === selectedGrade && c.subject === selectedSubject && c.topic === selectedTopic && (selectedSubtopic ? c.subtopic === selectedSubtopic : true));
-    const outcomes: string[] = [];
-    entries.forEach(e => outcomes.push(...e.learning_outcomes));
-    return Array.from(new Set(outcomes));
-  }, [curriculum, selectedGrade, selectedSubject, selectedTopic, selectedSubtopic, activeWeekData]);
+  }, [filteredOutcomes, selectedOutcome]);
 
   const handleGenerate = async () => {
     if (!selectedTopic || !selectedOutcome) {
@@ -201,10 +238,26 @@ export function PlannerView({
       return;
     }
 
+    // MANDATORY PRE-GENERATION VALIDATION:
+    // Verify that the selected topic belongs to the selected curriculum context
+    const validation = validateTopicInContext(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject,
+      cycle: selectedCycle,
+      topic: selectedTopic
+    });
+
+    if (!validation.valid) {
+      showToast(validation.reason || "This topic is not mapped to the selected class, subject, cycle, or academic year.", "error");
+      return;
+    }
+
     setIsGenerating(true);
     try {
       if (isWeeklyPlanMode) {
         const weeklyPlan = await generateWeeklyLessonPlan({
+          academicYear: selectedAcademicYear,
           grade: selectedGrade,
           subject: selectedSubject,
           topic: selectedTopic,
@@ -216,9 +269,33 @@ export function PlannerView({
           includeDifferentiation: userSettings.aiQuality.includeDifferentiation,
           calendarDays: activeCalendar?.days
         });
-        setGeneratedWeeklyPlan(weeklyPlan);
+
+        // Validate generated plan against curriculum integrity
+        const weeklyIntegrity = validateGeneratedLesson(weeklyPlan, curriculum, {
+          academicYear: selectedAcademicYear,
+          className: selectedGrade,
+          subject: selectedSubject,
+          cycle: selectedCycle,
+          topic: selectedTopic
+        });
+
+        if (!weeklyIntegrity.valid) {
+          showToast(`Generation rejected: ${weeklyIntegrity.reason}`, "error");
+          return;
+        }
+
+        setGeneratedWeeklyPlan({
+          ...weeklyPlan,
+          academicYear: selectedAcademicYear,
+          schoolYear: selectedAcademicYear,
+          grade: selectedGrade,
+          subject: selectedSubject,
+          cycle: selectedCycle,
+          week_number: selectedWeek
+        } as any);
       } else if (isLAWeeklyMode && selectedSubject === 'Language Arts') {
         const plan = await generateLanguageArtsWeeklyPlan({
+          academicYear: selectedAcademicYear,
           grade: selectedGrade,
           cycle: selectedCycle,
           week: selectedWeek,
@@ -227,8 +304,24 @@ export function PlannerView({
           structure: laWeeklyStructure,
           calendarDays: activeCalendar?.days
         });
+
+        const laIntegrity = validateGeneratedLesson(plan, curriculum, {
+          academicYear: selectedAcademicYear,
+          className: selectedGrade,
+          subject: selectedSubject,
+          cycle: selectedCycle,
+          topic: selectedTopic
+        });
+
+        if (!laIntegrity.valid) {
+          showToast(`Generation rejected: ${laIntegrity.reason}`, "error");
+          return;
+        }
+
         setGeneratedLAWeeklyPlan({
           ...plan,
+          academicYear: selectedAcademicYear,
+          schoolYear: selectedAcademicYear,
           grade: selectedGrade,
           subject: 'Language Arts',
           cycle: selectedCycle,
@@ -237,8 +330,71 @@ export function PlannerView({
           createdAt: new Date().toISOString(),
           createdBy: ''
         });
+      } else if (selectedSubject === 'Language Arts') {
+        const componentsToUse = autoSelectLAComponents || selectedLAComponents.length !== 2
+          ? undefined
+          : (selectedLAComponents as [LanguageArtsComponent, LanguageArtsComponent]);
+
+        const plan = await generateLanguageArtsDailyPlan({
+          academicYear: selectedAcademicYear,
+          grade: selectedGrade,
+          cycle: selectedCycle,
+          week: selectedWeek,
+          day: selectedDayInfo?.dayNumber || 1, 
+          date: selectedDate,
+          topic: selectedTopic,
+          subtopic: selectedSubtopic,
+          lessonTitle: selectedTopic, 
+          learningOutcome: selectedOutcome,
+          objectives: [selectedOutcome], 
+          duration: '45 minutes', 
+          teachingModel,
+          style: outputStyle,
+          includeTeacherScript: userSettings.aiQuality.includeTeacherScript,
+          includeDifferentiation: userSettings.aiQuality.includeDifferentiation,
+          calendarDays: activeCalendar?.days,
+          components: componentsToUse
+        });
+
+        // Validate generated lesson against curriculum integrity
+        const lessonIntegrity = validateGeneratedLesson(plan, curriculum, {
+          academicYear: selectedAcademicYear,
+          className: selectedGrade,
+          subject: selectedSubject,
+          cycle: selectedCycle,
+          topic: selectedTopic,
+          subtopic: selectedSubtopic
+        });
+
+        if (!lessonIntegrity.valid) {
+          showToast(`Generation rejected: ${lessonIntegrity.reason}`, "error");
+          return;
+        }
+
+        setGeneratedPlan({
+          ...plan,
+          structured_json: plan,
+          academicYear: selectedAcademicYear,
+          schoolYear: selectedAcademicYear,
+          grade: selectedGrade,
+          subject: 'Language Arts',
+          cycle: selectedCycle,
+          week: selectedWeek,
+          date: selectedDate,
+          topic: selectedTopic,
+          subtopic: selectedSubtopic,
+          learningOutcome: selectedOutcome,
+          style: outputStyle,
+          includeTeacherScript: userSettings.aiQuality.includeTeacherScript,
+          includeDifferentiation: userSettings.aiQuality.includeDifferentiation,
+          createdAt: new Date().toISOString(),
+          createdBy: '', 
+          status: 'Planned',
+          isReadyToTeach: true
+        });
       } else {
         const plan = await generateLessonPlan({
+          academicYear: selectedAcademicYear,
           grade: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
@@ -258,9 +414,26 @@ export function PlannerView({
           calendarDays: activeCalendar?.days
         });
 
+        // Validate generated lesson against curriculum integrity
+        const lessonIntegrity = validateGeneratedLesson(plan, curriculum, {
+          academicYear: selectedAcademicYear,
+          className: selectedGrade,
+          subject: selectedSubject,
+          cycle: selectedCycle,
+          topic: selectedTopic,
+          subtopic: selectedSubtopic
+        });
+
+        if (!lessonIntegrity.valid) {
+          showToast(`Generation rejected: ${lessonIntegrity.reason}`, "error");
+          return;
+        }
+
         setGeneratedPlan({
           ...plan,
           structured_json: plan,
+          academicYear: selectedAcademicYear,
+          schoolYear: selectedAcademicYear,
           grade: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
@@ -278,9 +451,9 @@ export function PlannerView({
           isReadyToTeach: !!(plan.videoAssistant && plan.inDepthVisuals && plan.boardVisualPlan && plan.exactMaterials)
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error generating lesson plan:", err);
-      showToast("Failed to generate lesson plan. Please try again.", "error");
+      showToast(err?.message || "Failed to generate lesson plan. Please try again.", "error");
     } finally {
       setIsGenerating(false);
     }
@@ -319,22 +492,35 @@ export function PlannerView({
             <div className="flex justify-between items-start">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-gray-900 tracking-tight">Create New Lesson Plan</h2>
-                <p className="text-gray-500">Select curriculum outcomes to generate an AI-powered lesson plan.</p>
+                <p className="text-gray-500">Select curriculum outcomes to generate an AI-powered teach-ready lesson plan.</p>
               </div>
               <div className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center gap-2">
                 <CalendarDays className="w-3 h-3 text-indigo-600" />
-                <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Belize 2025/2026</span>
+                <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">{selectedAcademicYear}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade Level</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
+                <Select 
+                  options={[
+                    { label: '2025-2026', value: '2025-2026' },
+                    { label: '2026-2027', value: '2026-2027' }
+                  ]} 
+                  value={selectedAcademicYear} 
+                  onChange={(val) => setSelectedAcademicYear(val)} 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Class / Standard</label>
                 <Select 
                   disabled={!!activeClass}
                   options={[
                     { label: 'Infant 1', value: 'Infant 1' },
                     { label: 'Infant 2', value: 'Infant 2' },
+                    { label: 'Infant 3', value: 'Infant 3' },
                     { label: 'Standard 1', value: 'Standard 1' },
                     { label: 'Standard 2', value: 'Standard 2' },
                     { label: 'Standard 3', value: 'Standard 3' },
@@ -351,6 +537,7 @@ export function PlannerView({
                   </p>
                 )}
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subject</label>
                 <Select 
@@ -368,6 +555,7 @@ export function PlannerView({
                   onChange={(val) => setSelectedSubject(val as Subject)} 
                 />
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Teaching Date</label>
                 <div className="relative">
@@ -393,9 +581,10 @@ export function PlannerView({
                   </div>
                 )}
               </div>
-              <div className="space-y-2">
+
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Cycle & Week</label>
-                <div className="flex gap-2">
+                <div className="flex gap-4">
                   <div className="flex-1">
                     <Select 
                       options={[
@@ -420,7 +609,7 @@ export function PlannerView({
             </div>
 
             <div className="space-y-6 pt-4 border-t border-gray-50">
-              {activeWeekData && (
+              {activeWeekData && filteredTopics.includes(activeWeekData.topic) && (
                 <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
@@ -450,33 +639,49 @@ export function PlannerView({
                 </div>
               )}
 
+              {filteredTopics.length === 0 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Curriculum Not Mapped</h4>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      {getCurriculumEmptyStateMessage({
+                        academicYear: selectedAcademicYear,
+                        className: selectedGrade,
+                        subject: selectedSubject,
+                        cycle: selectedCycle
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Topic</label>
                 <Select 
+                  disabled={filteredTopics.length === 0}
                   options={filteredTopics.map(t => ({ label: t, value: t }))} 
                   value={selectedTopic} 
                   onChange={(val) => setSelectedTopic(val)} 
-                  placeholder={filteredTopics.length > 0 ? "Select a topic..." : "No topics found for this grade/subject"}
+                  placeholder={filteredTopics.length > 0 ? "Select an approved topic..." : "No curriculum data available"}
                 />
-                {filteredTopics.length === 0 && (
-                  <p className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Upload curriculum for {selectedGrade} {selectedSubject} to see topics here.
-                  </p>
-                )}
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subtopic</label>
                 <Select 
+                  disabled={!selectedTopic || filteredSubtopics.length === 0}
                   options={filteredSubtopics.map(t => ({ label: t, value: t }))} 
                   value={selectedSubtopic} 
                   onChange={(val) => setSelectedSubtopic(val)} 
                   placeholder={selectedTopic ? (filteredSubtopics.length > 0 ? "Select a subtopic..." : "No subtopics found") : "Select a topic first"}
                 />
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Learning Outcome</label>
                 <Select 
+                  disabled={!selectedTopic || filteredOutcomes.length === 0}
                   options={filteredOutcomes.map(o => ({ label: o, value: o }))} 
                   value={selectedOutcome} 
                   onChange={(val) => setSelectedOutcome(val)} 
@@ -538,6 +743,80 @@ export function PlannerView({
                           value={laWeeklyStructure} 
                           onChange={(val) => setLAWeeklyStructure(val as LanguageArtsWeeklyStructure)} 
                         />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedSubject === 'Language Arts' && !isLAWeeklyMode && !isWeeklyPlanMode && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-emerald-600" />
+                      <div>
+                        <h4 className="text-sm font-bold text-emerald-950">Daily Language Arts Components</h4>
+                        <p className="text-[11px] text-emerald-700 font-medium">Belize Rule: Exactly 2 components per daily lesson</p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setAutoSelectLAComponents(!autoSelectLAComponents)}
+                      className="text-[10px] h-7 bg-white font-semibold border-emerald-300 text-emerald-900 hover:bg-emerald-100"
+                    >
+                      {autoSelectLAComponents ? "Auto-Pair: ON" : "Custom: 2 Selected"}
+                    </Button>
+                  </div>
+
+                  {autoSelectLAComponents ? (
+                    <div className="p-3 bg-white/90 rounded-lg border border-emerald-100 text-xs text-emerald-900 leading-relaxed">
+                      <span className="font-bold text-emerald-950">Pedagogical Auto-Pairing Active:</span> The system selects the ideal 2-component pair (e.g. Comprehension + Writing or Phonics + High Frequency Words) aligned with your topic and lesson day.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-xs text-emerald-900 font-semibold">
+                        <span>Select exactly 2 components:</span>
+                        <span className="bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded text-[11px] font-bold">
+                          {selectedLAComponents.length}/2 Selected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {LANGUAGE_ARTS_5_COMPONENTS.map(comp => {
+                          const isSelected = selectedLAComponents.includes(comp);
+                          return (
+                            <button
+                              key={comp}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  if (selectedLAComponents.length > 1) {
+                                    setSelectedLAComponents(selectedLAComponents.filter(c => c !== comp));
+                                  }
+                                } else {
+                                  if (selectedLAComponents.length < 2) {
+                                    setSelectedLAComponents([...selectedLAComponents, comp]);
+                                  } else {
+                                    // Replace second component
+                                    setSelectedLAComponents([selectedLAComponents[0], comp]);
+                                  }
+                                }
+                              }}
+                              className={`text-left text-xs p-2.5 rounded-lg border transition-all flex items-center justify-between ${
+                                isSelected 
+                                  ? 'bg-emerald-100 border-emerald-500 text-emerald-950 font-bold shadow-xs' 
+                                  : 'bg-white border-gray-200 text-gray-700 hover:bg-emerald-50/50'
+                              }`}
+                            >
+                              <span>{comp}</span>
+                              {isSelected && (
+                                <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">
+                                  Selected
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

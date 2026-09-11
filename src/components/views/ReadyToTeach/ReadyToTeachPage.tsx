@@ -191,9 +191,13 @@ export const ReadyToTeachPage: React.FC<ReadyToTeachPageProps> = ({ lessonId, on
     window.print();
   };
 
-  const handleExportWord = () => {
+  const handleExportWord = async () => {
     if (!lesson) return;
-    exportSavedLessonToWord(lesson, resources);
+    try {
+      await exportSavedLessonToWord(lesson, resources);
+    } catch (err) {
+      console.error("Export error:", err);
+    }
   };
 
   const scrollToSection = (sectionId: string) => {

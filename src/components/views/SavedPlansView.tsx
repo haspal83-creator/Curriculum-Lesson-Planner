@@ -11,10 +11,11 @@ import {
   BookOpen 
 } from 'lucide-react';
 import { Button, Card, Input, Select } from '../ui';
-import { LessonPlan, WeeklyCurriculumPlan, DailyLessonPlan, LanguageArtsWeeklyPlan } from '../../types';
+import { LessonPlan, WeeklyCurriculumPlan, DailyLessonPlan, LanguageArtsWeeklyPlan, GradeLevel } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface SavedPlansViewProps {
+  activeClass?: GradeLevel | null;
   plans: LessonPlan[];
   weeklyPlans: WeeklyCurriculumPlan[];
   laWeeklyPlans: LanguageArtsWeeklyPlan[];
@@ -34,6 +35,7 @@ interface SavedPlansViewProps {
 }
 
 export function SavedPlansView({ 
+  activeClass,
   plans, 
   weeklyPlans, 
   laWeeklyPlans,
@@ -57,8 +59,19 @@ export function SavedPlansView({
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="space-y-1">
-          <h2 className="text-xl font-bold">Saved Plans & Resources</h2>
-          <p className="text-sm text-gray-500">Access and manage all your generated educational content.</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold">Saved Plans & Resources</h2>
+            {activeClass && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {activeClass}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500">
+            {activeClass 
+              ? `Access and manage educational content saved for ${activeClass}.`
+              : "Access and manage all your generated educational content."}
+          </p>
         </div>
         <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
           <Button variant={filter === 'all' ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>

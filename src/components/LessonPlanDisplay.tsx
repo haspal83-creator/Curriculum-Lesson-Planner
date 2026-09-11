@@ -68,7 +68,12 @@ import {
   Search,
   Filter,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  PanelLeft,
+  PanelLeftClose,
+  PanelRight,
+  PanelRightClose,
+  BookOpenCheck
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Button, Card, LessonStatusBadge, DropdownMenu, Tabs, TabsList, TabsTrigger, TabsContent, Badge } from './ui';
@@ -78,9 +83,17 @@ import { useToasts } from '../context/ToastContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../firebase';
 import { exportToWord, formatLessonForExport } from '../lib/exportUtils';
+import { normalizeLearningObjectives } from '../lib/learningObjectivesHelper';
+import { PrintableLessonPlan } from './PrintableLessonPlan';
 import { LessonVideoPlayer } from './LessonVideoPlayer';
 import { ActionPanel } from './ActionPanel';
 import { LessonExecutionBoard } from './LessonExecutionBoard';
+import { TeachMeThisTopicModal } from './TeachMeThisTopicModal';
+import { TeacherQuickReferenceCard } from './TeacherQuickReferenceCard';
+import { LessonAtAGlanceTable } from './LessonAtAGlanceTable';
+import { TeacherPrepModeView } from './TeacherPrepModeView';
+import { LiveTeachModeView } from './LiveTeachModeView';
+import { enrichAndGuaranteeTeachReady } from '../lib/lessonQualityGate';
 
 // Helper Components for the new Layout
 const LessonSectionCard = ({ id, title, icon: Icon, children, actions, expanded, onToggle, className, isTeachMode }: any) => (
@@ -225,19 +238,40 @@ export function LessonPlanDisplay({
   initialTab = 'plan'
 }: LessonPlanDisplayProps) {
   const { showToast } = useToasts();
+  const enrichedPlan = React.useMemo(() => {
+    return enrichAndGuaranteeTeachReady(plan, {
+      grade: plan.grade,
+      subject: plan.subject,
+      cycle: plan.cycle,
+      week: plan.week,
+      topic: plan.topic,
+      subtopic: plan.subtopic,
+      learningOutcome: plan.learningOutcome,
+      duration: plan.duration
+    });
+  }, [plan]);
+
   const [viewMode, setViewMode] = useState<'teacher' | 'student'>('teacher');
+  const [currentMode, setCurrentMode] = useState<'planner' | 'prep' | 'teach'>('planner');
+  const [showTeachMeTopicModal, setShowTeachMeTopicModal] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [isTeachMode, setIsTeachMode] = useState(false);
   const [isSplitView, setIsSplitView] = useState(true);
+  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
+  const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    summary: true,
+    strategies: true,
     objectives: true,
     materials: true,
     procedures: true,
     assessment: true,
     differentiation: true,
     closure: true,
-    reflection: true
+    reflection: true,
+    assets: true
   });
 
   const [activeSection, setActiveSection] = useState('summary');
@@ -257,7 +291,7 @@ export function LessonPlanDisplay({
       }
     );
 
-    const ids = ['summary', 'strategies', 'objectives', 'materials', 'procedures', 'assessment', 'differentiation', 'closure', 'reflection'];
+    const ids = ['summary', 'strategies', 'objectives', 'materials', 'procedures', 'assessment', 'differentiation', 'closure', 'reflection', 'assets'];
     ids.forEach((id) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
@@ -292,9 +326,15 @@ export function LessonPlanDisplay({
     window.print();
   };
 
-  const handleExportWord = () => {
-    exportToWord(plan, auth.currentUser?.displayName || undefined);
-    showToast("Generating Word document template...", "success");
+  const handleExportWord = async () => {
+    try {
+      showToast("Generating professional Word document (.docx)...", "info");
+      await exportToWord(plan, auth.currentUser?.displayName || undefined);
+      showToast("Lesson plan exported successfully as .docx!", "success");
+    } catch (err) {
+      console.error("Export error:", err);
+      showToast("Failed to export Word document.", "error");
+    }
   };
 
   // Video Settings State
@@ -968,82 +1008,246 @@ export function LessonPlanDisplay({
               )}
             </TabsContent>
             <TabsContent value="plan" className="mt-0 relative bg-gray-50/30 min-h-screen">
-              {/* 1. STICKY TOP ACTION BAR — EXACT HEIGHT: 72px */}
-              <div className="sticky top-0 z-50 h-[72px] border-b border-gray-200 bg-white/80 backdrop-blur-md print:hidden">
-                <div className="max-w-[1800px] mx-auto h-full px-8 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-gray-100/50 p-1 rounded-2xl border border-gray-200/50">
+              {/* 1. STICKY TOP ACTION BAR */}
+              <div className="sticky top-0 z-50 h-[72px] border-b border-gray-200 bg-white/90 backdrop-blur-md print:hidden">
+                <div className="max-w-[1800px] mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+                  {/* Left Controls: Mode & Panel Toggles */}
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                    <div className="flex items-center bg-gray-100/70 p-1 rounded-2xl border border-gray-200/60">
                       <Button 
-                        variant={!isTeachMode ? "primary" : "ghost"} 
+                        variant={currentMode === 'planner' ? "primary" : "ghost"} 
                         size="sm" 
                         className={cn(
-                          "h-9 px-6 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
-                          !isTeachMode ? "bg-white shadow-md text-indigo-600" : "text-gray-400 hover:text-gray-600"
+                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          currentMode === 'planner' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
                         )}
-                        onClick={() => setIsTeachMode(false)}
+                        onClick={() => {
+                          setCurrentMode('planner');
+                          setIsTeachMode(false);
+                        }}
                       >
                         Planner View
                       </Button>
                       <Button 
-                        variant={isTeachMode ? "primary" : "ghost"} 
+                        variant={currentMode === 'prep' ? "primary" : "ghost"} 
                         size="sm" 
                         className={cn(
-                          "h-9 px-6 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
-                          isTeachMode ? "bg-white shadow-md text-indigo-600" : "text-gray-400 hover:text-gray-600"
+                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          currentMode === 'prep' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
                         )}
-                        onClick={() => setIsTeachMode(true)}
+                        onClick={() => {
+                          setCurrentMode('prep');
+                          setIsTeachMode(false);
+                        }}
+                      >
+                        Prep Mode
+                      </Button>
+                      <Button 
+                        variant={currentMode === 'teach' ? "primary" : "ghost"} 
+                        size="sm" 
+                        className={cn(
+                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          currentMode === 'teach' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
+                        )}
+                        onClick={() => {
+                          setCurrentMode('teach');
+                          setIsTeachMode(true);
+                        }}
                       >
                         Teach Mode
                       </Button>
                     </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowTeachMeTopicModal(true)}
+                      className="h-9 px-3 rounded-xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                      title="Instant Teacher Conceptual Mastery Briefing"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="hidden sm:inline">Teach Me This Topic</span>
+                    </Button>
+
+                    {!isTeachMode && (
+                      <>
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block mx-0.5" />
+                        
+                        {/* Focus Lesson Toggle */}
+                        <Button
+                          variant={isFocusMode ? "primary" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            const next = !isFocusMode;
+                            setIsFocusMode(next);
+                            if (next) {
+                              setIsNavCollapsed(true);
+                              setIsAssistantCollapsed(true);
+                            } else {
+                              setIsNavCollapsed(false);
+                              setIsAssistantCollapsed(false);
+                            }
+                          }}
+                          className={cn(
+                            "h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all",
+                            isFocusMode 
+                              ? "bg-indigo-600 text-white shadow-sm border-indigo-600" 
+                              : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                          )}
+                          title={isFocusMode ? "Exit Focus Mode (Restore sidebars)" : "Focus Mode (Maximize lesson reading area)"}
+                        >
+                          {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                          <span className="hidden md:inline">{isFocusMode ? "Exit Focus" : "Focus Lesson"}</span>
+                        </Button>
+
+                        {/* Navigation Sidebar Toggle */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsNavCollapsed(!isNavCollapsed)}
+                          className={cn(
+                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden lg:flex items-center gap-1.5 border border-gray-200/80 transition-all",
+                            isNavCollapsed && "bg-indigo-50 text-indigo-600 border-indigo-200"
+                          )}
+                          title={isNavCollapsed ? "Show Navigation Sidebar" : "Collapse Navigation Sidebar"}
+                        >
+                          {isNavCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+                          <span className="text-[11px]">{isNavCollapsed ? "Show Nav" : "Nav"}</span>
+                        </Button>
+
+                        {/* Assistant Panel Toggle */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsAssistantCollapsed(!isAssistantCollapsed)}
+                          className={cn(
+                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden lg:flex items-center gap-1.5 border border-gray-200/80 transition-all",
+                            isAssistantCollapsed && "bg-indigo-50 text-indigo-600 border-indigo-200"
+                          )}
+                          title={isAssistantCollapsed ? "Show Assistant Panel" : "Collapse Assistant Panel"}
+                        >
+                          {isAssistantCollapsed ? <PanelRight className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
+                          <span className="text-[11px]">{isAssistantCollapsed ? "Assistant" : "Hide Asst"}</span>
+                        </Button>
+                      </>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center gap-3">
-                      <Button variant="outline" className="h-11 px-5 rounded-2xl border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all">
-                        <Edit3 className="w-4 h-4 mr-2.5" /> Edit
+                  {/* Right Controls: Actions & Exports */}
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <div className="hidden sm:flex items-center gap-2">
+                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handlePrint}>
+                        <Printer className="w-4 h-4 mr-2 text-gray-500" /> Print
                       </Button>
-                      <Button variant="outline" className="h-11 px-5 rounded-2xl border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all" onClick={handlePrint}>
-                        <Printer className="w-4 h-4 mr-2.5" /> Print
+                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportPDF}>
+                        <FileDown className="w-4 h-4 mr-2 text-gray-500" /> PDF
                       </Button>
-                      <Button variant="outline" className="h-11 px-5 rounded-2xl border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all" onClick={handleExportPDF}>
-                        <FileDown className="w-4 h-4 mr-2.5" /> PDF
+                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportWord}>
+                        <FileEdit className="w-4 h-4 mr-2 text-indigo-600" /> Word (.docx)
                       </Button>
                     </div>
-                    <div className="h-8 w-px bg-gray-200 mx-1" />
+                    <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block" />
                     <DropdownMenu
                       trigger={
-                        <Button variant="outline" className="h-11 w-11 p-0 rounded-2xl border-gray-200 hover:bg-gray-50 transition-all">
-                          <MoreHorizontal className="w-5 h-5 text-gray-400" />
+                        <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-gray-200 hover:bg-gray-50 transition-all">
+                          <MoreHorizontal className="w-5 h-5 text-gray-500" />
                         </Button>
                       }
                       items={[
+                        { label: 'Export to Word (.docx)', onClick: handleExportWord, icon: <FileEdit className="w-4 h-4 text-indigo-600" /> },
+                        { label: 'Print Lesson', onClick: handlePrint, icon: <Printer className="w-4 h-4" /> },
+                        { label: 'Save as PDF', onClick: handleExportPDF, icon: <FileDown className="w-4 h-4" /> },
                         { label: 'Duplicate Lesson', onClick: () => onDuplicate?.(plan), icon: <Copy className="w-4 h-4" /> },
-                        { label: 'Share with Team', onClick: () => showToast("Sharing coming soon!", "info"), icon: <Share2 className="w-4 h-4" /> },
-                        { label: 'Export to Word', onClick: handleExportWord, icon: <FileEdit className="w-4 h-4" /> },
-                        { label: 'Generate Resources', onClick: handleGenerateFullPack, icon: <Sparkles className="w-4 h-4 text-indigo-600" /> },
-                        { label: 'AI Video Assist', onClick: () => setActiveTab('ai-video'), icon: <Video className="w-4 h-4 text-indigo-600" /> },
+                        { label: 'Generate Full Pack', onClick: handleGenerateFullPack, icon: <Sparkles className="w-4 h-4 text-indigo-600" /> },
+                        { label: 'AI Video Lesson', onClick: () => setActiveTab('ai-video'), icon: <Video className="w-4 h-4 text-indigo-600" /> },
                       ]}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* OUTER PAGE CONTAINER — EXACT WIDTH: 1800px */}
-              <div className="w-full max-w-[1800px] mx-auto px-8 py-6">
-                
-                {/* 4. MAIN WORKSPACE GRID */}
-                <div className={cn(
-                    "mt-8",
-                    isTeachMode ? "grid grid-cols-1 gap-8 px-8" : "app-container"
+              {/* 2. OUTER WORKSPACE CONTAINER */}
+              <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {currentMode === 'teach' ? (
+                  <LiveTeachModeView 
+                    plan={enrichedPlan} 
+                    onExitTeachMode={() => {
+                      setCurrentMode('planner');
+                      setIsTeachMode(false);
+                    }} 
+                    onOpenTeachMeTopic={() => setShowTeachMeTopicModal(true)} 
+                  />
+                ) : currentMode === 'prep' ? (
+                  <TeacherPrepModeView 
+                    plan={enrichedPlan} 
+                    onOpenTeachMeTopic={() => setShowTeachMeTopicModal(true)} 
+                    onSwitchToTeachMode={() => {
+                      setCurrentMode('teach');
+                      setIsTeachMode(true);
+                    }} 
+                  />
+                ) : (
+                  /* 3. MAIN WORKSPACE FLEX LAYOUT */
+                  <div className={cn(
+                    "flex items-start gap-8 w-full transition-all",
+                    isTeachMode && "block"
                   )}>
-                    
-                    {/* 5. LEFT SIDEBAR — EXACT MEASUREMENTS: 260px width */}
-                    {!isTeachMode && (
-                      <aside className="hidden lg:block left-sidebar">
-                        <div className="sticky top-24 min-h-[520px] rounded-[24px] border border-gray-200 bg-white p-6 shadow-sm print:hidden">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 px-2">Navigation</p>
-                          <div className="space-y-2">
+                  
+                  {/* 4. LEFT SIDEBAR — NAVIGATION */}
+                  {!isTeachMode && !isFocusMode && (
+                    isNavCollapsed ? (
+                      <div className="hidden lg:flex flex-col items-center py-4 px-2 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
+                        <button
+                          onClick={() => setIsNavCollapsed(false)}
+                          className="h-10 w-10 p-0 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
+                          title="Expand Navigation Sidebar"
+                        >
+                          <PanelLeft className="w-5 h-5" />
+                        </button>
+                        <div className="w-6 h-px bg-gray-200 my-3" />
+                        <div className="flex flex-col gap-2">
+                          {[
+                            { id: 'summary', icon: Layout, title: 'Overview' },
+                            { id: 'strategies', icon: Sparkles, title: 'Strategies' },
+                            { id: 'objectives', icon: Target, title: 'Objectives' },
+                            { id: 'materials', icon: Package, title: 'Materials' },
+                            { id: 'procedures', icon: PenTool, title: 'Execution Flow' },
+                            { id: 'assessment', icon: ListChecks, title: 'Assessment' },
+                            { id: 'differentiation', icon: Users, title: 'Differentiation' },
+                            { id: 'closure', icon: XCircle, title: 'Exit Ticket' },
+                            { id: 'reflection', icon: StickyNote, title: 'Reflection' },
+                            { id: 'assets', icon: FileText, title: 'Lesson Assets' },
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              onClick={() => scrollToSection(item.id)}
+                              className={cn(
+                                "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
+                                activeSection === item.id 
+                                  ? "bg-indigo-50 text-indigo-600 shadow-sm" 
+                                  : "text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+                              )}
+                              title={item.title}
+                            >
+                              <item.icon className="w-4 h-4" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <aside className="hidden lg:block w-56 xl:w-64 shrink-0 sticky top-24 print:hidden">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                          <div className="flex items-center justify-between mb-4 px-1">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Navigation</p>
+                            <button
+                              onClick={() => setIsNavCollapsed(true)}
+                              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                              title="Collapse Navigation Sidebar"
+                            >
+                              <PanelLeftClose className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="space-y-1">
                             {[
                               { id: 'summary', label: 'Overview', icon: Layout },
                               { id: 'strategies', label: 'Strategies', icon: Sparkles },
@@ -1052,589 +1256,1159 @@ export function LessonPlanDisplay({
                               { id: 'procedures', label: 'Execution Flow', icon: PenTool },
                               { id: 'assessment', label: 'Assessment', icon: ListChecks },
                               { id: 'differentiation', label: 'Differentiation', icon: Users },
-                              { id: 'closure', label: 'Closure', icon: XCircle },
+                              { id: 'closure', label: 'Exit Ticket', icon: XCircle },
                               { id: 'reflection', label: 'Reflection', icon: StickyNote },
+                              { id: 'assets', label: 'Lesson Assets', icon: FileText },
                             ].map(item => (
                               <button 
                                 key={item.id}
                                 onClick={() => scrollToSection(item.id)}
                                 className={cn(
-                                  "h-12 w-full rounded-2xl px-4 flex items-center justify-between text-sm font-bold transition-all duration-300 group",
+                                  "h-10 w-full rounded-xl px-3 flex items-center justify-between text-xs font-bold transition-all duration-200 group",
                                   activeSection === item.id 
                                     ? "bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-100/50" 
                                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                                 )}
                               >
-                                <div className="flex items-center gap-3.5">
+                                <div className="flex items-center gap-3 min-w-0">
                                   <item.icon className={cn(
-                                    "w-4 h-4 transition-colors",
-                                    activeSection === item.id ? "text-indigo-600" : "text-gray-300 group-hover:text-indigo-400"
+                                    "w-4 h-4 shrink-0 transition-colors",
+                                    activeSection === item.id ? "text-indigo-600" : "text-gray-400 group-hover:text-indigo-500"
                                   )} />
-                                  {item.label}
+                                  <span className="truncate">{item.label}</span>
                                 </div>
                                 {activeSection === item.id && (
-                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.6)]" />
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0 shadow-[0_0_6px_rgba(79,70,229,0.8)]" />
                                 )}
                               </button>
                             ))}
                           </div>
 
-                          <div className="mt-12 pt-8 border-t border-gray-100">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 px-2">Quick Stats</p>
-                            <div className="space-y-4 px-2">
+                          <div className="mt-6 pt-5 border-t border-gray-100">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 px-1">Quick Stats</p>
+                            <div className="space-y-2.5 px-1 text-xs">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-500">Duration</span>
-                                <span className="text-xs font-bold text-gray-900">{plan.duration}m</span>
+                                <span className="text-gray-500">Duration</span>
+                                <span className="font-bold text-gray-900">{plan.duration}m</span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-500">Phases</span>
-                                <span className="text-xs font-bold text-gray-900">5 Steps</span>
+                                <span className="text-gray-500">Grade</span>
+                                <span className="font-bold text-gray-900">{plan.grade}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Phases</span>
+                                <span className="font-bold text-indigo-600">5 Stages</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       </aside>
-                    )}
+                    )
+                  )}
 
-                    {/* 7. CENTER MAIN CONTENT */}
-                    <div className={cn(
-                      "main-wrapper min-w-0 mx-auto w-full",
-                      isTeachMode && "lg:col-span-1"
+                  {/* 5. CENTER MAIN LESSON CONTENT AREA */}
+                  <div className={cn(
+                    "flex-1 min-w-0 w-full transition-all",
+                    isFocusMode && "max-w-5xl xl:max-w-6xl mx-auto"
+                  )}>
+                    <main className={cn(
+                      "space-y-8 w-full",
+                      isTeachMode && "p-4 sm:p-8"
                     )}>
-                      <main className={cn(
-                        "main-content space-y-6",
-                        isTeachMode && "p-8"
-                      )}>
-                        {/* A. Lesson Header Card */}
+
+                      {/* TEACHER QUICK REFERENCE CARD (TOP-OF-CANVAS SCANNABLE COMPACT CARD) */}
+                      <TeacherQuickReferenceCard 
+                        plan={enrichedPlan} 
+                        onOpenTeachMeTopic={() => setShowTeachMeTopicModal(true)} 
+                      />
+
+                      {/* LESSON AT A GLANCE (TIMING-ARITHMETIC VERIFIED TABLE) */}
+                      <LessonAtAGlanceTable plan={enrichedPlan} />
+
+                      {/* SECTION 1: LESSON OVERVIEW */}
                       <Card id="summary" className={cn(
-                        "rounded-[16px] shadow-sm border-gray-100 bg-white transition-all",
-                        isTeachMode ? "p-12" : "p-8"
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
                       )}>
                         <div className="space-y-6">
                           <div className="flex items-center gap-3 text-indigo-600">
-                            <FileText className="w-6 h-6" />
+                            <FileText className="w-5 h-5" />
                             <span className="text-[10px] font-black uppercase tracking-[0.2em]">Lesson Overview</span>
                           </div>
-                          <h1 className={cn(
-                            "font-black text-gray-900 tracking-tight font-display",
-                            isTeachMode ? "text-5xl" : "text-4xl"
-                          )}>{plan.lessonTitle}</h1>
                           
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-50">
+                          <h1 className={cn(
+                            "font-black text-gray-900 tracking-tight font-display leading-tight",
+                            isTeachMode ? "text-3xl sm:text-5xl" : "text-2xl sm:text-4xl"
+                          )}>
+                            {plan.lessonTitle}
+                          </h1>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-100">
                             <div className="space-y-1">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Subject</p>
                               <div className="flex items-center gap-2">
-                                <BookOpen className="w-4 h-4 text-indigo-500" />
-                                <span className="font-bold text-gray-700">{plan.subject}</span>
+                                <BookOpen className="w-4 h-4 text-indigo-500 shrink-0" />
+                                <span className="font-bold text-gray-800">{plan.subject}</span>
                               </div>
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Grade</p>
                               <div className="flex items-center gap-2">
-                                <GraduationCap className="w-4 h-4 text-emerald-500" />
-                                <span className="font-bold text-gray-700">{plan.grade}</span>
+                                <GraduationCap className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span className="font-bold text-gray-800">{plan.grade}</span>
                               </div>
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Duration</p>
                               <div className="flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-rose-500" />
-                                <span className="font-bold text-gray-700">{plan.duration} mins</span>
+                                <Clock className="w-4 h-4 text-rose-500 shrink-0" />
+                                <span className="font-bold text-gray-800">{plan.duration} mins</span>
                               </div>
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Topic</p>
-                              <div className="flex items-center gap-2">
-                                <Target className="w-4 h-4 text-amber-500" />
-                                <span className="font-bold text-gray-700 truncate">{plan.topic}</span>
+                              <div className="flex items-start gap-2">
+                                <Target className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                <span className="font-bold text-gray-800 leading-snug">{plan.topic}</span>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </Card>
 
-                      {/* NEW: LESSON SNAPSHOT */}
-                      {plan.lessonSnapshot && (
-                        <div className="rounded-[16px] border border-indigo-100 bg-indigo-50/30 p-8 shadow-sm">
-                          <div className="flex items-center gap-4 mb-4">
-                            <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-                              <Sparkles className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-xl font-black text-indigo-900 font-display uppercase tracking-tight">Lesson Snapshot</h3>
-                          </div>
-                          <p className={cn(
-                            "text-indigo-900/80 font-medium leading-relaxed",
-                            isTeachMode ? "text-2xl" : "text-lg"
-                          )}>{plan.lessonSnapshot.about}</p>
-                        </div>
-                      )}
-
-                      {/* NEW: TEACHING STRATEGIES & METHODOLOGY */}
-                      {(plan.teachingStrategies?.length || plan.methodology) && (
-                        <div id="strategies" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {plan.teachingStrategies && plan.teachingStrategies.length > 0 && (
-                            <div className="rounded-[16px] border border-amber-100 bg-amber-50/30 p-8 shadow-sm">
-                              <div className="flex items-center gap-3 mb-6 text-amber-700">
-                                <Sparkles className="w-5 h-5" />
-                                <h3 className="text-lg font-black uppercase tracking-tight">Teaching Strategies</h3>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {plan.teachingStrategies.map((strategy, i) => (
-                                  <span key={i} className="bg-white border border-amber-200 text-amber-800 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
-                                    {strategy}
-                                  </span>
-                                ))}
-                              </div>
+                          {/* Curriculum Standard / Framework */}
+                          {((plan as any).curriculumFramework || (plan as any).curriculumCycle || (plan as any).curriculumOutcome || plan.strand) && (
+                            <div className="pt-4 border-t border-gray-100 flex flex-wrap items-center gap-3 text-xs">
+                              {(plan as any).curriculumFramework && (
+                                <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg font-bold">
+                                  {(plan as any).curriculumFramework}
+                                </span>
+                              )}
+                              {plan.strand && (
+                                <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg font-bold">
+                                  {plan.strand}
+                                </span>
+                              )}
+                              {(plan as any).curriculumCycle && (
+                                <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg font-medium">
+                                  {(plan as any).curriculumCycle}
+                                </span>
+                              )}
+                              {(plan as any).curriculumOutcome && (
+                                <span className="text-gray-600 font-medium">
+                                  Outcome: <strong className="text-gray-900">{(plan as any).curriculumOutcome}</strong>
+                                </span>
+                              )}
                             </div>
                           )}
-                          {plan.methodology && (
-                            <div className="rounded-[16px] border border-emerald-100 bg-emerald-50/30 p-8 shadow-sm">
-                              <div className="flex items-center gap-3 mb-6 text-emerald-700">
-                                <Layers className="w-5 h-5" />
-                                <h3 className="text-lg font-black uppercase tracking-tight">Methodology</h3>
+
+                          {/* Lesson Snapshot */}
+                          {plan.lessonSnapshot?.about && (
+                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-5 mt-4">
+                              <div className="flex items-center gap-2 text-indigo-800 font-black text-xs uppercase tracking-wider mb-2">
+                                <Sparkles className="w-4 h-4 text-indigo-600" /> About This Lesson
                               </div>
                               <p className={cn(
-                                "text-emerald-900/80 font-bold",
-                                isTeachMode ? "text-xl" : "text-sm"
+                                "text-indigo-950 font-medium leading-relaxed",
+                                isTeachMode ? "text-xl sm:text-2xl" : "text-base"
                               )}>
-                                {plan.methodology}
+                                {plan.lessonSnapshot.about}
                               </p>
                             </div>
                           )}
                         </div>
-                      )}
-
-                      {/* Sections Moved to Bottom Panel */}
-
-                      {/* D. Assessment Card */}
-                      <Card id="assessment" className={cn(
-                        "rounded-[16px] shadow-sm border-gray-100 bg-white transition-all",
-                        isTeachMode ? "p-12" : "p-8"
-                      )}>
-                        <div className="space-y-8">
-                          <div className="flex items-center gap-3 text-rose-600">
-                            <ListChecks className="w-6 h-6" />
-                            <h3 className="text-xl font-black uppercase tracking-tight">Assessment & Evaluation</h3>
-                          </div>
-
-                          <div className="space-y-6">
-                            <div className="space-y-3">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Questions for Understanding</p>
-                              <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
-                                <BulletList items={plan.assessment} icon={HelpCircle} isTeachMode={isTeachMode} />
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Exit Ticket</p>
-                              <div className="bg-indigo-50/30 p-8 rounded-xl border border-indigo-100 border-dashed text-center">
-                                <p className={cn(
-                                  "font-bold text-indigo-900 italic leading-relaxed",
-                                  isTeachMode ? "text-3xl" : "text-xl"
-                                )}>
-                                  {plan.closurePanel?.exitQuestion || "What is one thing you learned today?"}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Evaluation Notes</p>
-                              <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 min-h-[120px]">
-                                <p className="text-sm text-gray-400 italic">Teacher notes on student performance will be recorded here after the lesson...</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
                       </Card>
 
-                      {/* E. Differentiation Card */}
-                      <LessonSectionCard 
-                        id="differentiation" 
-                        title="Differentiation" 
-                        icon={Users}
-                        expanded={expandedSections.differentiation}
-                        onToggle={() => toggleSection('differentiation')}
-                        isTeachMode={isTeachMode}
-                      >
-                        {plan.differentiationFramework ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-6">
-                              <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] mb-3">Struggling</p>
-                              <BulletList items={[...(plan.differentiationFramework.strugglingLearners.scaffolds || []), ...(plan.differentiationFramework.strugglingLearners.visuals || []), ...(plan.differentiationFramework.strugglingLearners.manipulatives || []), plan.differentiationFramework.strugglingLearners.simplifiedInstructions, plan.differentiationFramework.strugglingLearners.guidedSupport].filter(Boolean)} icon={AlertCircle} isTeachMode={isTeachMode} />
-                            </div>
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-6">
-                              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-3">On-Level</p>
-                              <BulletList items={[plan.differentiationFramework.onLevelLearners.participationExpectations, plan.differentiationFramework.onLevelLearners.independentWorkExpectations, plan.differentiationFramework.onLevelLearners.peerCollaboration].filter(Boolean)} icon={Check} isTeachMode={isTeachMode} />
-                            </div>
-                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-6">
-                              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-3">Advanced</p>
-                              <BulletList items={[...(plan.differentiationFramework.advancedLearners.challengeTasks || []), ...(plan.differentiationFramework.advancedLearners.deeperThinkingPrompts || []), plan.differentiationFramework.advancedLearners.extensionActivity, plan.differentiationFramework.advancedLearners.leadershipRole].filter(Boolean)} icon={Zap} isTeachMode={isTeachMode} />
-                            </div>
-                            <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-6">
-                              <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-3">Inclusion Support</p>
-                              <BulletList items={Object.values(plan.differentiationFramework?.inclusionSupport || {}).filter(Boolean) as string[]} icon={Layers} isTeachMode={isTeachMode} />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-6">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Struggling</p>
-                              <BulletList items={plan.differentiation} icon={AlertCircle} isTeachMode={isTeachMode} />
-                            </div>
-                            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-6">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Advanced</p>
-                              <BulletList items={["Extension tasks", "Peer mentoring"]} icon={Zap} isTeachMode={isTeachMode} />
+                      {/* LANGUAGE ARTS 2-COMPONENT ARCHITECTURE & MANDATORY RESOURCES (BELIZE PRIMARY MANDATE) */}
+                      {(plan.subject === 'Language Arts' || (plan.languageArtsComponents && plan.languageArtsComponents.length > 0)) && (
+                        <div id="la-components" className="space-y-6">
+                          {/* 1. Header Display: Today's Language Arts Components */}
+                          <div className="rounded-2xl border-2 border-emerald-500/80 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-6 shadow-sm">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 text-emerald-800 font-black text-xs uppercase tracking-widest">
+                                  <BookOpenCheck className="w-5 h-5 text-emerald-600" />
+                                  Belize MoECST Daily Mandate — Exactly 2 Components
+                                </div>
+                                <h2 className="text-xl sm:text-2xl font-black text-emerald-950 tracking-tight">
+                                  Today's Language Arts Components:{" "}
+                                  <span className="text-emerald-700 underline decoration-emerald-400 underline-offset-4">
+                                    {plan.component1Details?.name || plan.languageArtsComponents?.[0] || 'Comprehension — Oral Expression and Listening'}
+                                  </span>
+                                  {" "}+{" "}
+                                  <span className="text-teal-700 underline decoration-teal-400 underline-offset-4">
+                                    {plan.component2Details?.name || plan.languageArtsComponents?.[1] || 'Production and Language Structure — Writing and Composition'}
+                                  </span>
+                                </h2>
+                              </div>
+                              <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                                <span className="bg-emerald-600 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-sm">
+                                  2 of 5 Active
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        )}
-                      </LessonSectionCard>
 
-                      {/* F. Reflection Card */}
-                      <LessonSectionCard 
-                        id="reflection" 
-                        title="Teacher Reflection" 
-                        icon={StickyNote}
-                        expanded={expandedSections.reflection}
-                        onToggle={() => toggleSection('reflection')}
-                        isTeachMode={isTeachMode}
-                      >
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-3">
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">What went well?</label>
-                              <textarea className="w-full rounded-xl border border-gray-100 bg-gray-50/50 p-5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[120px]" placeholder="Enter notes..." />
-                            </div>
-                            <div className="space-y-3">
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Challenges?</label>
-                              <textarea className="w-full rounded-xl border border-gray-100 bg-gray-50/50 p-5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[120px]" placeholder="Enter notes..." />
-                            </div>
+                          {/* 2. Component 1 and Component 2 Detailed Breakdown */}
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Component 1 Card */}
+                            {(() => {
+                              const c1 = plan.component1Details || {
+                                name: plan.languageArtsComponents?.[0] || 'Comprehension — Oral Expression and Listening',
+                                timeAllocation: '20 mins',
+                                explicitTeachingScript: plan.teacherScriptDetailed?.explanation || 'Teacher introduces the focal concept with direct modeling.',
+                                guidedPracticeTask: 'Students work in pairs on guided oral response or text analysis.',
+                                formativeCheck: {
+                                  teacherAsks: 'What key detail helps us understand the central message?',
+                                  expectedResponse: 'Students identify the textual evidence accurately.',
+                                  ifCorrect: 'Praise specific text citation and prompt deeper elaboration.',
+                                  ifIncorrect: 'Reteach by pointing directly to paragraph 2 and rereading together.'
+                                }
+                              };
+                              return (
+                                <Card className="rounded-2xl border-2 border-emerald-200 bg-white p-6 shadow-sm space-y-5">
+                                  <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
+                                    <div className="flex items-center gap-2 text-emerald-900">
+                                      <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-black text-xs flex items-center justify-center">1</span>
+                                      <h3 className="font-bold text-base text-gray-900 leading-snug">{c1.name}</h3>
+                                    </div>
+                                    <span className="text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shrink-0">
+                                      {c1.timeAllocation || '20 mins'}
+                                    </span>
+                                  </div>
+
+                                  {/* Explicit Script */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-800">
+                                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                                      Explicit Teaching Script (Word-for-Word)
+                                    </div>
+                                    <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-100 text-sm text-gray-800 italic leading-relaxed">
+                                      "{c1.explicitTeachingScript}"
+                                    </div>
+                                  </div>
+
+                                  {/* Guided Practice */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-800">
+                                      <Users className="w-3.5 h-3.5 text-emerald-600" />
+                                      Guided Practice Task
+                                    </div>
+                                    <p className="text-sm text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100 leading-relaxed">
+                                      {c1.guidedPracticeTask}
+                                    </p>
+                                  </div>
+
+                                  {/* Formative Check */}
+                                  {c1.formativeCheck && (
+                                    <div className="space-y-2 pt-2 border-t border-emerald-100">
+                                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-800">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        Formative Check & Response Branching
+                                      </div>
+                                      <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-200/60 space-y-2 text-xs">
+                                        <p><strong className="text-amber-950">Teacher Asks:</strong> <span className="text-gray-800">{c1.formativeCheck.teacherAsks}</span></p>
+                                        <p><strong className="text-emerald-950">Expected Response:</strong> <span className="text-gray-800">{c1.formativeCheck.expectedResponse}</span></p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                          <div className="bg-emerald-100/60 p-2 rounded-lg text-emerald-950">
+                                            <strong>If Correct:</strong> {c1.formativeCheck.ifCorrect}
+                                          </div>
+                                          <div className="bg-rose-100/60 p-2 rounded-lg text-rose-950">
+                                            <strong>If Incorrect:</strong> {c1.formativeCheck.ifIncorrect}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </Card>
+                              );
+                            })()}
+
+                            {/* Component 2 Card */}
+                            {(() => {
+                              const c2 = plan.component2Details || {
+                                name: plan.languageArtsComponents?.[1] || 'Production and Language Structure — Writing and Composition',
+                                timeAllocation: '20 mins',
+                                explicitTeachingScript: plan.teacherScriptDetailed?.modeling || 'Teacher models application of structure and drafting rules.',
+                                guidedPracticeTask: 'Students draft their own sentences applying today’s grammatical or vocabulary focus.',
+                                formativeCheck: {
+                                  teacherAsks: 'Can you show me your drafted sentence and identify the target rule?',
+                                  expectedResponse: 'Students correctly point to the applied structure.',
+                                  ifCorrect: 'Encourage student to add descriptive detail or a compound conjunction.',
+                                  ifIncorrect: 'Provide a sentence frame template on the board for scaffolding.'
+                                }
+                              };
+                              return (
+                                <Card className="rounded-2xl border-2 border-teal-200 bg-white p-6 shadow-sm space-y-5">
+                                  <div className="flex items-center justify-between border-b border-teal-100 pb-3">
+                                    <div className="flex items-center gap-2 text-teal-900">
+                                      <span className="w-7 h-7 rounded-lg bg-teal-600 text-white font-black text-xs flex items-center justify-center">2</span>
+                                      <h3 className="font-bold text-base text-gray-900 leading-snug">{c2.name}</h3>
+                                    </div>
+                                    <span className="text-xs font-bold px-2.5 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded-full shrink-0">
+                                      {c2.timeAllocation || '20 mins'}
+                                    </span>
+                                  </div>
+
+                                  {/* Explicit Script */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-teal-800">
+                                      <MessageSquare className="w-3.5 h-3.5 text-teal-600" />
+                                      Explicit Teaching Script (Word-for-Word)
+                                    </div>
+                                    <div className="bg-teal-50/60 p-3.5 rounded-xl border border-teal-100 text-sm text-gray-800 italic leading-relaxed">
+                                      "{c2.explicitTeachingScript}"
+                                    </div>
+                                  </div>
+
+                                  {/* Guided Practice */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-teal-800">
+                                      <Users className="w-3.5 h-3.5 text-teal-600" />
+                                      Guided Practice Task
+                                    </div>
+                                    <p className="text-sm text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100 leading-relaxed">
+                                      {c2.guidedPracticeTask}
+                                    </p>
+                                  </div>
+
+                                  {/* Formative Check */}
+                                  {c2.formativeCheck && (
+                                    <div className="space-y-2 pt-2 border-t border-teal-100">
+                                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-teal-800">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                                        Formative Check & Response Branching
+                                      </div>
+                                      <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-200/60 space-y-2 text-xs">
+                                        <p><strong className="text-amber-950">Teacher Asks:</strong> <span className="text-gray-800">{c2.formativeCheck.teacherAsks}</span></p>
+                                        <p><strong className="text-teal-950">Expected Response:</strong> <span className="text-gray-800">{c2.formativeCheck.expectedResponse}</span></p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                          <div className="bg-emerald-100/60 p-2 rounded-lg text-emerald-950">
+                                            <strong>If Correct:</strong> {c2.formativeCheck.ifCorrect}
+                                          </div>
+                                          <div className="bg-rose-100/60 p-2 rounded-lg text-rose-950">
+                                            <strong>If Incorrect:</strong> {c2.formativeCheck.ifIncorrect}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </Card>
+                              );
+                            })()}
                           </div>
+
+                          {/* 3. Mandatory LA Resource: Complete Reading Passage */}
+                          {plan.readingPassageFull && (
+                            <Card className="rounded-2xl border border-blue-200 bg-white p-6 sm:p-8 shadow-sm space-y-6">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-4">
+                                <div>
+                                  <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase tracking-wider">
+                                    <BookOpen className="w-4 h-4" />
+                                    Mandatory Reading Passage (Teach-Ready & Unabridged)
+                                  </div>
+                                  <h3 className="text-xl font-bold text-gray-900 mt-1">{plan.readingPassageFull.title}</h3>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {plan.readingPassageFull.genre && (
+                                    <span className="bg-blue-50 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-lg border border-blue-200">
+                                      {plan.readingPassageFull.genre}
+                                    </span>
+                                  )}
+                                  <span className="bg-gray-100 text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                    {plan.readingPassageFull.wordCount} words
+                                  </span>
+                                  <span className="bg-emerald-50 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-200">
+                                    Grade: {plan.readingPassageFull.gradeLevel}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Passage Body */}
+                              <div className="p-6 bg-slate-50/70 rounded-2xl border border-slate-200 text-gray-800 text-base leading-relaxed whitespace-pre-wrap font-serif">
+                                {plan.readingPassageFull.content}
+                              </div>
+
+                              {/* Highlighted Vocabulary */}
+                              {plan.readingPassageFull.vocabularyHighlighted && plan.readingPassageFull.vocabularyHighlighted.length > 0 && (
+                                <div className="space-y-2">
+                                  <p className="text-xs font-black text-blue-900 uppercase tracking-widest">
+                                    Focal In-Context Vocabulary
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {plan.readingPassageFull.vocabularyHighlighted.map((v, i) => (
+                                      <span key={i} className="bg-amber-100 text-amber-900 text-xs font-bold px-3 py-1 rounded-full border border-amber-300">
+                                        {v}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Comprehension Questions */}
+                              {plan.readingPassageFull.comprehensionQuestions && plan.readingPassageFull.comprehensionQuestions.length > 0 && (
+                                <div className="space-y-4 pt-4 border-t border-gray-100">
+                                  <h4 className="text-sm font-black text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                                    <FileQuestion className="w-4 h-4 text-blue-600" />
+                                    Passage Comprehension Questions & Model Answers
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {plan.readingPassageFull.comprehensionQuestions.map((q, idx) => (
+                                      <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs font-black text-blue-700 uppercase">Question {idx + 1}</span>
+                                          {q.cognitiveLevel && (
+                                            <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">
+                                              {q.cognitiveLevel}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm font-semibold text-gray-900">{q.question}</p>
+                                        <p className="text-xs text-gray-700 bg-white p-2.5 rounded-lg border border-gray-100">
+                                          <strong className="text-emerald-700">Answer Key:</strong> {q.answer}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          )}
+
+                          {/* 4. Mandatory LA Resource: Anchor Chart Blueprint */}
+                          {plan.anchorChartBlueprint && (
+                            <Card className="rounded-2xl border border-amber-200 bg-white p-6 sm:p-8 shadow-sm space-y-5">
+                              <div className="flex items-center justify-between border-b border-amber-100 pb-3">
+                                <div className="flex items-center gap-2 text-amber-900 font-bold">
+                                  <Presentation className="w-5 h-5 text-amber-600" />
+                                  <h3 className="text-base sm:text-lg">Anchor Chart Blueprint: {plan.anchorChartBlueprint.title}</h3>
+                                </div>
+                                <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full font-bold">
+                                  Layout: {plan.anchorChartBlueprint.layout}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                  <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-amber-800 mb-1">Header Display Text</p>
+                                    <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-sm font-black text-amber-950">
+                                      {plan.anchorChartBlueprint.headerText}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-amber-800 mb-2">Key Rules & Definitions</p>
+                                    <ul className="space-y-1.5">
+                                      {plan.anchorChartBlueprint.keyRulesOrDefinitions?.map((rule, idx) => (
+                                        <li key={idx} className="flex items-start gap-2 text-xs text-gray-800 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                                          <Check className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                          <span>{rule}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                  <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-amber-800 mb-1">Visual Diagram / Chart Blueprint</p>
+                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-gray-700 leading-relaxed font-mono">
+                                      {plan.anchorChartBlueprint.visualDiagramDescription}
+                                    </div>
+                                  </div>
+                                  <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+                                    <p className="text-xs font-black uppercase tracking-wider text-emerald-900 mb-1">Student Key Takeaway</p>
+                                    <p className="text-sm font-bold text-emerald-950 italic">
+                                      "{plan.anchorChartBlueprint.studentKeyTakeaway}"
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          )}
+
+                          {/* 5. Mandatory LA Resource: Daily Exit Ticket Package */}
+                          {plan.exitTicketPackage && (
+                            <Card className="rounded-2xl border border-rose-200 bg-white p-6 sm:p-8 shadow-sm space-y-5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 pb-3">
+                                <div>
+                                  <div className="flex items-center gap-2 text-rose-700 font-black text-xs uppercase tracking-wider">
+                                    <CheckSquare className="w-4 h-4" />
+                                    Daily Exit Ticket Assessment Package
+                                  </div>
+                                  <h3 className="text-lg font-bold text-gray-900 mt-1">{plan.exitTicketPackage.title}</h3>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold px-3 py-1 rounded-full">
+                                    Mastery: {plan.exitTicketPackage.masteryThreshold}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <p className="text-sm text-gray-700 italic bg-rose-50/50 p-3 rounded-xl border border-rose-100">
+                                Prompt: "{plan.exitTicketPackage.prompt}"
+                              </p>
+
+                              {/* Questions */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {plan.exitTicketPackage.questions?.map((q, idx) => (
+                                  <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-black text-rose-700">Question {idx + 1}</span>
+                                      {q.points && (
+                                        <span className="text-[10px] bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-bold">
+                                          {q.points} pt
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs font-bold text-gray-900">{q.question}</p>
+                                    <p className="text-[11px] text-gray-700 bg-white p-2 rounded border border-gray-100">
+                                      <strong className="text-emerald-700">Answer:</strong> {q.answerKey}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Grouping Rule Tomorrow */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 text-xs">
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                  <strong className="text-gray-900 block mb-1">Scoring Guidance:</strong>
+                                  <span className="text-gray-700">{plan.exitTicketPackage.scoringGuidance}</span>
+                                </div>
+                                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                                  <strong className="text-indigo-950 block mb-1">Actionable Grouping for Tomorrow:</strong>
+                                  <span className="text-indigo-900">{plan.exitTicketPackage.groupingRuleTomorrow}</span>
+                                </div>
+                              </div>
+                            </Card>
+                          )}
                         </div>
-                      </LessonSectionCard>
-                      {/* sections moved */}
+                      )}
 
-                    {/* 20. BOTTOM TEACHER ROW — EXACT LAYOUT: 2 columns */}
-                    <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-8">
-                      {/* 21. REFLECTION CARD */}
-                      <LessonSectionCard 
-                        id="reflection" 
-                        title="Teacher Reflection Dashboard" 
-                        icon={StickyNote}
-                        expanded={expandedSections.reflection}
-                        onToggle={() => toggleSection('reflection')}
-                        className="min-h-[400px]"
-                        isTeachMode={isTeachMode}
-                      >
-                        {plan.reflectionDashboard ? (
+                      {/* SECTION 2: TEACHING STRATEGIES & METHODOLOGY */}
+                      {(plan.teachingStrategies?.length || plan.methodology || plan.priorKnowledgeActivation || plan.vocabularyFocus) && (
+                        <div id="strategies" className="space-y-6">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                              <div className="rounded-3xl border border-emerald-100 bg-emerald-50/30 p-6">
-                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-3">What Worked Well</p>
-                                <BulletList items={plan.reflectionDashboard.whatWorked} icon={CheckCircle2} isTeachMode={isTeachMode} />
-                              </div>
-                              <div className="rounded-3xl border border-rose-100 bg-rose-50/30 p-6">
-                                <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] mb-3">Needs Improvement</p>
-                                <BulletList items={plan.reflectionDashboard.needsImprovement} icon={AlertCircle} isTeachMode={isTeachMode} />
-                              </div>
-                            </div>
-                            <div className="space-y-4">
-                              <div className="rounded-3xl border border-amber-100 bg-amber-50/30 p-6">
-                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-3">Follow-up Students</p>
-                                <BulletList items={plan.reflectionDashboard.followUpStudents} icon={Users} isTeachMode={isTeachMode} />
-                              </div>
-                              <div className="rounded-3xl border border-indigo-100 bg-indigo-50/30 p-6">
-                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-3">Next Steps</p>
-                                <BulletList items={plan.reflectionDashboard.nextSteps} icon={ArrowRight} isTeachMode={isTeachMode} />
-                              </div>
-                            </div>
+                            {plan.teachingStrategies && plan.teachingStrategies.length > 0 && (
+                              <Card className="rounded-2xl border-gray-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center gap-3 mb-4 text-amber-700">
+                                  <Sparkles className="w-5 h-5" />
+                                  <h3 className="text-base font-black uppercase tracking-tight">Teaching Strategies</h3>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {plan.teachingStrategies.map((strategy, i) => (
+                                    <span key={i} className="bg-amber-50/80 border border-amber-200/80 text-amber-900 px-3 py-1.5 rounded-xl text-xs font-bold">
+                                      {strategy}
+                                    </span>
+                                  ))}
+                                </div>
+                              </Card>
+                            )}
+                            {plan.methodology && (
+                              <Card className="rounded-2xl border-gray-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center gap-3 mb-4 text-emerald-700">
+                                  <Layers className="w-5 h-5" />
+                                  <h3 className="text-base font-black uppercase tracking-tight">Methodology</h3>
+                                </div>
+                                <p className={cn(
+                                  "text-gray-800 font-medium leading-relaxed",
+                                  isTeachMode ? "text-lg" : "text-sm"
+                                )}>
+                                  {plan.methodology}
+                                </p>
+                              </Card>
+                            )}
                           </div>
-                        ) : (
-                          <div className={cn(
-                            "space-y-6",
-                            isTeachMode && "space-y-10"
-                          )}>
-                            <div className={cn(
-                              "grid grid-cols-1 gap-6",
-                              !isTeachMode && "grid-cols-2"
-                            )}>
-                              <div className="space-y-3">
-                                <label className={cn(
-                                  "font-black text-gray-400 uppercase tracking-[0.2em]",
-                                  isTeachMode ? "text-xs" : "text-[10px]"
-                                )}>What went well?</label>
-                                <textarea className={cn(
-                                  "w-full rounded-3xl border border-gray-100 bg-gray-50/50 p-5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none",
-                                  isTeachMode ? "min-h-[200px] text-[18px]" : "min-h-[120px] text-sm"
-                                )} placeholder="Enter notes..." />
-                              </div>
-                              <div className="space-y-3">
-                                <label className={cn(
-                                  "font-black text-gray-400 uppercase tracking-[0.2em]",
-                                  isTeachMode ? "text-xs" : "text-[10px]"
-                                )}>Challenges?</label>
-                                <textarea className={cn(
-                                  "w-full rounded-3xl border border-gray-100 bg-gray-50/50 p-5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none",
-                                  isTeachMode ? "min-h-[200px] text-[18px]" : "min-h-[120px] text-sm"
-                                )} placeholder="Enter notes..." />
-                              </div>
-                            </div>
-                            <div className="space-y-3">
-                              <label className={cn(
-                                "font-black text-gray-400 uppercase tracking-[0.2em]",
-                                isTeachMode ? "text-xs" : "text-[10px]"
-                              )}>Notes for next lesson</label>
-                              <textarea className={cn(
-                                "w-full rounded-3xl border border-gray-100 bg-gray-50/50 p-5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none",
-                                isTeachMode ? "min-h-[200px] text-[18px]" : "min-h-[120px] text-sm"
-                              )} placeholder="Enter notes..." />
-                            </div>
-                          </div>
-                        )}
-                      </LessonSectionCard>
 
-                      {/* 22. ATTACHED RESOURCES CARD */}
-                      <Card className={cn(
-                        "min-h-[400px] rounded-[32px] border border-gray-200 bg-white shadow-sm transition-all",
-                        isTeachMode ? "p-12 border-indigo-200 shadow-xl" : "p-8"
+                          {/* Prior Knowledge Activation & Vocabulary Focus */}
+                          {(plan.priorKnowledgeActivation || plan.previousKnowledge || plan.vocabularyFocus || plan.keyVocabulary) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {(plan.priorKnowledgeActivation || plan.previousKnowledge) && (
+                                <Card className="rounded-2xl border-gray-200 bg-white p-6 shadow-sm">
+                                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3">Prior Knowledge Activation</p>
+                                  {typeof plan.priorKnowledgeActivation === 'object' && plan.priorKnowledgeActivation !== null ? (
+                                    <div className="space-y-2 text-sm text-gray-700">
+                                      {plan.priorKnowledgeActivation.whatTheyKnow && (
+                                        <p><strong className="text-gray-900">What they know:</strong> {plan.priorKnowledgeActivation.whatTheyKnow}</p>
+                                      )}
+                                      {plan.priorKnowledgeActivation.activationStrategy && (
+                                        <p><strong className="text-gray-900">Activation Strategy:</strong> {plan.priorKnowledgeActivation.activationStrategy}</p>
+                                      )}
+                                      {plan.priorKnowledgeActivation.misconceptionsToAnticipate && plan.priorKnowledgeActivation.misconceptionsToAnticipate.length > 0 && (
+                                        <div>
+                                          <strong className="text-gray-900">Anticipated Misconceptions:</strong>
+                                          <BulletList items={plan.priorKnowledgeActivation.misconceptionsToAnticipate} icon={AlertCircle} isTeachMode={isTeachMode} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-gray-700 text-sm leading-relaxed">
+                                      {String(plan.priorKnowledgeActivation || plan.previousKnowledge || '')}
+                                    </p>
+                                  )}
+                                </Card>
+                              )}
+                              {(plan.vocabularyFocus || plan.keyVocabulary) && (
+                                <Card className="rounded-2xl border-gray-200 bg-white p-6 shadow-sm">
+                                  <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-3">Key Vocabulary Focus</p>
+                                  <BulletList 
+                                    items={
+                                      plan.vocabularyFocus?.keyVocabulary?.map(v => `${v.term}${v.definition ? `: ${v.definition}` : ''}`) ||
+                                      plan.keyVocabulary
+                                    } 
+                                    icon={CheckCircle2} 
+                                    isTeachMode={isTeachMode} 
+                                  />
+                                </Card>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SECTION 3: LEARNING OBJECTIVES & SUCCESS CRITERIA */}
+                      {(() => {
+                        const normalizedObjectives = normalizeLearningObjectives(
+                          plan,
+                          plan.learningObjectivesBoard?.condition || (plan as any).learningObjectivesCondition || (plan as any).condition
+                        );
+                        return (
+                          <Card id="objectives" className={cn(
+                            "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                            isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                          )}>
+                            <div className="space-y-6">
+                              <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
+                                <div className="flex items-center gap-3 text-indigo-600">
+                                  <Target className="w-6 h-6" />
+                                  <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                                    Learning Objectives & Success Criteria
+                                  </h2>
+                                </div>
+                                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
+                                  One Shared Condition
+                                </span>
+                              </div>
+
+                              {/* Prominent Shared Condition */}
+                              <div className="rounded-2xl border-2 border-indigo-200/80 bg-indigo-50/50 p-6 shadow-sm">
+                                <div className="flex items-center gap-2 text-indigo-800 font-black text-xs uppercase tracking-widest mb-2">
+                                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                                  Shared Learning Condition (All Domains)
+                                </div>
+                                <p className={cn(
+                                  "text-gray-900 font-bold leading-relaxed",
+                                  isTeachMode ? "text-2xl" : "text-base sm:text-lg"
+                                )}>
+                                  {normalizedObjectives.condition}
+                                </p>
+                              </div>
+
+                              {/* 3 Domain Cards: Cognitive, Psychomotor, Affective */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                {/* 1. Cognitive Domain */}
+                                <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5 space-y-3">
+                                  <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase tracking-wider">
+                                    <BookOpen className="w-4 h-4" />
+                                    Cognitive Domain
+                                  </div>
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                    {normalizedObjectives.cognitive}
+                                  </p>
+                                </div>
+
+                                {/* 2. Psychomotor / Skills Domain */}
+                                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 space-y-3">
+                                  <div className="flex items-center gap-2 text-emerald-700 font-black text-xs uppercase tracking-wider">
+                                    <PenTool className="w-4 h-4" />
+                                    Psychomotor / Skills Domain
+                                  </div>
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                    {normalizedObjectives.psychomotor}
+                                  </p>
+                                </div>
+
+                                {/* 3. Affective Domain */}
+                                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-5 space-y-3">
+                                  <div className="flex items-center gap-2 text-purple-700 font-black text-xs uppercase tracking-wider">
+                                    <Users className="w-4 h-4" />
+                                    Affective Domain
+                                  </div>
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                    {normalizedObjectives.affective}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Success Criteria */}
+                              {(plan.learningObjectivesBoard?.successCriteria || (plan as any).successCriteria || plan.structured_json?.successCriteria) && (
+                                <div className="pt-4 border-t border-gray-100">
+                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                                    Success Criteria (Observable Student Outcomes)
+                                  </p>
+                                  <div className="bg-gray-50/80 rounded-xl p-5 border border-gray-100">
+                                    <BulletList 
+                                      items={plan.learningObjectivesBoard?.successCriteria || (plan as any).successCriteria || plan.structured_json?.successCriteria} 
+                                      icon={CheckCircle2} 
+                                      isTeachMode={isTeachMode} 
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })()}
+
+                      {/* SECTION 4: MATERIALS & RESOURCES (Natural Vertical Flow - No Small Box) */}
+                      <Card id="materials" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
                       )}>
-                        <div className={cn(
-                          "flex justify-between items-center",
-                          isTeachMode ? "mb-12" : "mb-8"
-                        )}>
-                          <h4 className={cn(
-                            "font-display font-bold text-gray-900 flex items-center gap-3",
-                            isTeachMode ? "text-[32px]" : "text-[24px]"
-                          )}>
-                            <Package className={isTeachMode ? "w-10 h-10 text-indigo-600" : "w-6 h-6 text-indigo-600"} />
-                            Lesson Assets
-                          </h4>
-                          <Button variant="ghost" size="sm" className={cn(
-                            "text-indigo-600 font-bold hover:bg-indigo-50 rounded-xl px-4",
-                            isTeachMode ? "h-14 px-8 text-lg" : "h-9"
-                          )} onClick={handleGenerateFullPack}>
-                            <Sparkles className={isTeachMode ? "w-6 h-6 mr-3" : "w-4 h-4 mr-2"} /> Generate All
-                          </Button>
-                        </div>
-                        
-                        <div className={cn(
-                          "space-y-4",
-                          isTeachMode && "space-y-6"
-                        )}>
-                          {plan.resourceMapping ? (
-                            plan.resourceMapping.map((res, i) => (
-                              <div key={i} className={cn(
-                                "rounded-2xl border border-gray-50 bg-gray-50/50 flex items-center justify-between group hover:bg-white hover:border-indigo-100 hover:shadow-md transition-all duration-300",
-                                isTeachMode ? "min-h-[100px] px-8 py-6" : "min-h-[76px] px-5 py-4"
-                              )}>
-                                <div className="flex items-center gap-4">
-                                  <div className={cn(
-                                    "rounded-xl border border-white shadow-sm transition-colors flex items-center justify-center bg-indigo-50 text-indigo-500",
-                                    isTeachMode ? "p-4 w-16 h-16" : "p-3 w-10 h-10"
-                                  )}>
-                                    <FileText className={isTeachMode ? "w-8 h-8" : "w-5 h-5"} />
-                                  </div>
-                                  <div>
-                                    <p className={cn(
-                                      "font-bold text-gray-900",
-                                      isTeachMode ? "text-[20px]" : "text-[15px]"
-                                    )}>{res.resourceName}</p>
-                                    <p className={cn(
-                                      "font-black text-gray-400 uppercase tracking-[0.1em] mt-0.5",
-                                      isTeachMode ? "text-xs" : "text-[10px]"
-                                    )}>{res.type} • {res.phaseUsed}</p>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-3 text-indigo-600 border-b border-gray-100 pb-4">
+                            <Package className="w-6 h-6" />
+                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                              Materials & Instructional Resources
+                            </h2>
+                          </div>
+
+                          {plan.materialsBoard && plan.materialsBoard.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {plan.materialsBoard.map((item, i) => (
+                                <div key={i} className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all space-y-1.5">
+                                  <div className="flex items-start gap-2.5">
+                                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{item.name}</p>
+                                      {item.purpose && (
+                                        <p className="text-xs text-gray-600 leading-normal mt-0.5">{item.purpose}</p>
+                                      )}
+                                      {(item.lessonPhase || (item as any).phaseUsed) && (
+                                        <span className="inline-block mt-2 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                                          Phase: {item.lessonPhase || (item as any).phaseUsed}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                                <div className={cn(
-                                  "flex gap-2 transition-all duration-300",
-                                  !isTeachMode && "opacity-0 group-hover:opacity-100"
-                                )}>
-                                  <Button variant="ghost" size="sm" className={cn(
-                                    "font-black uppercase rounded-xl hover:bg-indigo-50 hover:text-indigo-600",
-                                    isTeachMode ? "h-12 px-6 text-sm" : "h-9 px-4 text-[10px]"
-                                  )}>Open</Button>
-                                </div>
-                              </div>
-                            ))
+                              ))}
+                            </div>
                           ) : (
-                            [
-                              { title: 'Worksheet A', type: 'PDF Document', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
-                              { title: 'Visual Slides', type: 'Interactive Slides', icon: Presentation, color: 'text-orange-500', bg: 'bg-orange-50' },
-                              { title: 'Vocabulary Cards', type: 'Printable Cards', icon: Layers, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                              { title: 'Exit Tickets', type: 'Assessment PDF', icon: ListChecks, color: 'text-rose-500', bg: 'bg-rose-50' },
-                            ].map((res, i) => (
-                              <div key={i} className={cn(
-                                "rounded-2xl border border-gray-50 bg-gray-50/50 flex items-center justify-between group hover:bg-white hover:border-indigo-100 hover:shadow-md transition-all duration-300",
-                                isTeachMode ? "min-h-[100px] px-8 py-6" : "min-h-[76px] px-5 py-4"
-                              )}>
-                                <div className="flex items-center gap-4">
-                                  <div className={cn(
-                                    "rounded-xl border border-white shadow-sm transition-colors flex items-center justify-center",
-                                    res.bg, res.color,
-                                    isTeachMode ? "p-4 w-16 h-16" : "p-3 w-10 h-10"
-                                  )}>
-                                    <res.icon className={isTeachMode ? "w-8 h-8" : "w-5 h-5"} />
-                                  </div>
-                                  <div>
-                                    <p className={cn(
-                                      "font-bold text-gray-900",
-                                      isTeachMode ? "text-[20px]" : "text-[15px]"
-                                    )}>{res.title}</p>
-                                    <p className={cn(
-                                      "font-black text-gray-400 uppercase tracking-[0.1em] mt-0.5",
-                                      isTeachMode ? "text-xs" : "text-[10px]"
-                                    )}>{res.type}</p>
-                                  </div>
-                                </div>
-                                <div className={cn(
-                                  "flex gap-2 transition-all duration-300",
-                                  !isTeachMode && "opacity-0 group-hover:opacity-100"
-                                )}>
-                                  <Button variant="ghost" size="sm" className={cn(
-                                    "font-black uppercase rounded-xl hover:bg-indigo-50 hover:text-indigo-600",
-                                    isTeachMode ? "h-12 px-6 text-sm" : "h-9 px-4 text-[10px]"
-                                  )}>Open</Button>
-                                  <Button variant="ghost" size="sm" className={cn(
-                                    "font-black uppercase rounded-xl hover:bg-indigo-50 hover:text-indigo-600",
-                                    isTeachMode ? "h-12 px-6 text-sm" : "h-9 px-4 text-[10px]"
-                                  )}>Print</Button>
-                                </div>
-                              </div>
-                            ))
+                            <div className="bg-gray-50/60 rounded-xl p-6 border border-gray-100">
+                              <BulletList items={plan.materials} icon={Check} isTeachMode={isTeachMode} />
+                            </div>
                           )}
                         </div>
                       </Card>
 
-                      {/* EXIT TICKET SECTION */}
-                      <LessonSectionCard
-                        id="closure"
-                        title="Exit Ticket"
-                        icon={BookOpen}
-                        expanded={expandedSections.closure}
-                        onToggle={() => toggleSection('closure')}
-                        isTeachMode={isTeachMode}
-                      >
-                        <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/5 p-8 text-center">
-                          <p className="text-sm font-black text-indigo-400 uppercase tracking-widest mb-4">Final Check for Understanding</p>
-                          <p className={cn(
-                            "text-gray-900 font-bold italic leading-relaxed",
-                            isTeachMode ? "text-3xl" : "text-xl"
-                          )}>
-                            {plan.closurePanel?.exitQuestion || "Write down one thing you learned today and one question you still have."}
-                          </p>
-                        </div>
-                      </LessonSectionCard>
-                      </div>
-                      </main>
-
-                      {!isTeachMode && (
-                        <div className="bottom-panel no-print">
-                          <div className="bottom-item">
-                            <Card id="objectives" className="p-6 h-full border-gray-100 bg-white">
-                              <div className="space-y-6">
-                                <div className="flex items-center gap-3 text-indigo-600">
-                                  <Target className="w-5 h-5" />
-                                  <h3 className="text-sm font-black uppercase tracking-tight">Objectives</h3>
-                                </div>
-                                <div className="space-y-4">
-                                  <div>
-                                    <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-2">Knowledge</p>
-                                    <BulletList items={plan.learningObjectivesBoard?.knowledge || plan.generalObjective} icon={CheckCircle2} />
-                                  </div>
-                                  <div>
-                                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">Skills</p>
-                                    <BulletList items={plan.learningObjectivesBoard?.skill} icon={CheckCircle2} />
-                                  </div>
-                                </div>
-                              </div>
-                            </Card>
+                      {/* SECTION 5: LESSON EXECUTION FLOW (CENTERPIECE — Natural Vertical Document Flow) */}
+                      <Card id="procedures" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
+                            <div className="flex items-center gap-3 text-indigo-600">
+                              <PenTool className="w-6 h-6" />
+                              <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                                Lesson Execution Flow (5 Stages)
+                              </h2>
+                            </div>
+                            <span className="text-xs text-gray-500 font-medium">
+                              Full step-by-step teacher and student activities
+                            </span>
                           </div>
 
-                          <div className="bottom-item">
-                            <Card id="materials" className="p-6 h-full border-gray-100 bg-white">
-                              <div className="space-y-6">
-                                <div className="flex items-center gap-3 text-indigo-600">
-                                  <Package className="w-5 h-5" />
-                                  <h3 className="text-sm font-black uppercase tracking-tight">Materials</h3>
-                                </div>
-                                {plan.materialsBoard ? (
-                                  <div className="grid grid-cols-1 gap-3">
-                                    {plan.materialsBoard.slice(0, 4).map((item, i) => (
-                                      <div key={i} className="text-xs">
-                                        <p className="font-bold">{item.name}</p>
-                                        <p className="text-[10px] text-gray-500">{item.purpose}</p>
+                          {/* Full Execution Board without artificial height or scrolling constraints */}
+                          <div className="w-full">
+                            <LessonExecutionBoard plan={plan} isTeachMode={isTeachMode} compact={false} />
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* SECTION 6: ASSESSMENT & EVALUATION */}
+                      <Card id="assessment" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-3 text-rose-600 border-b border-gray-100 pb-4">
+                            <ListChecks className="w-6 h-6" />
+                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                              Assessment & Questioning Strategies
+                            </h2>
+                          </div>
+
+                          <div className="space-y-6">
+                            {/* Questions for Understanding */}
+                            <div className="space-y-3">
+                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Questions for Understanding</p>
+                              <div className="bg-gray-50/80 p-6 rounded-xl border border-gray-100">
+                                <BulletList items={plan.assessment} icon={HelpCircle} isTeachMode={isTeachMode} />
+                              </div>
+                            </div>
+
+                            {/* Questioning Strategies with Bloom's Levels */}
+                            {((plan as any).questioningStrategies || plan.teachingResources?.teacherMaterials?.guidedQuestions) && (
+                              <div className="space-y-3">
+                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Questioning Strategies & Bloom's Levels</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {(((plan as any).questioningStrategies || plan.teachingResources?.teacherMaterials?.guidedQuestions || []) as any[]).map((item: any, idx: number) => (
+                                    <div key={idx} className="p-4 rounded-xl border border-gray-100 bg-white shadow-sm space-y-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                                          {item.level || "Inquiry"}
+                                        </span>
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <BulletList items={plan.materials} icon={Check} />
-                                )}
+                                      <p className="font-bold text-gray-900 text-sm leading-relaxed">{item.question}</p>
+                                      {item.expectedResponse && (
+                                        <p className="text-xs text-gray-600 italic">Expected: {item.expectedResponse}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </Card>
-                          </div>
+                            )}
 
-                          <div className="bottom-item">
-                            <Card id="procedures" className="p-6 h-full border-gray-100 bg-white overflow-hidden">
-                              <div className="space-y-4">
-                                <div className="flex items-center gap-3 text-indigo-600">
-                                  <PenTool className="w-5 h-5" />
-                                  <h3 className="text-sm font-black uppercase tracking-tight">Execution</h3>
-                                </div>
-                                <div className="max-h-[200px] overflow-y-auto pr-2">
-                                  <LessonExecutionBoard plan={plan} compact />
-                                </div>
+                            {/* Evaluation Notes */}
+                            <div className="space-y-3">
+                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Evaluation Notes</p>
+                              <div className="bg-gray-50/80 p-5 rounded-xl border border-gray-100">
+                                <p className="text-sm text-gray-500 italic">Teacher notes on student performance will be recorded here after the lesson...</p>
                               </div>
-                            </Card>
+                            </div>
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </Card>
+
+                      {/* SECTION 7: DIFFERENTIATION FRAMEWORK */}
+                      <Card id="differentiation" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-3 text-indigo-600 border-b border-gray-100 pb-4">
+                            <Users className="w-6 h-6" />
+                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                              Differentiation Framework
+                            </h2>
+                          </div>
+
+                          {plan.differentiationFramework ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                              {/* Struggling Learners */}
+                              <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-5 space-y-3">
+                                <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em]">Struggling Learners</p>
+                                <BulletList 
+                                  items={[
+                                    ...(plan.differentiationFramework.strugglingLearners.scaffolds || []), 
+                                    ...(plan.differentiationFramework.strugglingLearners.visuals || []), 
+                                    ...(plan.differentiationFramework.strugglingLearners.manipulatives || []), 
+                                    plan.differentiationFramework.strugglingLearners.simplifiedInstructions, 
+                                    plan.differentiationFramework.strugglingLearners.guidedSupport
+                                  ].filter(Boolean)} 
+                                  icon={AlertCircle} 
+                                  isTeachMode={isTeachMode} 
+                                />
+                              </div>
+
+                              {/* On-Level Learners */}
+                              <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5 space-y-3">
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">On-Level Learners</p>
+                                <BulletList 
+                                  items={[
+                                    plan.differentiationFramework.onLevelLearners.participationExpectations, 
+                                    plan.differentiationFramework.onLevelLearners.independentWorkExpectations, 
+                                    plan.differentiationFramework.onLevelLearners.peerCollaboration
+                                  ].filter(Boolean)} 
+                                  icon={Check} 
+                                  isTeachMode={isTeachMode} 
+                                />
+                              </div>
+
+                              {/* Advanced Learners */}
+                              <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-5 space-y-3">
+                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Advanced Learners</p>
+                                <BulletList 
+                                  items={[
+                                    ...(plan.differentiationFramework.advancedLearners.challengeTasks || []), 
+                                    ...(plan.differentiationFramework.advancedLearners.deeperThinkingPrompts || []), 
+                                    plan.differentiationFramework.advancedLearners.extensionActivity, 
+                                    plan.differentiationFramework.advancedLearners.leadershipRole
+                                  ].filter(Boolean)} 
+                                  icon={Zap} 
+                                  isTeachMode={isTeachMode} 
+                                />
+                              </div>
+
+                              {/* Inclusion Support */}
+                              <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-5 space-y-3">
+                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em]">Inclusion Support</p>
+                                <BulletList 
+                                  items={Object.values(plan.differentiationFramework?.inclusionSupport || {}).filter(Boolean) as string[]} 
+                                  icon={Layers} 
+                                  isTeachMode={isTeachMode} 
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-6">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Struggling</p>
+                                <BulletList items={plan.differentiation} icon={AlertCircle} isTeachMode={isTeachMode} />
+                              </div>
+                              <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-6">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Advanced</p>
+                                <BulletList items={["Extension tasks", "Peer mentoring"]} icon={Zap} isTeachMode={isTeachMode} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* SECTION 8: CLOSURE & EXIT TICKET */}
+                      <Card id="closure" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-3 text-indigo-600 border-b border-gray-100 pb-4">
+                            <XCircle className="w-6 h-6" />
+                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                              Closure & Exit Ticket
+                            </h2>
+                          </div>
+
+                          <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/20 p-8 text-center">
+                            <p className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-3">
+                              Final Check for Understanding
+                            </p>
+                            <p className={cn(
+                              "text-gray-900 font-bold italic leading-relaxed",
+                              isTeachMode ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"
+                            )}>
+                              {plan.closurePanel?.exitQuestion || plan.closure || "Write down one key concept you mastered today and one question you still have."}
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* SECTION 9: TEACHER REFLECTION DASHBOARD */}
+                      <Card id="reflection" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-3 text-indigo-600 border-b border-gray-100 pb-4">
+                            <StickyNote className="w-6 h-6" />
+                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                              Teacher Reflection Dashboard
+                            </h2>
+                          </div>
+
+                          {plan.reflectionDashboard ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-4">
+                                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
+                                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-2.5">What Worked Well</p>
+                                  <BulletList items={plan.reflectionDashboard.whatWorked} icon={CheckCircle2} isTeachMode={isTeachMode} />
+                                </div>
+                                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-5">
+                                  <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] mb-2.5">Needs Improvement</p>
+                                  <BulletList items={plan.reflectionDashboard.needsImprovement} icon={AlertCircle} isTeachMode={isTeachMode} />
+                                </div>
+                              </div>
+                              <div className="space-y-4">
+                                <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-5">
+                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-2.5">Follow-up Students</p>
+                                  <BulletList items={plan.reflectionDashboard.followUpStudents} icon={Users} isTeachMode={isTeachMode} />
+                                </div>
+                                <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-5">
+                                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-2.5">Next Steps</p>
+                                  <BulletList items={plan.reflectionDashboard.nextSteps} icon={ArrowRight} isTeachMode={isTeachMode} />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">What went well?</label>
+                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[110px] text-sm text-gray-800" placeholder="Record what succeeded during the lesson..." />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Challenges & Next Steps</label>
+                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[110px] text-sm text-gray-800" placeholder="Record adjustments needed for the next lesson..." />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* SECTION 10: LESSON ASSETS & ATTACHED RESOURCES */}
+                      <Card id="assets" className={cn(
+                        "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
+                        isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
+                      )}>
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
+                            <div className="flex items-center gap-3 text-indigo-600">
+                              <Package className="w-6 h-6" />
+                              <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                                Lesson Assets & Generated Materials
+                              </h2>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-indigo-600 font-bold hover:bg-indigo-50 rounded-xl px-4 h-9"
+                              onClick={handleGenerateFullPack}
+                            >
+                              <Sparkles className="w-4 h-4 mr-2" /> Generate All Assets
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            {plan.resourceMapping ? (
+                              plan.resourceMapping.map((res, i) => (
+                                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 flex items-center justify-between hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
+                                  <div className="flex items-center gap-3.5">
+                                    <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-600">
+                                      <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{res.resourceName}</p>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
+                                        {res.type} • Phase: {res.phaseUsed}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600">
+                                      Open
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              [
+                                { title: 'Student Worksheet', type: 'Printable Practice Worksheet', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
+                                { title: 'Visual Slides', type: 'Interactive Instruction Deck', icon: Presentation, color: 'text-orange-500', bg: 'bg-orange-50' },
+                                { title: 'Vocabulary Flashcards', type: 'Printable Term Cards', icon: Layers, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                                { title: 'Exit Ticket Slips', type: 'Quick Check Slip', icon: ListChecks, color: 'text-rose-500', bg: 'bg-rose-50' },
+                              ].map((res, i) => (
+                                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 flex items-center justify-between hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
+                                  <div className="flex items-center gap-3.5">
+                                    <div className={cn("p-2.5 rounded-lg", res.bg, res.color)}>
+                                      <res.icon className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{res.title}</p>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">{res.type}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600">
+                                      Open
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600" onClick={handlePrint}>
+                                      Print
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+
+                    </main>
+                  </div>
 
                   {/* 6. RIGHT SIDEBAR — ASSISTANT PANEL */}
-                  {!isTeachMode && (
-                    <aside className="hidden lg:block right-sidebar">
-                      <div className="sticky top-24 space-y-6 print:hidden">
-                        <Card className="rounded-[24px] border border-gray-200 bg-white p-6 shadow-sm">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-6 flex items-center gap-2">
-                            <Settings2 className="w-4 h-4" /> Assistant Panel
-                          </h4>
-                          <div className="space-y-3">
-                            <Button variant="outline" className="w-full justify-start h-12 rounded-xl border-gray-100 text-gray-600 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group">
-                              <FileText className="w-4 h-4 mr-3 text-gray-300 group-hover:text-indigo-500" /> Quick Notes
-                            </Button>
-                            <Button variant="outline" className="w-full justify-start h-12 rounded-xl border-gray-100 text-gray-600 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group">
-                              <Layers className="w-4 h-4 mr-3 text-gray-300 group-hover:text-indigo-500" /> Vocabulary List
-                            </Button>
-                          </div>
-                        </Card>
-
-                        <Card className="rounded-[24px] border border-indigo-100 bg-white p-6 shadow-lg shadow-indigo-50/50">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-6">Quick Actions</h4>
-                          <div className="space-y-3">
-                            <Button 
-                              variant="primary" 
-                              size="sm" 
-                              className="w-full justify-start h-12 rounded-xl font-bold shadow-sm" 
-                              onClick={onGenerateReteach}
-                            >
-                              <RefreshCw className="w-4 h-4 mr-3" /> Generate Reteach
-                            </Button>
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              className="w-full justify-start h-12 rounded-xl font-bold" 
-                              onClick={onGenerateIntervention}
-                            >
-                              <Zap className="w-4 h-4 mr-3" /> Intervention
-                            </Button>
-                          </div>
-                        </Card>
+                  {!isTeachMode && !isFocusMode && (
+                    isAssistantCollapsed ? (
+                      <div className="hidden lg:flex flex-col items-center py-4 px-2 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
+                        <button
+                          onClick={() => setIsAssistantCollapsed(false)}
+                          className="h-10 w-10 p-0 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
+                          title="Expand Assistant Panel"
+                        >
+                          <PanelRight className="w-5 h-5" />
+                        </button>
                       </div>
-                    </aside>
+                    ) : (
+                      <aside className="hidden lg:block w-72 xl:w-80 shrink-0 sticky top-24 print:hidden">
+                        <div className="space-y-5">
+                          <Card className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                                <Settings2 className="w-4 h-4" /> Assistant Panel
+                              </h4>
+                              <button
+                                onClick={() => setIsAssistantCollapsed(true)}
+                                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                                title="Collapse Assistant Panel"
+                              >
+                                <PanelRightClose className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                onClick={() => setActiveTab('resources')}
+                              >
+                                <FileText className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
+                                Teaching Resources
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                onClick={() => setActiveTab('board-plan')}
+                              >
+                                <Presentation className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
+                                Board Plan
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                onClick={() => setActiveTab('ai-video')}
+                              >
+                                <Video className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
+                                AI Video Lesson
+                              </Button>
+                            </div>
+                          </Card>
+
+                          <Card className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-3">Teaching Actions</h4>
+                            <div className="space-y-2">
+                              <Button 
+                                variant="primary" 
+                                size="sm" 
+                                className="w-full justify-start h-10 rounded-xl font-bold shadow-sm text-xs" 
+                                onClick={onGenerateReteach}
+                              >
+                                <RefreshCw className="w-4 h-4 mr-2 shrink-0" /> Generate Reteach
+                              </Button>
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="w-full justify-start h-10 rounded-xl font-bold text-xs" 
+                                onClick={onGenerateIntervention}
+                              >
+                                <Zap className="w-4 h-4 mr-2 shrink-0" /> Intervention Plan
+                              </Button>
+                            </div>
+                          </Card>
+                        </div>
+                      </aside>
+                    )
                   )}
+
                 </div>
+              )}
               </div>
             </TabsContent>
-
 
             <TabsContent value="resources" className="mt-0 space-y-8 print:hidden">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -2430,6 +3204,14 @@ export function LessonPlanDisplay({
           </div>
         </Tabs>
       </Card>
+
+      {/* Teach Me This Topic 8-Question Modal */}
+      <TeachMeThisTopicModal 
+        isOpen={showTeachMeTopicModal} 
+        onClose={() => setShowTeachMeTopicModal(false)} 
+        plan={enrichedPlan} 
+      />
+
       {/* Video Player Modal */}
       {showVideoPlayer && plan.lessonVideo && (
         <LessonVideoPlayer 
@@ -2440,11 +3222,7 @@ export function LessonPlanDisplay({
       </div>
       {/* FORMAL PRINT TEMPLATE - ONLY VISIBLE DURING PRINT */}
       <div className="hidden print:block fixed inset-0 bg-white z-[9999] overflow-visible">
-        <div className="max-w-[8.5in] mx-auto p-4 sm:p-10">
-          <pre className="whitespace-pre-wrap font-sans text-[12pt] leading-relaxed text-black">
-            {formatLessonForExport(plan, auth.currentUser?.displayName || undefined)}
-          </pre>
-        </div>
+        <PrintableLessonPlan plan={plan} teacherName={auth.currentUser?.displayName || undefined} />
       </div>
     </>
   );

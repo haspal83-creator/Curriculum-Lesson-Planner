@@ -1,6 +1,7 @@
 import { db } from '../firebase';
 import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { addDays, isWithinInterval, startOfWeek } from 'date-fns';
+import { getClassId } from '../types';
 
 export const BELIZE_ACADEMIC_DATA = {
   cycles: [
@@ -56,6 +57,7 @@ export async function seedAcademicCalendar() {
 }
 
 export async function generateWeeklyPlans(userId: string, grade: string, subject: string) {
+  const classId = getClassId(grade);
   const cyclesSnap = await getDocs(collection(db, 'cycles'));
   const holidaysSnap = await getDocs(collection(db, 'holidays'));
   const vacationsSnap = await getDocs(collection(db, 'vacations'));
@@ -69,7 +71,7 @@ export async function generateWeeklyPlans(userId: string, grade: string, subject
   const existingPlansQuery = query(
     collection(db, 'weekly_plans'),
     where('userId', '==', userId),
-    where('grade', '==', grade),
+    where('classId', '==', classId),
     where('subject', '==', subject)
   );
   const existingPlansSnap = await getDocs(existingPlansQuery);
@@ -96,11 +98,14 @@ export async function generateWeeklyPlans(userId: string, grade: string, subject
       );
 
       if (!isVacation) {
-        const weekDocId = `${userId}_${grade}_${subject}_w${overallWeekCounter}`.replace(/[^a-zA-Z0-9]/g, '_');
+        const weekDocId = `${userId}_${classId}_${subject}_w${overallWeekCounter}`.replace(/[^a-zA-Z0-9]/g, '_');
         const weekDocRef = doc(db, 'weekly_plans', weekDocId);
         finalBatch.set(weekDocRef, {
           userId,
+          classId,
+          className: grade,
           grade,
+          grade_level: grade,
           subject,
           cycle_number: cycle.cycle_number,
           week_number: overallWeekCounter++,

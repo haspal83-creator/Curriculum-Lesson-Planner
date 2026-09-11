@@ -17,7 +17,8 @@ import { Button, Card, Select } from '../ui';
 import { 
   GradeLevel, 
   Subject, 
-  UserSettings 
+  UserSettings,
+  getClassId 
 } from '../../types';
 import { cn } from '../../lib/utils';
 import { useToasts } from '../../context/ToastContext';
@@ -27,6 +28,8 @@ import { seedAcademicCalendar, generateWeeklyPlans } from '../../lib/academicCal
 
 interface WeeklyAcademicPlan {
   id: string;
+  classId?: string;
+  className?: string;
   cycle_number: number;
   week_number: number;
   start_date: any;
@@ -45,17 +48,22 @@ interface Cycle {
 
 interface YearlyCalendarViewProps {
   userSettings: UserSettings;
+  activeClass?: GradeLevel | null;
+  activeClassId?: string | null;
   setActiveTab: (tab: string) => void;
   setPrefillData: (data: any) => void;
 }
 
 export function YearlyCalendarView({ 
   userSettings,
+  activeClass,
+  activeClassId,
   setActiveTab,
   setPrefillData
 }: YearlyCalendarViewProps) {
   const { showToast } = useToasts();
-  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(userSettings.defaultGrade);
+  const effectiveGrade = activeClass || userSettings.defaultGrade;
+  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(effectiveGrade);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(userSettings.defaultSubject);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyAcademicPlan[]>([]);
@@ -63,6 +71,12 @@ export function YearlyCalendarView({
   const [vacations, setVacations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (activeClass) {
+      setSelectedGrade(activeClass);
+    }
+  }, [activeClass]);
 
   useEffect(() => {
     // Initial Seed check
@@ -91,10 +105,22 @@ export function YearlyCalendarView({
   }, []);
 
   useEffect(() => {
-    // Listen to weekly plans for current selection
+    const userId = auth.currentUser?.uid;
+    const targetClassId = activeClassId || getClassId(selectedGrade);
+    if (!userId || !targetClassId) {
+      setWeeklyPlans([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setWeeklyPlans([]);
+    setIsLoading(true);
+
+    // Listen to weekly plans strictly scoped to userId AND classId
     const q = query(
       collection(db, 'weekly_plans'),
-      where('grade', '==', selectedGrade),
+      where('userId', '==', userId),
+      where('classId', '==', targetClassId),
       where('subject', '==', selectedSubject),
       orderBy('week_number', 'asc')
     );
@@ -102,10 +128,13 @@ export function YearlyCalendarView({
     const unsubPlans = onSnapshot(q, (snap) => {
       setWeeklyPlans(snap.docs.map(d => ({ id: d.id, ...d.data() } as WeeklyAcademicPlan)));
       setIsLoading(false);
+    }, (err) => {
+      console.warn("Weekly plans query warning:", err);
+      setIsLoading(false);
     });
 
     return () => unsubPlans();
-  }, [selectedGrade, selectedSubject, auth.currentUser]);
+  }, [selectedGrade, selectedSubject, activeClassId, auth.currentUser]);
 
   const handleGeneratePlans = async () => {
     const userId = auth.currentUser?.uid;
@@ -156,11 +185,15 @@ export function YearlyCalendarView({
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Class</label>
             <Select 
-              options={(userSettings.assignedClasses || []).map(c => ({ label: c, value: c }))} 
+              disabled={!!activeClass}
+              options={(userSettings.assignedClasses && userSettings.assignedClasses.length > 0 ? userSettings.assignedClasses : [selectedGrade]).map(c => ({ label: c, value: c }))} 
               value={selectedGrade} 
               onChange={(val) => setSelectedGrade(val as GradeLevel)} 
               className="w-40"
             />
+            {activeClass && (
+              <span className="text-[9px] text-indigo-600 font-bold block">Active: {activeClass}</span>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subject</label>

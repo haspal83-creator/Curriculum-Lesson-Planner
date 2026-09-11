@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, Input, Select } from '../ui';
 import { CurriculumEntry, GradeLevel, Subject } from '../../types';
+import { getFilteredCurriculum } from '../../services/curriculumFilterService';
 
 interface CycleUnitPlansViewProps {
   curriculum: CurriculumEntry[];
@@ -24,11 +25,16 @@ export function CycleUnitPlansView({
   setActiveTab, 
   setPrefillData 
 }: CycleUnitPlansViewProps) {
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2025-2026');
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>('Standard 1');
   const [selectedSubject, setSelectedSubject] = useState<Subject>('Mathematics');
 
   const cycleData = useMemo(() => {
-    const filtered = curriculum.filter(c => c.grade === selectedGrade && c.subject === selectedSubject);
+    const filtered = getFilteredCurriculum(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject
+    });
     const cycles: { [key: number]: CurriculumEntry[] } = {};
     
     filtered.forEach(entry => {
@@ -38,18 +44,31 @@ export function CycleUnitPlansView({
     });
 
     return Object.entries(cycles).sort((a, b) => Number(a[0]) - Number(b[0]));
-  }, [curriculum, selectedGrade, selectedSubject]);
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject]);
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex flex-wrap gap-4 items-center">
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade Level</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
+            <Select 
+              options={[
+                { label: '2025-2026', value: '2025-2026' },
+                { label: '2026-2027', value: '2026-2027' }
+              ]} 
+              value={selectedAcademicYear} 
+              onChange={(val) => setSelectedAcademicYear(val)} 
+              className="w-36"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Class / Standard</label>
             <Select 
               options={[
                 { label: 'Infant 1', value: 'Infant 1' },
                 { label: 'Infant 2', value: 'Infant 2' },
+                { label: 'Infant 3', value: 'Infant 3' },
                 { label: 'Standard 1', value: 'Standard 1' },
                 { label: 'Standard 2', value: 'Standard 2' },
                 { label: 'Standard 3', value: 'Standard 3' },

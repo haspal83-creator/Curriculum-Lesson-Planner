@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { LessonResourcesResponse } from "../types/index";
+import { callWithRetry } from "./utils";
 
 const getApiKey = () => {
   // On the server, we use process.env directly.
@@ -28,7 +29,14 @@ export function getGenAI(): GoogleGenAI {
     if (!key) {
       throw new Error("GEMINI_API_KEY environment variable is required. Please set it in the AI Studio Secrets panel.");
     }
-    genAI = new GoogleGenAI({ apiKey: key });
+    genAI = new GoogleGenAI({ 
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
   }
   return genAI;
 }
@@ -75,8 +83,8 @@ export async function generateLessonResources(grade: string, topic: string) {
       ]
     }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+    const response = await callWithRetry(() => ai.models.generateContent({
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -102,7 +110,7 @@ export async function generateLessonResources(grade: string, topic: string) {
           required: ["grade", "topic", "resources"]
         }
       }
-    });
+    }));
 
     const text = response.text;
     if (!text) {

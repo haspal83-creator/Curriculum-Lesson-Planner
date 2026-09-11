@@ -33,10 +33,13 @@ export function CurriculumManagerView({
   const { showToast } = useToasts();
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterAcademicYear, setFilterAcademicYear] = useState<string>('All');
   const [filterGrade, setFilterGrade] = useState<GradeLevel | 'All'>('All');
   const [filterSubject, setFilterSubject] = useState<Subject | 'All'>('All');
+  const [filterCycle, setFilterCycle] = useState<number | 'All'>('All');
 
   const [newEntry, setNewEntry] = useState<Partial<CurriculumEntry>>({
+    academicYear: '2025-2026',
     grade: 'Standard 1',
     subject: 'Mathematics',
     cycle: 1,
@@ -54,9 +57,11 @@ export function CurriculumManagerView({
       item.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.subtopic.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.strand?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesYear = filterAcademicYear === 'All' || (item.academicYear || '2025-2026') === filterAcademicYear;
     const matchesGrade = filterGrade === 'All' || item.grade === filterGrade;
     const matchesSubject = filterSubject === 'All' || item.subject === filterSubject;
-    return matchesSearch && matchesGrade && matchesSubject;
+    const matchesCycle = filterCycle === 'All' || item.cycle === filterCycle;
+    return matchesSearch && matchesYear && matchesGrade && matchesSubject && matchesCycle;
   });
 
   const handleAddEntry = async () => {
@@ -67,6 +72,7 @@ export function CurriculumManagerView({
 
     const entry: CurriculumEntry = {
       id: Math.random().toString(36).substr(2, 9),
+      academicYear: newEntry.academicYear || '2025-2026',
       grade: newEntry.grade as GradeLevel,
       subject: newEntry.subject as Subject,
       cycle: newEntry.cycle || 1,
@@ -83,6 +89,7 @@ export function CurriculumManagerView({
     await onSave([entry]);
     setIsAdding(false);
     setNewEntry({
+      academicYear: '2025-2026',
       grade: 'Standard 1',
       subject: 'Mathematics',
       cycle: 1,
@@ -135,9 +142,20 @@ export function CurriculumManagerView({
         </div>
         <Select 
           options={[
+            { label: 'All Years', value: 'All' },
+            { label: '2025-2026', value: '2025-2026' },
+            { label: '2026-2027', value: '2026-2027' }
+          ]} 
+          value={filterAcademicYear} 
+          onChange={(val) => setFilterAcademicYear(val)} 
+          className="w-36"
+        />
+        <Select 
+          options={[
             { label: 'All Grades', value: 'All' },
             { label: 'Infant 1', value: 'Infant 1' },
             { label: 'Infant 2', value: 'Infant 2' },
+            { label: 'Infant 3', value: 'Infant 3' },
             { label: 'Standard 1', value: 'Standard 1' },
             { label: 'Standard 2', value: 'Standard 2' },
             { label: 'Standard 3', value: 'Standard 3' },
@@ -161,6 +179,18 @@ export function CurriculumManagerView({
           onChange={(val) => setFilterSubject(val as any)} 
           className="w-40"
         />
+        <Select 
+          options={[
+            { label: 'All Cycles', value: 'All' },
+            { label: 'Cycle 1', value: 1 },
+            { label: 'Cycle 2', value: 2 },
+            { label: 'Cycle 3', value: 3 },
+            { label: 'Cycle 4', value: 4 }
+          ]} 
+          value={filterCycle} 
+          onChange={(val) => setFilterCycle(val === 'All' ? 'All' : Number(val))} 
+          className="w-32"
+        />
       </Card>
 
       <AnimatePresence>
@@ -179,13 +209,25 @@ export function CurriculumManagerView({
                 <Button variant="ghost" size="sm" onClick={() => setIsAdding(false)}>Cancel</Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
+                  <Select 
+                    options={[
+                      { label: '2025-2026', value: '2025-2026' },
+                      { label: '2026-2027', value: '2026-2027' }
+                    ]} 
+                    value={newEntry.academicYear || '2025-2026'} 
+                    onChange={(val) => setNewEntry({ ...newEntry, academicYear: val })} 
+                  />
+                </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade</label>
                   <Select 
                     options={[
                       { label: 'Infant 1', value: 'Infant 1' },
                       { label: 'Infant 2', value: 'Infant 2' },
+                      { label: 'Infant 3', value: 'Infant 3' },
                       { label: 'Standard 1', value: 'Standard 1' },
                       { label: 'Standard 2', value: 'Standard 2' },
                       { label: 'Standard 3', value: 'Standard 3' },

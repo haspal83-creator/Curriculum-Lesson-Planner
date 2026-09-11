@@ -21,6 +21,7 @@ async function callAi(action: string, params: any) {
 }
 
 export const generateLessonPlan = (params: any) => callAi('generateLessonPlan', params);
+export const generateLanguageArtsDailyPlan = (params: any) => callAi('generateLanguageArtsDailyPlan', params);
 export const generateWeeklyPlan = (grade: string, subject: string, cycle: number, entries: any[], numWeeks: number = 10, lessonsPerWeek: number = 5) => 
   callAi('generateWeeklyPlan', { grade, subject, cycle, entries, numWeeks, lessonsPerWeek });
 export const generateWeeklyCurriculumPlan = (params: any) => callAi('generateWeeklyCurriculumPlan', params);

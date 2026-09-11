@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   Calendar,
   Plus,
-  ArrowRight
+  ArrowRight,
+  ChevronRight
 } from 'lucide-react';
 import { Card, Button } from '../ui';
 import { StatCard, QuickAction } from '../DashboardComponents';
+import { cn } from '../../lib/utils';
 import { 
   GradeLevel, 
   CurriculumEntry, 
@@ -33,6 +35,7 @@ interface ClassDashboardProps {
   yearlyCalendars: YearlyCalendarPlan[];
   onAction: (tab: string) => void;
   onViewLesson: (lessonId: string) => void;
+  onSwitchClass?: () => void;
 }
 
 export const ClassDashboard: React.FC<ClassDashboardProps> = ({
@@ -43,7 +46,8 @@ export const ClassDashboard: React.FC<ClassDashboardProps> = ({
   outcomeMastery,
   yearlyCalendars,
   onAction,
-  onViewLesson
+  onViewLesson,
+  onSwitchClass
 }) => {
   const stats = useMemo(() => {
     const classCurriculum = (curriculum || []).filter(c => c.grade === activeClass);
@@ -80,12 +84,23 @@ export const ClassDashboard: React.FC<ClassDashboardProps> = ({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-gray-900 tracking-tight">
-            {activeClass} Dashboard
-          </h2>
-          <p className="text-gray-500 mt-1">Overview of your current teaching session and class progress.</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight">
+              {activeClass} Dashboard
+            </h2>
+            {onSwitchClass && (
+              <button
+                onClick={onSwitchClass}
+                className="px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors"
+                title="Switch to a different class"
+              >
+                Switch Class
+              </button>
+            )}
+          </div>
+          <p className="text-gray-500 mt-1">Overview of your current teaching session and class progress for {activeClass}.</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => onAction('planner')}>
@@ -250,6 +265,3 @@ function CheckItem({ label, completed }: { label: string, completed: boolean }) 
     </div>
   );
 }
-
-import { cn } from '../../lib/utils';
-import { ChevronRight } from 'lucide-react';

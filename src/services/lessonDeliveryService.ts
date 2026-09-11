@@ -12,7 +12,9 @@ import { stripUndefined, callWithRetry } from "../lib/utils";
 import { 
   SavedLesson, 
   LessonResourceNew, 
-  LessonResourceType
+  LessonResourceType,
+  getClassId,
+  GradeLevel
 } from "../types";
 
 import { generateResource as generateAiResource } from "./gemini";
@@ -63,9 +65,15 @@ export const lessonDeliveryService = {
 
   async generateResource(lesson: SavedLesson, type: LessonResourceType): Promise<void> {
     const aiContent = await generateAiResource(type, lesson);
+    const resolvedGrade = (lesson.grade || lesson.class_id) as GradeLevel;
+    const resolvedClassId = lesson.classId || (resolvedGrade ? getClassId(resolvedGrade) : undefined);
 
     const resource: Omit<LessonResourceNew, 'id'> = {
       lesson_id: lesson.id!,
+      classId: resolvedClassId,
+      className: lesson.className || resolvedGrade,
+      grade: resolvedGrade,
+      userId: auth.currentUser?.uid || lesson.createdBy,
       resource_type: type,
       title: type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
       content: aiContent,

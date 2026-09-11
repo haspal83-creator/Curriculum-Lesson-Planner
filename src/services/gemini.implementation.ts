@@ -29,7 +29,8 @@ import {
   AvatarStyle,
   AvatarPlacement,
   CurriculumUnit,
-  WeeklyLessonPlan
+  WeeklyLessonPlan,
+  LanguageArtsComponent
 } from "../types";
 
 import { callWithRetry } from "../lib/utils";
@@ -46,40 +47,117 @@ const safeFormat = (dateStr: string | undefined | null, formatStr: string): stri
 import { getMasterCalendar, getDayType, isTeachingDay, getCycleForDate } from "./calendarService";
 
 import { getGenAI, validateGeminiConfig } from "../lib/gemini";
+import { normalizeLearningObjectives } from "../lib/learningObjectivesHelper";
+import { enrichAndGuaranteeTeachReady } from "../lib/lessonQualityGate";
 const masterCalendar = getMasterCalendar();
 
-const SYSTEM_INSTRUCTION = `You are a Master Curriculum Specialist. Help teachers create professional, curriculum-aligned, classroom-ready lesson plans.
+const SYSTEM_INSTRUCTION = `You are an expert educational technology architect, Belize primary curriculum specialist, instructional designer, assessment specialist, and experienced primary school teacher.
+Your role is to build a TEACHER-INDEPENDENT, TEACH-READY LESSON PLANNER.
+The system functions as:
+Curriculum Planner + Teacher Preparation Guide + Instructional Coach + Teaching Script + Student Activity Generator + Assessment Guide.
 
-### CORE PHILOSOPHY: THE TEACHING WORKSPACE
-- **Dashboard Layout:** Structure plans as landscape-oriented workspaces. Avoid long documents.
-- **Actionable:** Content must be readable and actionable for direct teaching from the screen.
-- **Execution-Focused:** Use the "Lesson Execution Board" to break lessons into clear phases with teacher/student actions.
-- **Embedded Support:** Weave assessment and differentiation into the instructional flow.
-- **Curriculum-Driven:** Root every plan in provided curriculum entries. Teacher's Guides (CurriculumUnit) are the ABSOLUTE SOURCE OF TRUTH.
+### CORE PHILOSOPHY: TEACHER-INDEPENDENT INSTRUCTION
+The teacher should NOT need to conduct separate basic research using Google, YouTube, textbooks, or other websites merely to understand the content required to teach the lesson.
+Every generated lesson must contain:
+1. Complete Teacher Preparation: What the concept is, what it means, why it matters, how it works, important rules, terminology, and Belizean real-world applications.
+2. Complete Teacher Script: The actual words a teacher should say ("Teacher Says: ...") for opening, explaining, modeling, transitions, feedback, and closing.
+3. No Vague Instructions: NEVER output standalone instructions like "Explain the topic", "Model the skill", "Ask guiding questions", or "Give examples". ALWAYS provide the actual content, words, questions, expected student answers, and corrections required to execute the instruction.
+4. Concrete Worked Examples: Step-by-step solutions with explanations of each step, final answers, and common student errors.
+5. Formative Checks with Immediate Pathways: Explicit guidance for "If Correct" and "If Incorrect" across all comprehension checks.
+6. Reteaching Protocol: Dedicated "If Students Are Struggling" protocol with simpler explanations, alternative examples, and manipulatives.
+7. Complete Assessment & Answer Key: Exact student tasks, full answer keys, rubrics, and measurable mastery criteria.
+8. Student Materials: Generated worksheets, reading passages, vocabulary cards, problem sets, and exit tickets with answer keys.
 
-### REQUIRED STRUCTURE
-1. **HEADER:** Subject, Grade, Date, Duration, Topic, Outcome, Mode.
-2. **SNAPSHOT:** Summary (About, Learning, Focus, Flow).
-3. **STRATEGIES & METHODOLOGY:** List specific teaching strategies used throughout the lesson (e.g., scaffolding, modeling, pair work) and the overarching methodology.
-4. **OBJECTIVES BOARD:** Knowledge, skill, attitude, success criteria.
-4. **PRIOR KNOWLEDGE:** What they know, activation, misconceptions.
-5. **VOCABULARY:** Terms, definitions, academic language, pronunciation.
-6. **MATERIALS BOARD:** Mapping materials to phases.
-7. **EXECUTION BOARD:** Phases (Intro, Explicit, Guided, Independent, Closure).
-   - Each phase: Time, Teacher/Student Actions, Questions, Engagement, Materials, Response, Assessment.
-   - Phase 2: Explanation/Modeling, Key Concept.
-   - Phase 3: Support/Scaffolding, Check for Understanding.
-   - Phase 4: Student Task, Monitoring.
-8. **ASSESSMENT SYSTEM:** Ongoing checks and final Assessment Board.
-9. **DIFFERENTIATION:** Supports for Struggling, On-Level, Advanced, Inclusion.
-10. **CLOSURE:** Recap, demonstration, exit question, next lesson link.
-11. **REFLECTION:** Post-lesson analysis blocks.
-12. **HOMEWORK:** Task, purpose, materials.
-13. **RESOURCE MAPPING:** Connecting resources to phases.
+### SUBJECT-SPECIFIC PEDAGOGY
+- **Language Arts:** Structure explicitly around Belize MoECST 5 core components:
+  1. Comprehension — Oral Expression and Listening
+  2. Phonological Awareness
+  3. Phonics and Word Recognition
+  4. High Frequency Words
+  5. Production & Language Structure — Writing and Composition
+- **Mathematics:** Concrete → Pictorial → Abstract scaffolding, step-by-step worked examples, and explicit common calculation error warnings.
+- **Science:** Inquiry-based observation, predictions, fair testing procedures, and evidence-based scientific reasoning.
+- **Belizean Studies / Social Studies:** Rich factual grounding in Belizean culture, geography across all 6 districts, multi-ethnic heritage (Maya, Garifuna, Creole, Mestizo, East Indian, Mennonite), and community life.
+
+### PERMANENT APPLICATION-WIDE RULE: LEARNING OBJECTIVES STRUCTURE
+Every Learning Objectives section must ALWAYS use ONE SHARED CONDITION for all three learning domains:
+1. ONE SHARED CONDITION:
+   - Begin with a single "condition" that applies to all three domains, based on the lesson's actual materials, learning situation, resources, or task (e.g., "Given an expanded decimal place value chart and a set of decimal numbers with up to five decimal places:").
+   - Broad enough to support cognitive, psychomotor, and affective learning naturally.
+   - Do NOT repeat the "Given..." condition inside individual domain objectives!
+2. THREE DOMAINS (STUDENT-CENTERED OBSERVABLE ACTIONS):
+   - Cognitive Domain: "Students will [observable cognitive action] [measurable criterion where appropriate]." (e.g. identify, classify, describe, explain, solve, calculate, analyze, evaluate).
+   - Psychomotor / Skills Domain: "Students will [observable physical/procedural/skill-based action] [measurable criterion where appropriate]." (e.g. construct, demonstrate, represent, manipulate, measure, draw, model, record).
+   - Affective Domain: "Students will [observable attitude, value, collaboration, confidence, persistence, or disposition]." (e.g. "Students will demonstrate confidence when explaining their mathematical reasoning.", "Students will participate respectfully during collaborative activities."). Avoid vague non-observable phrases like "Students will understand the importance of...".
+3. NO CONDITION REPETITION: Once the shared condition is stated in the condition field, NEVER repeat "Given..." inside cognitive, psychomotor, or affective fields.
+4. GRAMMATICAL ACCURACY: Ensure correct article usage ("Given an expanded...", "a" vs "an") and consistent student-centered language ("Students will...").
+
+### AUTHORITATIVE CURRICULUM INTEGRITY MANDATE (PERMANENT RULE)
+- The supplied curriculum context (Academic Year, Class/Grade, Subject, Cycle, Topic, Subtopic) is strictly authoritative.
+- You may ONLY use the topics, subtopics, and outcomes supplied in the filtered curriculum payload.
+- Do NOT introduce, substitute, infer, invent, or borrow topics from another cycle, class, subject, or academic year.
+- If the requested topic is not present in the supplied curriculum context, you must not generate the lesson.
 
 ### RULES
 - **No Paragraphs in Procedures:** Use bulleted lists.
-- **ABCD Objectives:** "Given [Condition], students will be able to [Behavior] with [Criteria]."` ;
+- **Never Output Raw Markdown Asterisks or Heading Symbols in Plain Text Fields.**`;
+
+/**
+ * Executes a Gemini content generation call with automated retry and seamless model fallback.
+ * Uses 'gemini-3.8-flash' as primary. If 503 (high demand) or 429 occurs,
+ * it retries and automatically falls back to 'gemini-3.1-flash-lite' or 'gemini-flash-latest'.
+ */
+export const executeGenAIWithFallback = async (
+  requestFactory: (model: string) => Promise<any>,
+  preferredModel = "gemini-3.6-flash",
+  fallbackModels: string[] = ["gemini-3.1-flash-lite", "gemini-3.8-flash"]
+) => {
+  const modelsToTry = [preferredModel, ...fallbackModels.filter(m => m !== preferredModel)];
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    try {
+      return await callWithRetry(() => requestFactory(model), 1, 800);
+    } catch (error: any) {
+      lastError = error;
+      const errorMsg = String(error?.message || '');
+      let errorStr = '';
+      try {
+        errorStr = JSON.stringify(error);
+      } catch (e) {
+        errorStr = errorMsg;
+      }
+
+      const combinedText = `${errorMsg} ${errorStr} ${String(error)}`;
+
+      const isQuotaOrDemand = 
+        error?.status === 429 || 
+        error?.status === 503 ||
+        error?.code === 429 ||
+        error?.code === 503 ||
+        error?.error?.code === 429 ||
+        error?.error?.code === 503 ||
+        error?.error?.status === 'UNAVAILABLE' ||
+        error?.error?.status === 'RESOURCE_EXHAUSTED' ||
+        combinedText.includes('503') ||
+        combinedText.includes('429') ||
+        combinedText.includes('UNAVAILABLE') ||
+        combinedText.includes('high demand') ||
+        combinedText.includes('temporarily') ||
+        combinedText.includes('RESOURCE_EXHAUSTED') ||
+        combinedText.includes('limit: 0') ||
+        combinedText.includes('Overloaded');
+
+      if (isQuotaOrDemand) {
+        console.warn(`[GenAI Fallback] Model "${model}" capacity limit or high demand. Trying fallback model...`);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError;
+};
 
 export const parseCurriculum = async (fileData?: { data: string, mimeType: string }, text?: string) => {
   validateGeminiConfig();
@@ -98,8 +176,8 @@ export const parseCurriculum = async (fileData?: { data: string, mimeType: strin
     });
   }
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3-flash-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: { parts },
     config: {
       responseMimeType: "application/json",
@@ -187,8 +265,8 @@ export const parseCurriculumUnit = async (fileData?: { data: string, mimeType: s
     });
   }
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3-flash-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: { parts },
     config: {
       responseMimeType: "application/json",
@@ -243,8 +321,8 @@ export const parseCurriculumUnit = async (fileData?: { data: string, mimeType: s
 
 export const generateWeeklyPlan = async (grade: string, subject: string, cycle: number, entries: any[], numWeeks: number = 10, lessonsPerWeek: number = 5) => {
   validateGeminiConfig();
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: `You are an AI weekly planner...`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -280,6 +358,7 @@ export const generateWeeklyPlan = async (grade: string, subject: string, cycle: 
 export const generateWeeklyBreakdown = async (params: {
   grade: string;
   subject: string;
+  academicYear?: string;
   cycle: number;
   week: number;
   numDays: number;
@@ -289,7 +368,7 @@ export const generateWeeklyBreakdown = async (params: {
   curriculumUnit?: CurriculumUnit;
 }): Promise<Partial<WeeklyCurriculumPlan>> => {
   validateGeminiConfig();
-  const { grade, subject, cycle, week, numDays, entries, previousWeeks = [], calendarDays = [], curriculumUnit } = params;
+  const { grade, subject, cycle, week, numDays, entries, previousWeeks = [], calendarDays = [], curriculumUnit, academicYear = '2025-2026' } = params;
 
   // Filter for actual teaching days in this week
   const teachingDaysInWeek = calendarDays.filter(d => d.week === week && d.isTeachingDay);
@@ -297,7 +376,13 @@ export const generateWeeklyBreakdown = async (params: {
   // Force 5 days as per user request to see 5 daily plans for each weekly plan
   const actualNumDays = 5; 
 
-  const prompt = `You are a smart curriculum planner. Using the provided curriculum entries for ${grade}, ${subject}, Cycle ${cycle}, determine the most logical topic, sub-topics, and learning outcomes for Week ${week}.
+  const prompt = `You are a smart curriculum planner. Using the provided curriculum entries for ${grade}, ${subject}, Cycle ${cycle} (Academic Year: ${academicYear}), determine the most logical topic, sub-topics, and learning outcomes for Week ${week}.
+  
+  CRITICAL CURRICULUM INTEGRITY RULE:
+  The supplied curriculum is authoritative.
+  You may ONLY use the topics and subtopics supplied in the filtered curriculum context.
+  Do not introduce, substitute, infer, invent, or borrow topics from another cycle, class, subject, or academic year.
+  If the requested topic is not present in the supplied curriculum context, do not generate the lesson.
   
   ${curriculumUnit ? `
   ### OFFICIAL CURRICULUM SOURCE: ${curriculumUnit.source}
@@ -344,8 +429,8 @@ export const generateWeeklyBreakdown = async (params: {
   
   Output a JSON object matching the WeeklyCurriculumPlan structure.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -393,10 +478,21 @@ export const generateWeeklyBreakdown = async (params: {
     return text.replace(/```json\n?|```/g, '').trim();
   };
 
-  return JSON.parse(cleanJson(response.text));
+  const parsed = JSON.parse(cleanJson(response.text));
+  return {
+    ...parsed,
+    grade_level: grade as GradeLevel,
+    grade: grade as GradeLevel,
+    subject: subject as Subject,
+    cycle,
+    week_number: week,
+    academicYear,
+    schoolYear: academicYear
+  };
 };
 
 export const generateLessonPlan = async (params: {
+  academicYear?: string;
   grade: string;
   subject: string;
   cycle: number;
@@ -418,13 +514,14 @@ export const generateLessonPlan = async (params: {
   curriculumUnit?: CurriculumUnit;
 }) => {
   validateGeminiConfig();
-  const { grade, subject, cycle, week, day, topic, subtopic, lessonTitle, objectives, learningOutcome, duration, teachingModel, specialNotes, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [], curriculumUnit } = params;
+  const { grade, subject, cycle, week, day, topic, subtopic, lessonTitle, objectives, learningOutcome, duration, teachingModel, specialNotes, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [], curriculumUnit, academicYear = '2025-2026' } = params;
 
   const teachingDay = calendarDays.find(d => d.date === params.date || (d.week === week && d.dayNumber === day));
   const actualDuration = teachingDay?.type === 'Half Day' ? '30 minutes' : duration;
 
   const prompt = `Generate a highly detailed, professional, and structured COMPLETE CLASSROOM-READY LESSON EXECUTION PACK for Day ${day} of Week ${week}.
 ${teachingDay ? `Scheduled Date: ${safeFormat(teachingDay.date, 'EEEE, MMMM do')} (${teachingDay.type})` : ''}
+Academic Year: ${academicYear}
 Lesson Title: ${lessonTitle}
 Grade: ${grade}
 Subject: ${subject}
@@ -437,6 +534,9 @@ Weekly Learning Outcome: ${learningOutcome}
 Daily Objectives: ${(objectives || []).join(', ')}
 Special Notes/Preferences: ${specialNotes || 'None'}
 Style: ${style}
+
+AUTHORITATIVE CURRICULUM RULE:
+This lesson must strictly adhere to the provided Academic Year (${academicYear}), Grade (${grade}), Subject (${subject}), Cycle (${cycle}), and Topic (${topic}). You must not substitute or invent topics from other cycles, grades, or subjects.
 
 ${curriculumUnit ? `
 ### OFFICIAL CURRICULUM SOURCE: ${curriculumUnit.source}
@@ -465,13 +565,19 @@ Generate a full lesson execution support system following the structure defined 
 Rules:
 - Procedures MUST be bulleted steps. NO long paragraphs.
 - Use realistic teacher language.
-- Specific Objectives MUST follow the ABCD format.
+- MANDATORY LEARNING OBJECTIVES FORMAT (PERMANENT RULE):
+  * Provide "learningObjectives" with:
+    - condition: Exactly one shared condition starting with "Given..." based on the lesson's actual materials, learning situation, or task.
+    - cognitive: "Students will [observable cognitive behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
+    - psychomotor: "Students will [observable physical/procedural/skill-based behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
+    - affective: "Students will [observable attitude, participation, collaboration, or confidence]." Do NOT repeat the condition.
+  * Do NOT repeat the condition inside the individual domain objectives.
 - Visuals must be fully described with content, not just titles.
 - Materials must be precise and organized by stage.
 - Adapt complexity for ${grade}.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -503,15 +609,26 @@ Rules:
             },
             required: ["about", "learning", "focus", "flow"]
           },
+          learningObjectives: {
+            type: Type.OBJECT,
+            properties: {
+              condition: { type: Type.STRING, description: "One shared condition that applies to all three domains, based on lesson materials and context. Starts with 'Given...'. Do NOT repeat inside individual domains." },
+              cognitive: { type: Type.STRING, description: "Cognitive domain: Students will [observable cognitive action] [measurable criterion where appropriate]. Do NOT repeat 'Given...'." },
+              psychomotor: { type: Type.STRING, description: "Psychomotor / Skills domain: Students will [observable physical/procedural action] [measurable criterion where appropriate]. Do NOT repeat 'Given...'." },
+              affective: { type: Type.STRING, description: "Affective domain: Students will [observable attitude, participation, or confidence]. Do NOT repeat 'Given...'." }
+            },
+            required: ["condition", "cognitive", "psychomotor", "affective"]
+          },
           learningObjectivesBoard: {
             type: Type.OBJECT,
             properties: {
-              knowledge: { type: Type.STRING },
-              skill: { type: Type.STRING },
-              attitude: { type: Type.STRING },
+              condition: { type: Type.STRING },
+              knowledge: { type: Type.STRING, description: "Cognitive domain (Students will...)" },
+              skill: { type: Type.STRING, description: "Psychomotor / Skills domain (Students will...)" },
+              attitude: { type: Type.STRING, description: "Affective domain (Students will...)" },
               successCriteria: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
-            required: ["knowledge", "skill", "successCriteria"]
+            required: ["condition", "knowledge", "skill", "attitude", "successCriteria"]
           },
           priorKnowledgeActivation: {
             type: Type.OBJECT,
@@ -707,6 +824,7 @@ Rules:
           "lessonTitle", 
           "learningOutcome", 
           "lessonSnapshot",
+          "learningObjectives",
           "learningObjectivesBoard",
           "priorKnowledgeActivation",
           "vocabularyFocus",
@@ -730,20 +848,587 @@ Rules:
   try {
     const result = JSON.parse(cleanJson(response.text));
     
-    return {
+    // Normalize and enforce permanent learning objectives rule
+    const norm = normalizeLearningObjectives(result, { 
+      topic, 
+      materials: result.materialsBoard?.map((m: any) => m.name) || result.materials 
+    });
+    result.learningObjectives = norm;
+    result.learningObjectivesBoard = {
+      ...result.learningObjectivesBoard,
+      condition: norm.condition,
+      knowledge: norm.cognitive,
+      skill: norm.psychomotor,
+      attitude: norm.affective,
+      successCriteria: result.learningObjectivesBoard?.successCriteria || []
+    };
+    result.specificObjectives = [
+      norm.cognitive,
+      norm.psychomotor,
+      norm.affective
+    ];
+
+    const finalPlan = enrichAndGuaranteeTeachReady({
       ...result,
       content: "", // Content is now handled by structured fields in UI
+      academicYear,
       grade,
       subject,
       cycle,
       week,
       topic,
       subtopic,
-      learningOutcome
-    };
+      learningOutcome,
+      duration: actualDuration
+    }, {
+      academicYear,
+      grade,
+      subject,
+      cycle,
+      week,
+      topic,
+      subtopic,
+      learningOutcome,
+      duration: actualDuration
+    });
+
+    return finalPlan;
   } catch (e) {
     console.error("Failed to parse lesson plan JSON:", e, response.text);
     throw new Error("Failed to parse generated lesson plan.");
+  }
+};
+
+export const generateLanguageArtsDailyPlan = async (params: {
+  academicYear?: string;
+  grade: string;
+  cycle: number;
+  week: number;
+  day: number;
+  date?: string;
+  topic: string;
+  subtopic?: string;
+  lessonTitle?: string;
+  learningOutcome?: string;
+  objectives?: string[];
+  duration?: string;
+  teachingModel?: TeachingModel;
+  specialNotes?: string;
+  style?: string;
+  includeTeacherScript?: boolean;
+  includeDifferentiation?: boolean;
+  calendarDays?: CalendarDayEntry[];
+  curriculumUnit?: CurriculumUnit;
+  components?: [LanguageArtsComponent, LanguageArtsComponent];
+}) => {
+  validateGeminiConfig();
+  const { 
+    grade, 
+    cycle, 
+    week, 
+    day, 
+    topic, 
+    subtopic, 
+    lessonTitle, 
+    objectives, 
+    learningOutcome, 
+    duration = '45 minutes', 
+    teachingModel = 'Direct Instruction (I Do, We Do, You Do)', 
+    specialNotes, 
+    style = 'Standard Teacher', 
+    calendarDays = [], 
+    curriculumUnit, 
+    academicYear = '2025-2026',
+    components 
+  } = params;
+
+  const teachingDay = calendarDays.find(d => d.date === params.date || (d.week === week && d.dayNumber === day));
+  const actualDuration = teachingDay?.type === 'Half Day' ? '30 minutes' : duration;
+
+  // Enforce exactly 2 components
+  let selectedComps = components;
+  if (!selectedComps || selectedComps.length !== 2) {
+    if (day === 2) {
+      selectedComps = ['Phonological Awareness', 'Phonics and Word Recognition'];
+    } else if (day === 3) {
+      selectedComps = ['Phonics and Word Recognition', 'High Frequency Words'];
+    } else if (day === 4) {
+      selectedComps = ['High Frequency Words', 'Production and Language Structure — Writing and Composition'];
+    } else {
+      selectedComps = ['Comprehension — Oral Expression and Listening', 'Production and Language Structure — Writing and Composition'];
+    }
+  }
+
+  const prompt = `Generate a highly detailed, professional, TEACHER-INDEPENDENT, READY-TO-TEACH LANGUAGE ARTS DAILY LESSON EXECUTION PACK for Day ${day} of Week ${week}.
+${teachingDay ? `Scheduled Date: ${safeFormat(teachingDay.date, 'EEEE, MMMM do')} (${teachingDay.type})` : ''}
+Academic Year: ${academicYear}
+Lesson Title: ${lessonTitle || topic}
+Grade/Class: ${grade}
+Subject: Language Arts
+Cycle: ${cycle}
+Topic: ${topic}
+Sub-topic: ${subtopic || topic}
+Duration: ${actualDuration}
+Teaching Model: ${teachingModel}
+Weekly Learning Outcome: ${learningOutcome || `Demonstrate competence in ${topic}`}
+Daily Objectives: ${(objectives || []).join(', ')}
+Special Notes/Preferences: ${specialNotes || 'None'}
+Style: ${style}
+
+# NON-NEGOTIABLE LANGUAGE ARTS COMPONENT RULE
+Language Arts has exactly 5 components:
+1. Comprehension — Oral Expression and Listening
+2. Phonological Awareness
+3. Phonics and Word Recognition
+4. High Frequency Words
+5. Production and Language Structure — Writing and Composition
+
+## DAILY MANDATE:
+Every Language Arts lesson MUST contain EXACTLY 2 components.
+Never 1 component. Never 3, 4, or 5 components in one daily lesson.
+For today's lesson, you MUST focus exclusively on these EXACT 2 components:
+- Component 1: "${selectedComps[0]}"
+- Component 2: "${selectedComps[1]}"
+
+The lesson header must clearly display:
+"Today's Language Arts Components: ${selectedComps[0]} + ${selectedComps[1]}"
+
+## NO MISSING RESOURCES MANDATE:
+Could a teacher print this lesson and its generated resources, walk into the classroom, and teach the entire lesson without having to create or search for anything else?
+You MUST generate the complete, unabridged text for all required resources:
+1. "readingPassageFull":
+   - Complete, unabridged reading passage text (NOT an excerpt, minimum 150-250 words for standard classes, 80-120 words for infant classes) situated in a Belizean cultural/community context.
+   - Title, genre, target grade, word count.
+   - vocabularyHighlighted: array of 4-6 words from the passage with definitions in context.
+   - comprehensionQuestions: 4 text-dependent questions across cognitive levels (Literal, Inferential, Vocabulary in Context, Evaluative) with expected answers.
+2. "anchorChartBlueprint":
+   - Complete blueprint of the chart the teacher draws or displays on the chalkboard.
+   - Title, layout, headerText, keyRulesOrDefinitions (at least 3 rules), visualDiagramDescription, and studentKeyTakeaway.
+3. "exitTicketPackage":
+   - Exactly 3 diagnostic questions assessing today's 2 components.
+   - Full question, answerKey, points.
+   - Scoring guidance, 80% mastery threshold, and explicit grouping rule for tomorrow.
+4. "component1Details" and "component2Details":
+   - name, timeAllocation (e.g. 20 minutes).
+   - Word-for-word explicit teacher script ("Teacher Says: ...").
+   - Step-by-step guided practice task.
+   - Formative check with teacherAsks, expectedResponse, ifCorrect action, and ifIncorrect intervention.
+
+${curriculumUnit ? `
+### OFFICIAL CURRICULUM SOURCE: ${curriculumUnit.source}
+Unit: ${curriculumUnit.unitNumber} - ${curriculumUnit.unitTitle}
+Unit Outcomes: ${(curriculumUnit.outcomes || []).join(', ')}
+Reading Focus: ${curriculumUnit.readingFocus}
+Speaking/Listening Focus: ${curriculumUnit.speakingListeningFocus}
+Language Focus: ${curriculumUnit.languageFocus}
+Word Work Focus: ${curriculumUnit.wordWorkFocus}
+Writing Focus: ${curriculumUnit.writingFocus}
+` : ''}
+
+### MANDATORY LEARNING OBJECTIVES FORMAT (PERMANENT RULE):
+Provide "learningObjectives" with:
+- condition: Exactly one shared condition starting with "Given..." based on the lesson's actual materials, learning situation, or task.
+- cognitive: "Students will [observable cognitive behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
+- psychomotor: "Students will [observable physical/procedural/skill-based behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
+- affective: "Students will [observable attitude, participation, collaboration, or confidence]." Do NOT repeat the condition.
+Do NOT repeat the condition inside the individual domain objectives.`;
+
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      responseMimeType: "application/json",
+      maxOutputTokens: 16384,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          lessonTitle: { type: Type.STRING },
+          studentTeacherName: { type: Type.STRING },
+          date: { type: Type.STRING },
+          classSize: { type: Type.STRING },
+          ageRange: { type: Type.STRING },
+          learningOutcome: { type: Type.STRING },
+          weeklyGoalConnection: { type: Type.STRING },
+          strand: { type: Type.STRING },
+          lessonType: { type: Type.STRING },
+          teachingMode: { type: Type.STRING },
+          teachingStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
+          methodology: { type: Type.STRING },
+
+          languageArtsComponents: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Exactly 2 components"
+          },
+          component1Details: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              timeAllocation: { type: Type.STRING },
+              explicitTeachingScript: { type: Type.STRING },
+              guidedPracticeTask: { type: Type.STRING },
+              formativeCheck: {
+                type: Type.OBJECT,
+                properties: {
+                  teacherAsks: { type: Type.STRING },
+                  expectedResponse: { type: Type.STRING },
+                  ifCorrect: { type: Type.STRING },
+                  ifIncorrect: { type: Type.STRING }
+                },
+                required: ["teacherAsks", "expectedResponse", "ifCorrect", "ifIncorrect"]
+              }
+            },
+            required: ["name", "timeAllocation", "explicitTeachingScript", "guidedPracticeTask", "formativeCheck"]
+          },
+          component2Details: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              timeAllocation: { type: Type.STRING },
+              explicitTeachingScript: { type: Type.STRING },
+              guidedPracticeTask: { type: Type.STRING },
+              formativeCheck: {
+                type: Type.OBJECT,
+                properties: {
+                  teacherAsks: { type: Type.STRING },
+                  expectedResponse: { type: Type.STRING },
+                  ifCorrect: { type: Type.STRING },
+                  ifIncorrect: { type: Type.STRING }
+                },
+                required: ["teacherAsks", "expectedResponse", "ifCorrect", "ifIncorrect"]
+              }
+            },
+            required: ["name", "timeAllocation", "explicitTeachingScript", "guidedPracticeTask", "formativeCheck"]
+          },
+          readingPassageFull: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              genre: { type: Type.STRING },
+              gradeLevel: { type: Type.STRING },
+              wordCount: { type: Type.INTEGER },
+              content: { type: Type.STRING },
+              vocabularyHighlighted: { type: Type.ARRAY, items: { type: Type.STRING } },
+              comprehensionQuestions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { type: Type.STRING },
+                    answer: { type: Type.STRING },
+                    cognitiveLevel: { type: Type.STRING }
+                  },
+                  required: ["question", "answer", "cognitiveLevel"]
+                }
+              }
+            },
+            required: ["title", "genre", "gradeLevel", "wordCount", "content", "comprehensionQuestions"]
+          },
+          anchorChartBlueprint: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              layout: { type: Type.STRING },
+              headerText: { type: Type.STRING },
+              keyRulesOrDefinitions: { type: Type.ARRAY, items: { type: Type.STRING } },
+              visualDiagramDescription: { type: Type.STRING },
+              studentKeyTakeaway: { type: Type.STRING }
+            },
+            required: ["title", "layout", "headerText", "keyRulesOrDefinitions", "visualDiagramDescription", "studentKeyTakeaway"]
+          },
+          exitTicketPackage: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              prompt: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { type: Type.STRING },
+                    answerKey: { type: Type.STRING },
+                    points: { type: Type.INTEGER }
+                  },
+                  required: ["question", "answerKey", "points"]
+                }
+              },
+              scoringGuidance: { type: Type.STRING },
+              masteryThreshold: { type: Type.STRING },
+              groupingRuleTomorrow: { type: Type.STRING }
+            },
+            required: ["title", "prompt", "questions", "scoringGuidance", "masteryThreshold", "groupingRuleTomorrow"]
+          },
+
+          lessonSnapshot: {
+            type: Type.OBJECT,
+            properties: {
+              about: { type: Type.STRING },
+              learning: { type: Type.STRING },
+              focus: { type: Type.STRING },
+              flow: { type: Type.STRING }
+            },
+            required: ["about", "learning", "focus", "flow"]
+          },
+          learningObjectives: {
+            type: Type.OBJECT,
+            properties: {
+              condition: { type: Type.STRING },
+              cognitive: { type: Type.STRING },
+              psychomotor: { type: Type.STRING },
+              affective: { type: Type.STRING }
+            },
+            required: ["condition", "cognitive", "psychomotor", "affective"]
+          },
+          learningObjectivesBoard: {
+            type: Type.OBJECT,
+            properties: {
+              condition: { type: Type.STRING },
+              knowledge: { type: Type.STRING },
+              skill: { type: Type.STRING },
+              attitude: { type: Type.STRING },
+              successCriteria: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["condition", "knowledge", "skill", "attitude", "successCriteria"]
+          },
+          priorKnowledgeActivation: {
+            type: Type.OBJECT,
+            properties: {
+              whatTheyKnow: { type: Type.STRING },
+              activationStrategy: { type: Type.STRING },
+              misconceptionsToAnticipate: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["whatTheyKnow", "activationStrategy", "misconceptionsToAnticipate"]
+          },
+          vocabularyFocus: {
+            type: Type.OBJECT,
+            properties: {
+              keyVocabulary: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    term: { type: Type.STRING },
+                    definition: { type: Type.STRING }
+                  },
+                  required: ["term", "definition"]
+                }
+              }
+            },
+            required: ["keyVocabulary"]
+          },
+          materialsBoard: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                quantity: { type: Type.STRING },
+                purpose: { type: Type.STRING },
+                lessonPhase: { type: Type.STRING },
+                resourceType: { type: Type.STRING }
+              },
+              required: ["name", "purpose", "lessonPhase"]
+            }
+          },
+          executionBoard: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                phase: { type: Type.STRING },
+                timeAllocation: { type: Type.STRING },
+                teacherActions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                studentActions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                questionsToAsk: { type: Type.ARRAY, items: { type: Type.STRING } },
+                materialsUsed: { type: Type.ARRAY, items: { type: Type.STRING } }
+              },
+              required: ["phase", "timeAllocation", "teacherActions", "studentActions", "questionsToAsk", "materialsUsed"]
+            }
+          },
+          finalAssessmentBoard: {
+            type: Type.OBJECT,
+            properties: {
+              type: { type: Type.STRING },
+              studentTask: { type: Type.STRING },
+              evidenceOfLearning: { type: Type.STRING },
+              criteriaForSuccess: { type: Type.ARRAY, items: { type: Type.STRING } },
+              masteryIndicator: { type: Type.STRING },
+              assessmentTool: { type: Type.STRING }
+            },
+            required: ["type", "studentTask", "evidenceOfLearning", "criteriaForSuccess", "masteryIndicator", "assessmentTool"]
+          },
+          differentiationFramework: {
+            type: Type.OBJECT,
+            properties: {
+              strugglingLearners: {
+                type: Type.OBJECT,
+                properties: {
+                  scaffolds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  guidedPrompts: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  materials: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["scaffolds", "guidedPrompts", "materials"]
+              },
+              advancedLearners: {
+                type: Type.OBJECT,
+                properties: {
+                  extensions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  higherOrderQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  independentTasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["extensions", "higherOrderQuestions", "independentTasks"]
+              }
+            },
+            required: ["strugglingLearners", "advancedLearners"]
+          },
+          closurePanel: {
+            type: Type.OBJECT,
+            properties: {
+              recap: { type: Type.STRING },
+              demonstration: { type: Type.STRING },
+              exitQuestion: { type: Type.STRING },
+              nextLessonConnection: { type: Type.STRING }
+            },
+            required: ["recap", "demonstration", "exitQuestion", "nextLessonConnection"]
+          },
+          reflectionDashboard: {
+            type: Type.OBJECT,
+            properties: {
+              whatWorked: { type: Type.STRING },
+              needsImprovement: { type: Type.STRING },
+              followUpStudents: { type: Type.ARRAY, items: { type: Type.STRING } },
+              nextSteps: { type: Type.STRING }
+            },
+            required: ["whatWorked", "needsImprovement", "nextSteps"]
+          },
+          resourceMapping: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                resourceName: { type: Type.STRING },
+                phaseUsed: { type: Type.STRING },
+                purpose: { type: Type.STRING },
+                type: { type: Type.STRING }
+              },
+              required: ["resourceName", "phaseUsed", "purpose", "type"]
+            }
+          }
+        },
+        required: [
+          "lessonTitle",
+          "learningOutcome",
+          "lessonSnapshot",
+          "learningObjectives",
+          "learningObjectivesBoard",
+          "languageArtsComponents",
+          "component1Details",
+          "component2Details",
+          "readingPassageFull",
+          "anchorChartBlueprint",
+          "exitTicketPackage",
+          "materialsBoard",
+          "executionBoard",
+          "finalAssessmentBoard",
+          "differentiationFramework",
+          "closurePanel",
+          "reflectionDashboard",
+          "resourceMapping"
+        ]
+      }
+    }
+  }));
+
+  const cleanJson = (text: string | undefined) => {
+    if (!text) return '{}';
+    return text.replace(/```json\n?|```/g, '').trim();
+  };
+
+  try {
+    const result = JSON.parse(cleanJson(response.text));
+    result.languageArtsComponents = [selectedComps[0], selectedComps[1]];
+
+    const norm = normalizeLearningObjectives(result, { 
+      topic, 
+      materials: result.materialsBoard?.map((m: any) => m.name) || result.materials 
+    });
+    result.learningObjectives = norm;
+    result.learningObjectivesBoard = {
+      ...result.learningObjectivesBoard,
+      condition: norm.condition,
+      knowledge: norm.cognitive,
+      skill: norm.psychomotor,
+      attitude: norm.affective,
+      successCriteria: result.learningObjectivesBoard?.successCriteria || []
+    };
+    result.specificObjectives = [
+      norm.cognitive,
+      norm.psychomotor,
+      norm.affective
+    ];
+
+    const finalPlan = enrichAndGuaranteeTeachReady({
+      ...result,
+      content: "",
+      academicYear,
+      grade,
+      subject: 'Language Arts',
+      cycle,
+      week,
+      day,
+      date: params.date,
+      topic,
+      subtopic,
+      learningOutcome,
+      duration: actualDuration,
+      languageArtsComponents: [selectedComps[0], selectedComps[1]]
+    }, {
+      academicYear,
+      grade,
+      subject: 'Language Arts',
+      cycle,
+      week,
+      day,
+      date: params.date,
+      topic,
+      subtopic,
+      learningOutcome,
+      duration: actualDuration,
+      components: [selectedComps[0], selectedComps[1]]
+    });
+
+    return finalPlan;
+  } catch (e) {
+    console.error("Failed to parse Language Arts daily plan JSON:", e, response.text);
+    return enrichAndGuaranteeTeachReady({
+      lessonTitle: topic,
+      subject: 'Language Arts',
+      grade,
+      cycle,
+      week,
+      day,
+      date: params.date,
+      topic,
+      subtopic,
+      learningOutcome,
+      duration: actualDuration,
+      languageArtsComponents: [selectedComps[0], selectedComps[1]]
+    }, {
+      academicYear,
+      grade,
+      subject: 'Language Arts',
+      cycle,
+      week,
+      day,
+      date: params.date,
+      topic,
+      subtopic,
+      learningOutcome,
+      duration: actualDuration,
+      components: [selectedComps[0], selectedComps[1]]
+    });
   }
 };
 
@@ -871,8 +1556,8 @@ export const generateCyclePacingMap = async (params: PacingMapParams) => {
   - warnings: Array of strings.
   - distributionMethod: "${distributionMethod}"`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1034,8 +1719,8 @@ For each strand, provide "AI Teaching Assistant" style guidance:
 
 Ensure the content is age-appropriate for ${grade} and aligns with the Belizean curriculum standards.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1142,8 +1827,8 @@ Include Answer Key: ${options.includeAnswerKey ? 'Yes' : 'No'}
 
 Output the content in Markdown format.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION
@@ -1176,8 +1861,8 @@ RETEACH REQUIREMENTS:
 
 Output a full lesson package in JSON format.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1229,8 +1914,8 @@ Generate:
 
 Output in Markdown format.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION
@@ -1256,8 +1941,8 @@ Include:
 
 Output in Markdown format.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION
@@ -1284,8 +1969,8 @@ Generate a 5-day revision plan. Each day should include:
 
 Output as a JSON array of 5 days.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1333,8 +2018,8 @@ export const generateYearlyCurriculumMap = async (grade: GradeLevel, subject: Su
   
   Output as a JSON object matching the YearlyCurriculumMap interface.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1406,8 +2091,8 @@ export const generateCyclePlan = async (map: YearlyCurriculumMap, cycleNumber: n
   
   Output as a JSON object matching the CyclePlan interface.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1463,8 +2148,8 @@ export const generateWeeklyTeachingPlan = async (cyclePlan: CyclePlan, weekNumbe
   
   Output as a JSON object matching the WeeklyTeachingPlan interface.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -1511,8 +2196,8 @@ Context: ${JSON.stringify(context)}
 
 Maintain the professional educational tone and ensure the output is classroom-ready.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION
@@ -1524,7 +2209,23 @@ Maintain the professional educational tone and ensure the output is classroom-re
 
 export const regenerateSection = async (sectionName: string, lessonContext: LessonPlan) => {
   validateGeminiConfig();
-  const prompt = `Regenerate the "${sectionName}" section for the following lesson:
+  const isObjectives = /objective/i.test(sectionName);
+  const prompt = isObjectives
+    ? `Regenerate the "Learning Objectives" section for the following lesson:
+Subject: ${lessonContext.subject}
+Grade: ${lessonContext.grade}
+Topic: ${lessonContext.topic}
+Sub-topic: ${lessonContext.subtopic}
+Materials: ${(lessonContext.materialsBoard?.map(m => m.name) || lessonContext.materials || []).join(', ')}
+
+PERMANENT RULE: LEARNING OBJECTIVES STRUCTURE
+You MUST use ONE SHARED CONDITION for all three learning domains:
+- Exactly one shared Condition starting with "Given..." based on the lesson's actual materials and context.
+- Cognitive Domain: "Students will [observable cognitive behavior]..." with measurable criteria where appropriate. Do NOT repeat the condition.
+- Psychomotor / Skills Domain: "Students will [observable physical/procedural skill behavior]..." with measurable criteria where appropriate. Do NOT repeat the condition.
+- Affective Domain: "Students will [observable attitude, participation, or confidence]...". Do NOT repeat the condition.
+Do NOT use raw Markdown asterisks, hashtags, or HTML tags.`
+    : `Regenerate the "${sectionName}" section for the following lesson:
 Subject: ${lessonContext.subject}
 Grade: ${lessonContext.grade}
 Topic: ${lessonContext.topic}
@@ -1533,8 +2234,8 @@ Objectives: ${lessonContext.specificObjectives.join(', ')}
 
 Ensure the new content is high-quality, detailed, and classroom-ready.`;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION
@@ -1589,8 +2290,8 @@ export const generateVideoScript = async (
     Return ONLY the script text.
   `;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3-flash-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt
   }));
 
@@ -1623,8 +2324,8 @@ export const generateVideoScenes = async (
     Structure the response as a JSON array of objects matching the VideoScene interface.
   `;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3-flash-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -1684,7 +2385,7 @@ export const generateSceneVisual = async (
 ): Promise<string> => {
   validateGeminiConfig();
   const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-2.5-flash-image",
+    model: "gemini-3.1-flash-lite-image",
     contents: {
       parts: [
         {
@@ -1749,8 +2450,8 @@ export const generateLessonVideo = async (
   Ensure the language is age-appropriate for ${lesson.grade} students.
   `;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -1898,14 +2599,26 @@ export const generateWeeklyLessonPlan = async (params: {
         },
         required: ["about", "learning", "focus", "flow"]
       },
+      learningObjectives: {
+        type: Type.OBJECT,
+        properties: {
+          condition: { type: Type.STRING, description: "One shared condition starting with 'Given...'. Do NOT repeat inside individual domains." },
+          cognitive: { type: Type.STRING, description: "Cognitive domain: Students will [action]... Do NOT repeat 'Given...'." },
+          psychomotor: { type: Type.STRING, description: "Psychomotor / Skills domain: Students will [action]... Do NOT repeat 'Given...'." },
+          affective: { type: Type.STRING, description: "Affective domain: Students will [action]... Do NOT repeat 'Given...'." }
+        },
+        required: ["condition", "cognitive", "psychomotor", "affective"]
+      },
       learningObjectivesBoard: {
         type: Type.OBJECT,
         properties: {
+          condition: { type: Type.STRING },
           knowledge: { type: Type.STRING },
           skill: { type: Type.STRING },
+          attitude: { type: Type.STRING },
           successCriteria: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
-        required: ["knowledge", "skill", "successCriteria"]
+        required: ["condition", "knowledge", "skill", "attitude", "successCriteria"]
       },
       priorKnowledgeActivation: {
         type: Type.OBJECT,
@@ -2057,6 +2770,7 @@ export const generateWeeklyLessonPlan = async (params: {
       "lessonTitle", 
       "learningOutcome", 
       "lessonSnapshot",
+      "learningObjectives",
       "learningObjectivesBoard",
       "priorKnowledgeActivation",
       "vocabularyFocus",
@@ -2070,8 +2784,8 @@ export const generateWeeklyLessonPlan = async (params: {
     ]
   };
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -2112,20 +2826,40 @@ export const generateWeeklyLessonPlan = async (params: {
 
   const result = JSON.parse(cleanJson((response as any).text));
   
-  // Post-process to ensure daily lessons have basic metadata
-  const processedDays = result.week.days.map((d: any) => ({
-    ...d,
-    lesson: {
-      ...d.lesson,
-      grade,
-      subject,
-      cycle,
-      week,
-      topic,
-      createdAt: new Date().toISOString(),
-      structured_json: d.lesson
-    }
-  }));
+  // Post-process to ensure daily lessons have basic metadata and normalized objectives
+  const processedDays = result.week.days.map((d: any) => {
+    const norm = normalizeLearningObjectives(d.lesson, { 
+      topic: d.lesson?.topic || topic, 
+      materials: d.lesson?.materialsBoard?.map((m: any) => m.name) || d.lesson?.materials 
+    });
+    return {
+      ...d,
+      lesson: {
+        ...d.lesson,
+        learningObjectives: norm,
+        learningObjectivesBoard: {
+          ...d.lesson?.learningObjectivesBoard,
+          condition: norm.condition,
+          knowledge: norm.cognitive,
+          skill: norm.psychomotor,
+          attitude: norm.affective,
+          successCriteria: d.lesson?.learningObjectivesBoard?.successCriteria || []
+        },
+        specificObjectives: [
+          norm.cognitive,
+          norm.psychomotor,
+          norm.affective
+        ],
+        grade,
+        subject,
+        cycle,
+        week,
+        topic,
+        createdAt: new Date().toISOString(),
+        structured_json: d.lesson
+      }
+    };
+  });
 
   return {
     ...result,
@@ -2159,8 +2893,8 @@ export const generateVideoResourcePack = async (
   Structure the response as a JSON object matching the resourcePack structure.
   `;
 
-  const response = await callWithRetry(() => getGenAI().models.generateContent({
-    model: "gemini-3.1-pro-preview",
+  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+    model,
     contents: prompt,
     config: {
       responseMimeType: "application/json",

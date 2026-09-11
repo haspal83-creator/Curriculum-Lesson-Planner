@@ -29,10 +29,13 @@ import {
   CurriculumCoverage
 } from '../../types';
 import { generateCyclePacingMap, calculateCoverage } from '../../services/gemini';
+import { getFilteredCurriculum, getCurriculumEmptyStateMessage } from '../../services/curriculumFilterService';
 import { cn, safeFormat } from '../../lib/utils';
 import { useToasts } from '../../context/ToastContext';
 
 interface CyclePacingViewProps {
+  activeClass?: GradeLevel | null;
+  activeClassId?: string | null;
   curriculum: CurriculumEntry[];
   yearlyCalendars: YearlyCalendarPlan[];
   cyclePacingMaps: CyclePacingMap[];
@@ -43,6 +46,8 @@ interface CyclePacingViewProps {
 }
 
 export function CyclePacingView({ 
+  activeClass,
+  activeClassId,
   curriculum, 
   yearlyCalendars, 
   cyclePacingMaps,
@@ -52,9 +57,17 @@ export function CyclePacingView({
   onDelete
 }: CyclePacingViewProps) {
   const { showToast } = useToasts();
-  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(userSettings.defaultGrade);
+  const effectiveGrade = activeClass || userSettings.defaultGrade;
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(userSettings.defaultAcademicYear || '2025-2026');
+  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(effectiveGrade);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(userSettings.defaultSubject);
   const [selectedCycle, setSelectedCycle] = useState<number>(1);
+
+  useEffect(() => {
+    if (activeClass) {
+      setSelectedGrade(activeClass);
+    }
+  }, [activeClass]);
   const [distributionMethod, setDistributionMethod] = useState<'Balanced' | 'Teacher-Controlled' | 'Priority-Based' | 'Outcome-Based'>('Balanced');
   const [isGenerating, setIsGenerating] = useState(false);
   const [coverage, setCoverage] = useState<CurriculumCoverage | null>(null);
@@ -87,7 +100,12 @@ export function CyclePacingView({
       if (activeMap && activeCalendar) {
         setIsCalculatingCoverage(true);
         try {
-          const cycleEntries = curriculum.filter(c => c.grade === selectedGrade && c.subject === selectedSubject && c.cycle === selectedCycle);
+          const cycleEntries = getFilteredCurriculum(curriculum, {
+            academicYear: selectedAcademicYear,
+            className: selectedGrade,
+            subject: selectedSubject,
+            cycle: selectedCycle
+          });
           const result = await calculateCoverage({
             grade: selectedGrade,
             subject: selectedSubject,
@@ -107,12 +125,22 @@ export function CyclePacingView({
       }
     };
     updateCoverage();
-  }, [activeMap, activeCalendar, curriculum, selectedGrade, selectedSubject, selectedCycle]);
+  }, [activeMap, activeCalendar, curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle]);
 
   const handleGenerate = async () => {
-    const cycleEntries = curriculum.filter(c => c.grade === selectedGrade && c.subject === selectedSubject && c.cycle === selectedCycle);
+    const cycleEntries = getFilteredCurriculum(curriculum, {
+      academicYear: selectedAcademicYear,
+      className: selectedGrade,
+      subject: selectedSubject,
+      cycle: selectedCycle
+    });
     if (cycleEntries.length === 0) {
-      showToast("No curriculum entries found for this cycle. Please upload curriculum first.", "error");
+      showToast(getCurriculumEmptyStateMessage({
+        academicYear: selectedAcademicYear,
+        className: selectedGrade,
+        subject: selectedSubject,
+        cycle: selectedCycle
+      }), "error");
       return;
     }
     if (availableWeeks === 0) {
@@ -123,6 +151,7 @@ export function CyclePacingView({
     setIsGenerating(true);
     try {
       const generated = await generateCyclePacingMap({
+        academicYear: selectedAcademicYear,
         grade: selectedGrade,
         subject: selectedSubject,
         cycle: selectedCycle,
@@ -135,6 +164,7 @@ export function CyclePacingView({
 
       await onSave({
         ...generated,
+        academicYear: selectedAcademicYear,
         grade: selectedGrade,
         subject: selectedSubject,
         cycle: selectedCycle,
@@ -158,17 +188,27 @@ export function CyclePacingView({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex flex-wrap gap-4 items-center">
           <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
+            <Select 
+              options={[
+                { label: '2025-2026', value: '2025-2026' },
+                { label: '2026-2027', value: '2026-2027' }
+              ]} 
+              value={selectedAcademicYear} 
+              onChange={(val) => setSelectedAcademicYear(val)} 
+              className="w-36"
+            />
+          </div>
+          <div className="space-y-1">
             <div className="flex items-center gap-2 mb-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade Level</label>
-              <div className="px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 rounded flex items-center gap-1">
-                <Calendar className="w-2 h-2 text-indigo-600" />
-                <span className="text-[8px] font-black text-indigo-700 uppercase tracking-tighter">Belize 25/26</span>
-              </div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Class / Standard</label>
             </div>
             <Select 
+              disabled={!!activeClass}
               options={[
                 { label: 'Infant 1', value: 'Infant 1' },
                 { label: 'Infant 2', value: 'Infant 2' },
+                { label: 'Infant 3', value: 'Infant 3' },
                 { label: 'Standard 1', value: 'Standard 1' },
                 { label: 'Standard 2', value: 'Standard 2' },
                 { label: 'Standard 3', value: 'Standard 3' },
@@ -180,6 +220,9 @@ export function CyclePacingView({
               onChange={(val) => setSelectedGrade(val as GradeLevel)} 
               className="w-40"
             />
+            {activeClass && (
+              <span className="text-[9px] text-indigo-600 font-bold block">Active: {activeClass}</span>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subject</label>

@@ -1,4 +1,49 @@
-export type GradeLevel = 'Infant 1' | 'Infant 2' | 'Standard 1' | 'Standard 2' | 'Standard 3' | 'Standard 4' | 'Standard 5' | 'Standard 6';
+export type GradeLevel = 'Infant 1' | 'Infant 2' | 'Infant 3' | 'Standard 1' | 'Standard 2' | 'Standard 3' | 'Standard 4' | 'Standard 5' | 'Standard 6';
+export const ALL_GRADE_LEVELS: GradeLevel[] = [
+  'Infant 1',
+  'Infant 2',
+  'Infant 3',
+  'Standard 1',
+  'Standard 2',
+  'Standard 3',
+  'Standard 4',
+  'Standard 5',
+  'Standard 6'
+];
+
+export interface LearningObjectivesStructure {
+  condition: string;
+  cognitive: string;
+  psychomotor: string;
+  affective: string;
+}
+
+/**
+ * Normalizes any GradeLevel or class name string into a reliable, URL-safe classId (e.g. "standard-5")
+ */
+export const getClassId = (grade: GradeLevel | string): string => {
+  return grade.toLowerCase().trim().replace(/\s+/g, '-');
+};
+
+/**
+ * Resolves a normalized classId back to its canonical GradeLevel string
+ */
+export const getClassNameFromId = (classId: string): GradeLevel => {
+  const normalized = classId.toLowerCase().trim();
+  const map: Record<string, GradeLevel> = {
+    'infant-1': 'Infant 1',
+    'infant-2': 'Infant 2',
+    'infant-3': 'Infant 3',
+    'standard-1': 'Standard 1',
+    'standard-2': 'Standard 2',
+    'standard-3': 'Standard 3',
+    'standard-4': 'Standard 4',
+    'standard-5': 'Standard 5',
+    'standard-6': 'Standard 6',
+  };
+  return map[normalized] || 'Standard 4';
+};
+
 export type Subject = 'Mathematics' | 'Language Arts' | 'Science and Technology' | 'Belizean Studies' | 'HFLE' | 'Spanish' | 'PE' | 'Creative Arts';
 export type OutputStyle = 'Standard Teacher' | 'Detailed Teacher' | 'Observation-Ready' | 'Student-Friendly' | 'Ministry-Style Formal';
 export type TeachingModel = '5E' | 'Competency-based' | 'Inquiry-based' | 'Direct instruction' | 'Universal Design for Learning (UDL)';
@@ -105,7 +150,9 @@ export interface WeeklyTeachingPlan {
       focus: string;
       flow: string;
     };
+    learningObjectives?: LearningObjectivesStructure;
     learningObjectivesBoard?: {
+      condition?: string;
       knowledge: string;
       skill: string;
       attitude: string;
@@ -152,6 +199,9 @@ export type ObjectiveMasteryStatus = 'Mastered' | 'Partially met' | 'Not met';
 
 export interface AssessmentRecord {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   lessonId: string;
   lessonType: 'daily' | 'standalone';
   lessonTitle: string;
@@ -184,6 +234,9 @@ export interface AssessmentRecord {
 
 export interface OutcomeMastery {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   outcome: string;
   grade: GradeLevel;
   subject: Subject;
@@ -198,6 +251,9 @@ export interface OutcomeMastery {
 
 export interface StudentSupportFlag {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   category: string;
   description: string;
   studentCount: number;
@@ -207,6 +263,9 @@ export interface StudentSupportFlag {
 
 export interface MisconceptionLog {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   subject: Subject;
   topic: string;
   misconception: string;
@@ -218,8 +277,13 @@ export interface MisconceptionLog {
 
 export interface CurriculumEntry {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade: GradeLevel;
   subject: Subject;
+  academicYear?: string;
+  schoolYear?: string;
   strand?: string;
   topic: string;
   subtopic: string;
@@ -235,6 +299,7 @@ export interface CurriculumEntry {
   notes?: string;
   isAmbiguous?: boolean;
   createdAt: string;
+  createdBy?: string;
 }
 
 export interface CurriculumUnit {
@@ -558,10 +623,196 @@ export interface DifferentiationFramework {
   };
 }
 
+export interface TeacherQuickReference {
+  standard: string;
+  subject: string;
+  cycle: number | string;
+  strand?: string;
+  topic: string;
+  learningOutcome: string;
+  objective: string;
+  keyConcept: string;
+  essentialVocabulary: string[];
+  prerequisiteKnowledge: string;
+  materials: string[];
+  teachingStrategy: string;
+  assessment: string;
+  masteryTarget: string;
+  duration: string;
+}
+
+export interface LessonAtAGlanceRow {
+  time: string;
+  timeMinutes: number;
+  stage: string;
+  teacherDoes: string;
+  studentsDo: string;
+}
+
+export interface TeacherPreparationBriefing {
+  whatYouNeedToKnow: {
+    conceptSummary: string;
+    whatItMeans: string;
+    whyItMatters: string;
+    howItWorks: string;
+    importantRules: string[];
+    importantTerminology: string[];
+    connectionsToPriorLearning: string;
+    realWorldApplications: string;
+  };
+}
+
+export interface KeyVocabularyEntry {
+  term: string;
+  teacherDefinition: string;
+  studentDefinition: string;
+  exampleSentence?: string;
+}
+
+export interface PrerequisiteDiagnostic {
+  requiredConcepts: string[];
+  requiredSkills: string[];
+  diagnosticCheck: {
+    teacherAsks: string;
+    expectedResponse: string;
+    ifStudentsCannotAnswer: string;
+  };
+}
+
+export interface CommonMisconceptionEntry {
+  misconception: string;
+  correctUnderstanding: string;
+  teacherCorrectionLanguage: string;
+}
+
+export interface TeachMeThisTopicBriefing {
+  whatIsThisTopic: string;
+  whyItMatters: string;
+  mostImportantIdeas: string[];
+  mustUnderstandBeforeTeaching: string;
+  howToExplainSimply: string;
+  firstExampleToUse: string;
+  mistakesToWatchFor: string[];
+  quickCheckUnderstanding: string;
+}
+
+export interface TeacherScriptFull {
+  opening: string;
+  introduction: string;
+  explanation: string;
+  modeling: string;
+  questioning: string[];
+  transitions: string[];
+  directions: string;
+  feedbackLanguage: string;
+  correctionPrompts: string;
+  closing: string;
+}
+
+export interface InstructionalSequence {
+  iDo: {
+    teacherAction: string;
+    teacherExplanation: string;
+    workedExample: string;
+    thinkAloud: string;
+    expectedStudentObservation: string;
+  };
+  weDo: {
+    tasks: string[];
+    teacherPrompts: string[];
+    expectedResponses: string[];
+    correctAnswers: string[];
+    feedbackLanguage: string;
+    correctionPrompts: string;
+  };
+  youDo: {
+    studentTasks: string[];
+    problemsOrPassages: string[];
+    activities: string[];
+    successCriteria: string;
+  };
+}
+
+export interface WorkedExampleItem {
+  subjectType: 'Mathematics' | 'Language Arts' | 'Science' | 'Belizean Studies / Social Studies' | 'General';
+  problemOrContext: string;
+  stepByStepSolution?: { step: number; action: string; explanation: string }[];
+  finalAnswerOrModelResponse: string;
+  commonErrorOrScientificReasoning?: string;
+  belizeanContextNote?: string;
+}
+
+export interface BloomQuestionBank {
+  recall: { question: string; expectedAnswer: string }[];
+  understanding: { question: string; expectedAnswer: string }[];
+  application: { question: string; expectedAnswer: string }[];
+  analysis: { question: string; expectedAnswer: string }[];
+  evaluation?: { question: string; expectedAnswer: string }[];
+  creation?: { questionOrTask: string; expectedOutput: string }[];
+}
+
+export interface FormativeCheckItem {
+  checkType: string;
+  teacherAsksOrDoes: string;
+  studentsDo: string;
+  expectedResponse: string;
+  ifCorrect: string;
+  ifIncorrect: string;
+}
+
+export interface StrugglingRemediation {
+  signsOfConfusion: string[];
+  likelyCause: string;
+  simplerExplanation: string;
+  alternativeExample: string;
+  additionalGuidedPractice: string;
+  visualOrManipulativeOption: string;
+  reteachingStrategy: string;
+  followUpCheck: string;
+}
+
+export interface CommonErrorItem {
+  likelyError: string;
+  whyItHappens: string;
+  teacherResponse: string;
+  correctiveExample: string;
+}
+
+export interface ReadyToTeachItem {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
+export interface CompleteAssessmentPackage {
+  task: string;
+  expectedResponse: string;
+  answerKey: string;
+  rubric?: { criteria: string; exemplary: string; proficient: string; developing: string }[];
+  masteryCriteria: string;
+}
+
+export interface GeneratedStudentMaterial {
+  title: string;
+  type: 'worksheet' | 'reading_passage' | 'vocabulary_cards' | 'problem_set' | 'graphic_organizer' | 'exit_ticket' | 'quiz' | 'activity_cards';
+  content: string;
+  answerKey?: string;
+}
+
+export interface BelizeanContextDetails {
+  contextConnection: string;
+  communityApplication: string;
+  culturalOrEnvironmentalExample?: string;
+}
+
 export interface LessonPlan {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade: GradeLevel;
   subject: Subject;
+  academicYear?: string;
   topic: string;
   subtopic: string;
   strand?: string;
@@ -583,6 +834,7 @@ export interface LessonPlan {
   createdBy: string;
   cycle: number;
   week?: number;
+  day?: number;
   date?: string;
   
   // New Structured Fields
@@ -592,10 +844,15 @@ export interface LessonPlan {
     focus: string;
     flow: string;
   };
+  learningObjectives?: LearningObjectivesStructure;
   learningObjectivesBoard: {
+    condition?: string;
     knowledge: string;
     skill: string;
     attitude?: string;
+    cognitive?: string;
+    psychomotor?: string;
+    affective?: string;
     successCriteria: string[];
   };
   priorKnowledgeActivation: {
@@ -673,7 +930,92 @@ export interface LessonPlan {
   materialsNeeded?: string[];
   suggestedAddOns?: { type: string; suggestion: string }[];
   isReadyToTeach?: boolean;
+  
+  // Teacher-Independent Instructional Coach System Fields
+  teacherQuickReference?: TeacherQuickReference;
+  lessonAtAGlance?: LessonAtAGlanceRow[];
+  teacherPreparation?: TeacherPreparationBriefing;
+  keyVocabularyTable?: KeyVocabularyEntry[];
+  prerequisiteDiagnostic?: PrerequisiteDiagnostic;
+  commonMisconceptionsTable?: CommonMisconceptionEntry[];
+  teachMeThisTopic?: TeachMeThisTopicBriefing;
+  teacherScriptDetailed?: TeacherScriptFull;
+  instructionalSequence?: InstructionalSequence;
+  workedExamplesList?: WorkedExampleItem[];
+  bloomQuestionBank?: BloomQuestionBank;
+  formativeChecksList?: FormativeCheckItem[];
+  ifStudentsAreStruggling?: StrugglingRemediation;
+  commonErrorsTable?: CommonErrorItem[];
+  readyToTeachChecklist?: ReadyToTeachItem[];
+  completeAssessment?: CompleteAssessmentPackage;
+  studentMaterials?: GeneratedStudentMaterial[];
+  belizeanContextDetails?: BelizeanContextDetails;
+
+  // Language Arts Master 2-Component Architecture & Complete Resources
+  languageArtsComponents?: [LanguageArtsComponent, LanguageArtsComponent] | LanguageArtsComponent[];
+  component1Details?: LanguageArtsComponentDetails;
+  component2Details?: LanguageArtsComponentDetails;
+  readingPassageFull?: ReadingPassageResource;
+  anchorChartBlueprint?: AnchorChartBlueprint;
+  exitTicketPackage?: ExitTicketPackage;
+
   updatedAt?: any;
+}
+
+export type LanguageArtsComponent = 
+  | 'Comprehension — Oral Expression and Listening'
+  | 'Phonological Awareness'
+  | 'Phonics and Word Recognition'
+  | 'High Frequency Words'
+  | 'Production and Language Structure — Writing and Composition';
+
+export const LANGUAGE_ARTS_5_COMPONENTS: LanguageArtsComponent[] = [
+  'Comprehension — Oral Expression and Listening',
+  'Phonological Awareness',
+  'Phonics and Word Recognition',
+  'High Frequency Words',
+  'Production and Language Structure — Writing and Composition'
+];
+
+export interface LanguageArtsComponentDetails {
+  name: LanguageArtsComponent;
+  timeAllocation: string;
+  explicitTeachingScript: string;
+  guidedPracticeTask: string;
+  formativeCheck: {
+    teacherAsks: string;
+    expectedResponse: string;
+    ifCorrect: string;
+    ifIncorrect: string;
+  };
+}
+
+export interface ReadingPassageResource {
+  title: string;
+  wordCount: number;
+  gradeLevel: string;
+  genre?: string;
+  content: string;
+  vocabularyHighlighted?: string[];
+  comprehensionQuestions?: { question: string; answer: string; cognitiveLevel?: string }[];
+}
+
+export interface AnchorChartBlueprint {
+  title: string;
+  layout: string;
+  headerText: string;
+  keyRulesOrDefinitions: string[];
+  visualDiagramDescription: string;
+  studentKeyTakeaway: string;
+}
+
+export interface ExitTicketPackage {
+  title: string;
+  prompt: string;
+  questions: { question: string; answerKey: string; points?: number }[];
+  scoringGuidance: string;
+  masteryThreshold: string;
+  groupingRuleTomorrow: string;
 }
 
 export interface LanguageArtsDailyStrand {
@@ -706,6 +1048,9 @@ export type LanguageArtsWeeklyStructure = 'Recommended' | 'Alternative';
 
 export interface LanguageArtsWeeklyPlan {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade: GradeLevel;
   subject: 'Language Arts';
   cycle: number;
@@ -733,8 +1078,14 @@ export interface LanguageArtsWeeklyPlan {
 
 export interface WeeklyCurriculumPlan {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade_level: GradeLevel;
+  grade?: GradeLevel;
   subject: Subject;
+  academicYear?: string;
+  schoolYear?: string;
   cycle: number;
   week_number: number;
   weekly_topic: string;
@@ -759,7 +1110,9 @@ export interface WeeklyCurriculumPlan {
       focus: string;
       flow: string;
     };
+    learningObjectives?: LearningObjectivesStructure;
     learningObjectivesBoard?: {
+      condition?: string;
       knowledge: string;
       skill: string;
       attitude: string;
@@ -829,6 +1182,9 @@ export interface CalendarDayEntry {
 
 export interface YearlyCalendarPlan {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade: GradeLevel;
   subject: Subject;
   schoolYear: string; // e.g., "2025-2026"
@@ -890,6 +1246,9 @@ export interface MasterCalendar {
 
 export interface DailyLessonPlan {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   weekly_plan_id: string;
   day_number: number;
   lesson_title: string;
@@ -943,6 +1302,9 @@ export interface PacingWeek {
 
 export interface CyclePacingMap {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
   grade: GradeLevel;
   subject: Subject;
   cycle: number;
@@ -987,6 +1349,10 @@ export interface TeachingCollection {
 
 export interface SavedLesson {
   id?: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
+  grade?: GradeLevel;
   lesson_plan_id: string;
   class_id: GradeLevel;
   createdBy: string;
@@ -997,6 +1363,14 @@ export interface SavedLesson {
   cycle?: string;
   week?: string;
   duration?: string;
+  learningObjectives?: LearningObjectivesStructure;
+  learningObjectivesBoard?: {
+    condition?: string;
+    knowledge: string;
+    skill: string;
+    attitude?: string;
+    successCriteria?: string[];
+  };
   objectives?: string[];
   learning_outcomes?: string[];
   key_vocabulary?: string[];
@@ -1023,6 +1397,10 @@ export type LessonResourceType =
 
 export interface LessonResourceNew {
   id: string;
+  userId?: string;
+  classId?: string;
+  className?: string;
+  grade?: GradeLevel;
   lesson_id: string;
   resource_type: LessonResourceType;
   title: string;
@@ -1110,12 +1488,14 @@ export interface VersionRecord {
 
 export interface UserSettings {
   schoolName: string;
+  defaultAcademicYear?: string;
   defaultGrade: GradeLevel;
   defaultSubject: Subject;
   curriculumStructure: 'Terms' | 'Cycles';
   teachingModel?: TeachingModel;
   assignedClasses?: GradeLevel[];
   lastSelectedClass?: GradeLevel;
+  lastSelectedClassId?: string;
   aiQuality: {
     defaultOutputStyle: OutputStyle;
     includeTeacherScript: boolean;
