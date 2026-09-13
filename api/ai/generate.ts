@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as geminiService from '../../src/services/gemini.implementation';
 import { generateLessonResources } from '../../src/lib/gemini';
@@ -6,34 +7,77 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // Always set Content-Type header to application/json
+  res.setHeader('Content-Type', 'application/json');
+
+  // STEP 2.1 — Accept POST requests only
   if (req.method !== 'POST') {
     return res.status(405).json({
-      error: 'Method not allowed'
+      success: false,
+      error: `Method ${req.method} not allowed. Please use POST.`
+    });
+  }
+
+  // STEP 2.2 — Parse the JSON request body safely
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (parseErr: any) {
+      console.error('Lesson generation API error: Invalid JSON request body:', parseErr?.message);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid JSON request body.'
+      });
+    }
+  }
+
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({
+      success: false,
+      error: 'Request body must be a valid JSON object.'
+    });
+  }
+
+  const { action, params } = body;
+
+  // STEP 2.3 — Validate the request
+  if (!action || typeof action !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing or invalid "action" field in request body.'
+    });
+  }
+
+  // STEP 4 & STEP 6 — Verify GEMINI_API_KEY and log state (NEVER log the actual key)
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const hasApiKey = Boolean(apiKey && apiKey !== 'undefined' && apiKey !== 'null');
+
+  console.error(`[API /api/ai/generate] Action: "${action}" | GEMINI_API_KEY configured: ${hasApiKey}`);
+
+  if (!hasApiKey) {
+    console.error('Lesson generation API error: GEMINI_API_KEY is not configured on the server.');
+    return res.status(500).json({
+      success: false,
+      error: 'GEMINI_API_KEY is not configured on the server.'
     });
   }
 
   try {
-    const { action, params } = req.body;
-
-    if (!action) {
-      return res.status(400).json({
-        error: 'Missing action'
-      });
-    }
-
-    let result;
+    let result: any;
+    const actionParams = params || {};
 
     switch (action) {
       case 'generateLessonPlan':
-        result = await geminiService.generateLessonPlan(params);
+        result = await geminiService.generateLessonPlan(actionParams);
         break;
 
       case 'generateLanguageArtsDailyPlan':
-        result = await geminiService.generateLanguageArtsDailyPlan(params);
+        result = await geminiService.generateLanguageArtsDailyPlan(actionParams);
         break;
 
       case 'generateWeeklyPlan': {
-        const { grade, subject, cycle, entries, numWeeks, lessonsPerWeek } = params;
+        const { grade, subject, cycle, entries, numWeeks, lessonsPerWeek } = actionParams;
         result = await geminiService.generateWeeklyPlan(
           grade,
           subject,
@@ -46,141 +90,142 @@ export default async function handler(
       }
 
       case 'generateWeeklyBreakdown':
-        result = await geminiService.generateWeeklyBreakdown(params);
+        result = await geminiService.generateWeeklyBreakdown(actionParams);
         break;
 
       case 'generateWeeklyCurriculumPlan':
-        result = await geminiService.generateWeeklyBreakdown(params);
+        result = await geminiService.generateWeeklyBreakdown(actionParams);
         break;
 
       case 'parseCurriculum':
         result = await geminiService.parseCurriculum(
-          params.fileData,
-          params.text
+          actionParams.fileData,
+          actionParams.text
         );
         break;
 
       case 'parseCurriculumUnit':
         result = await geminiService.parseCurriculumUnit(
-          params.fileData,
-          params.text
+          actionParams.fileData,
+          actionParams.text
         );
         break;
 
       case 'generateFullWeek':
-        result = await geminiService.generateFullWeek(params);
+        result = await geminiService.generateFullWeek(actionParams);
         break;
 
       case 'improveContent':
         result = await geminiService.improveContent(
-          params.content,
-          params.instruction,
-          params.context
+          actionParams.content,
+          actionParams.instruction,
+          actionParams.context
         );
         break;
 
       case 'regenerateSection':
         result = await geminiService.regenerateSection(
-          params.sectionName,
-          params.lessonContext
+          actionParams.sectionName,
+          actionParams.lessonContext
         );
         break;
 
       case 'generateLessonResources':
         result = await generateLessonResources(
-          params.grade,
-          params.topic
+          actionParams.grade,
+          actionParams.topic
         );
         break;
 
       case 'generateCyclePacingMap':
-        result = await geminiService.generateCyclePacingMap(params);
+        result = await geminiService.generateCyclePacingMap(actionParams);
         break;
 
       case 'calculateCoverage':
-        result = await geminiService.calculateCoverage(params);
+        result = await geminiService.calculateCoverage(actionParams);
         break;
 
       case 'generateLanguageArtsWeeklyPlan':
-        result = await geminiService.generateLanguageArtsWeeklyPlan(params);
+        result = await geminiService.generateLanguageArtsWeeklyPlan(actionParams);
         break;
 
       case 'generateResource':
         result = await geminiService.generateResource(
-          params.type,
-          params.lessonContext,
-          params.options
+          actionParams.type,
+          actionParams.lessonContext,
+          actionParams.options
         );
         break;
 
       case 'generateWeeklyLessonPlan':
-        result = await geminiService.generateWeeklyLessonPlan(params);
+        result = await geminiService.generateWeeklyLessonPlan(actionParams);
         break;
 
       case 'generateReteachLesson':
         result = await geminiService.generateReteachLesson(
-          params.originalPlan,
-          params.assessmentRecord
+          actionParams.originalPlan,
+          actionParams.assessmentRecord
         );
         break;
 
       case 'generateInterventionWork':
         result = await geminiService.generateInterventionWork(
-          params.lessonPlan,
-          params.assessmentRecord
+          actionParams.lessonPlan,
+          actionParams.assessmentRecord
         );
         break;
 
       case 'generateCatchUpLesson':
         result = await geminiService.generateCatchUpLesson(
-          params.lessonPlan
+          actionParams.lessonPlan
         );
         break;
 
       case 'generateRevisionWeek':
         result = await geminiService.generateRevisionWeek(
-          params.grade,
-          params.subject,
-          params.weakOutcomes,
-          params.misconceptions
+          actionParams.grade,
+          actionParams.subject,
+          actionParams.weakOutcomes,
+          actionParams.misconceptions
         );
         break;
 
       case 'generateYearlyCurriculumMap':
         result = await geminiService.generateYearlyCurriculumMap(
-          params.grade,
-          params.subject,
-          params.curriculum,
-          params.calendar
+          actionParams.grade,
+          actionParams.subject,
+          actionParams.curriculum,
+          actionParams.calendar
         );
         break;
 
       case 'generateCyclePlan':
         result = await geminiService.generateCyclePlan(
-          params.map,
-          params.cycleNumber,
-          params.calendar
+          actionParams.map,
+          actionParams.cycleNumber,
+          actionParams.calendar
         );
         break;
 
       case 'generateWeeklyTeachingPlan':
         result = await geminiService.generateWeeklyTeachingPlan(
-          params.cyclePlan,
-          params.weekNumber,
-          params.calendar
+          actionParams.cyclePlan,
+          actionParams.weekNumber,
+          actionParams.calendar
         );
         break;
 
       case 'generateLessonVideo':
         result = await geminiService.generateLessonVideo(
-          params.lesson,
-          params.voiceSettings,
-          params.avatarSettings
+          actionParams.lesson,
+          actionParams.voiceSettings,
+          actionParams.avatarSettings
         );
         break;
 
       default:
         return res.status(400).json({
+          success: false,
           error: `Unknown action: ${action}`
         });
     }
@@ -188,11 +233,17 @@ export default async function handler(
     return res.status(200).json(result);
 
   } catch (error: any) {
-    console.error('AI Error Details:', error);
+    console.error('Lesson generation API error:', {
+      action,
+      message: error?.message,
+      stack: error?.stack,
+      details: error?.details || error?.response?.data
+    });
 
     return res.status(500).json({
-      error: error?.message || 'Internal Server Error',
-      details: error?.details || 'Check Vercel runtime logs for more information.'
+      success: false,
+      error: error?.message || 'Internal Server Error during lesson generation',
+      details: error?.details || undefined
     });
   }
 }

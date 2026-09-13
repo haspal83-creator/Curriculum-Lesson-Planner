@@ -12,12 +12,31 @@ async function callAi(action: string, params: any) {
     body: JSON.stringify({ action, params }),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || `AI request failed: ${response.statusText}`);
+  const contentType = response.headers.get("content-type") || "";
+  let data: any;
+
+  if (contentType.includes("application/json")) {
+    try {
+      data = await response.json();
+    } catch (parseError: any) {
+      throw new Error(
+        `API returned invalid JSON (${response.status}): ${parseError?.message || "JSON parse error"}`
+      );
+    }
+  } else {
+    const text = await response.text();
+    throw new Error(
+      `API returned ${response.status}: ${text || "Unknown server error"}`
+    );
   }
 
-  return response.json();
+  if (!response.ok) {
+    throw new Error(
+      data?.error || data?.message || `Server error (${response.status})`
+    );
+  }
+
+  return data;
 }
 
 export const generateLessonPlan = (params: any) => callAi('generateLessonPlan', params);
