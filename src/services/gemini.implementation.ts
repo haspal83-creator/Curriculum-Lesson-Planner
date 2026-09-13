@@ -49,6 +49,7 @@ import { getMasterCalendar, getDayType, isTeachingDay, getCycleForDate } from ".
 import { getGenAI, validateGeminiConfig } from "../lib/gemini";
 import { normalizeLearningObjectives } from "../lib/learningObjectivesHelper";
 import { enrichAndGuaranteeTeachReady } from "../lib/lessonQualityGate";
+import { isLanguageArtsSubject } from "../lib/languageArtsQualityGate";
 const masterCalendar = getMasterCalendar();
 
 const SYSTEM_INSTRUCTION = `You are an expert educational technology architect, Belize primary curriculum specialist, instructional designer, assessment specialist, and experienced primary school teacher.
@@ -58,6 +59,41 @@ Curriculum Planner + Teacher Preparation Guide + Instructional Coach + Teaching 
 
 ### CORE PHILOSOPHY: TEACHER-INDEPENDENT INSTRUCTION
 The teacher should NOT need to conduct separate basic research using Google, YouTube, textbooks, or other websites merely to understand the content required to teach the lesson.
+
+### UNBROKEN 16-STEP INSTRUCTIONAL ALIGNMENT CHAIN
+Every lesson plan must form an unbroken, coherent pedagogical cascade where every single step directly connects to and reinforces the preceding step:
+1. CURRICULUM OUTCOME — Authoritative national syllabus outcome
+        ↓
+2. LESSON FOCUS — Precise concept, subtopic, or skill focus
+        ↓
+3. MEASURABLE OBJECTIVES — One shared condition + Cognitive, Psychomotor, and Affective observable outcomes
+        ↓
+4. SUCCESS CRITERIA — Transparent, student-facing "I can..." mastery statements
+        ↓
+5. PRIOR KNOWLEDGE — Prerequisite diagnostic activation & misconceptions check
+        ↓
+6. ENGAGE — Stage 1 hook, real-world context, and inquiry prompt
+        ↓
+7. EXPLORE — Stage 2 student discovery, mentor text examination, or pattern identification
+        ↓
+8. EXPLICIT MODELING — Stage 3 "I Do" teacher think-aloud and step-by-step demonstration
+        ↓
+9. GUIDED PRACTICE — Stage 3 "We Do" collaborative paired practice with active CFU
+        ↓
+10. INDEPENDENT APPLICATION — Stage 4 "You Do" individual practice worksheet or exercise book tasks
+        ↓
+11. FORMATIVE ASSESSMENT — Mid-lesson comprehension checks with explicit "If Correct / If Incorrect" pathways
+        ↓
+12. DIFFERENTIATED RESPONSE — Tiered scaffolds for struggling, on-level, advanced, and inclusion learners
+        ↓
+13. EXIT TICKET — 3-question diagnostic end-of-lesson assessment measuring objective mastery
+        ↓
+14. MASTERY DECISION — 80% benchmark mastery threshold & scoring rubric
+        ↓
+15. NEXT-LESSON ACTION — Targeted grouping rules for tomorrow (guided intervention table vs enrichment)
+        ↓
+16. POST-LESSON REFLECTION — Anticipatory pre-lesson notes & teacher post-lesson observation log
+
 Every generated lesson must contain:
 1. Complete Teacher Preparation: What the concept is, what it means, why it matters, how it works, important rules, terminology, and Belizean real-world applications.
 2. Complete Teacher Script: The actual words a teacher should say ("Teacher Says: ...") for opening, explaining, modeling, transitions, feedback, and closing.
@@ -75,6 +111,13 @@ Every generated lesson must contain:
   3. Phonics and Word Recognition
   4. High Frequency Words
   5. Production & Language Structure — Writing and Composition
+  * STRICT SUBJECT PURITY: Zero mathematics terminology bleed. NEVER use "solve problems", "show all your working", "algorithm", "calculation", "computational errors", "reverse operation", "box your answers", "number line", or "place value".
+  * ACCURATE MORPHOLOGY: Use only linguistically defensible, transparent examples (e.g. sub+marine, sub+merge, trans+port, inter+act, un+lock, re+read, pre+view, dis+agree, mis+understand, help+ful, care+less, quick+ly). Never generate false word segmentations.
+  * GENUINE BLOOM'S TAXONOMY: Construct authentic reading, analysis, evaluation, and composition questions across all levels.
+  * REAL STUDENT WORKSHEETS: Always generate actual student questions ready for printing. NEVER output placeholders like "[Foundational Practice Problem]" or "[Standard Application Problem]".
+  * REAL ANSWER KEYS: Every question must have an explicit model answer, acceptable criteria, and scoring guidance. NEVER output "Correct working shown" or "Verified answer".
+  * PRE-LESSON REFLECTION: reflectionDashboard must be anticipatory planning notes ("What do I anticipate students may find difficult?", "What evidence will I collect?", "What will I adjust if students struggle?"). NEVER invent fake past-tense claims that the lesson has already been taught, and NEVER invent fake student names (no "Kevin", "Maria", "John").
+  * SCORING CONSISTENCY: Question point values must sum to the declared total, and mastery thresholds must share the same denominator.
 - **Mathematics:** Concrete → Pictorial → Abstract scaffolding, step-by-step worked examples, and explicit common calculation error warnings.
 - **Science:** Inquiry-based observation, predictions, fair testing procedures, and evidence-based scientific reasoning.
 - **Belizean Studies / Social Studies:** Rich factual grounding in Belizean culture, geography across all 6 districts, multi-ethnic heritage (Maya, Garifuna, Creole, Mestizo, East Indian, Mennonite), and community life.
@@ -110,7 +153,7 @@ Every Learning Objectives section must ALWAYS use ONE SHARED CONDITION for all t
 export const executeGenAIWithFallback = async (
   requestFactory: (model: string) => Promise<any>,
   preferredModel = "gemini-3.6-flash",
-  fallbackModels: string[] = ["gemini-3.1-flash-lite", "gemini-3.8-flash"]
+  fallbackModels: string[] = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"]
 ) => {
   const modelsToTry = [preferredModel, ...fallbackModels.filter(m => m !== preferredModel)];
   let lastError: any = null;
@@ -516,8 +559,11 @@ export const generateLessonPlan = async (params: {
   validateGeminiConfig();
   const { grade, subject, cycle, week, day, topic, subtopic, lessonTitle, objectives, learningOutcome, duration, teachingModel, specialNotes, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [], curriculumUnit, academicYear = '2025-2026' } = params;
 
-  const teachingDay = calendarDays.find(d => d.date === params.date || (d.week === week && d.dayNumber === day));
-  const actualDuration = teachingDay?.type === 'Half Day' ? '30 minutes' : duration;
+  const teachingDays = calendarDays.filter(d => d.isTeachingDay);
+  const teachingDay = teachingDays[day - 1];
+  // Language Arts lessons are ALWAYS 90 minutes by default
+  const defaultDuration = (duration && duration !== '45 minutes') ? duration : '90 minutes';
+  const actualDuration = teachingDay?.type === 'Half Day' ? '45 minutes' : defaultDuration;
 
   const prompt = `Generate a highly detailed, professional, and structured COMPLETE CLASSROOM-READY LESSON EXECUTION PACK for Day ${day} of Week ${week}.
 ${teachingDay ? `Scheduled Date: ${safeFormat(teachingDay.date, 'EEEE, MMMM do')} (${teachingDay.type})` : ''}
@@ -559,22 +605,47 @@ Teacher Guidance: ${curriculumUnit.answersGuidance || 'N/A'}
 IMPORTANT: You MUST use the specific page numbers and focus areas from this Teacher's Guide. Prioritize this content over generic AI generation.
 ` : ''}
 
+### MANDATORY 90-MINUTE LANGUAGE ARTS PACING & INSTRUCTIONAL CASCADE
+For Language Arts, duration is strictly 90 MINUTES by default. Build this lesson as a comprehensive 90-minute literacy block from the ground up:
+1. Engage & Prior Knowledge — 8 minutes
+2. Explore: Belizean Reading Passage — 15 minutes
+3. Explicit Instruction / Teacher Think-Aloud — 15 minutes
+4. Guided Morphological Analysis — 15 minutes
+5. Collaborative Word-Building / Application — 10 minutes
+6. Independent Reading & Writing Application — 15 minutes
+7. Exit Assessment & Closure — 12 minutes (7 min diagnostic assessment + 5 min reflection synthesis)
+TOTAL MUST EQUAL EXACTLY 90 MINUTES.
+
 ### MANDATORY OUTPUT COMPONENTS
 Generate a full lesson execution support system following the structure defined in your system instructions.
 
 Rules:
 - Procedures MUST be bulleted steps. NO long paragraphs.
 - Use realistic teacher language.
-- MANDATORY LEARNING OBJECTIVES FORMAT (PERMANENT RULE):
-  * Provide "learningObjectives" with:
-    - condition: Exactly one shared condition starting with "Given..." based on the lesson's actual materials, learning situation, or task.
-    - cognitive: "Students will [observable cognitive behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
-    - psychomotor: "Students will [observable physical/procedural/skill-based behavior] [measurable criterion where appropriate]." Do NOT repeat the condition.
-    - affective: "Students will [observable attitude, participation, collaboration, or confidence]." Do NOT repeat the condition.
-  * Do NOT repeat the condition inside the individual domain objectives.
+- MANDATORY LEARNING OBJECTIVES FORMAT:
+  * condition: Shared condition starting with "Given..." based on the lesson's actual materials (e.g. "Given a Belizean informational passage and a prefix analysis organizer...").
+  * cognitive: "Students will [observable cognitive behavior] [measurable criterion where appropriate, e.g. with at least 80% accuracy]."
+  * psychomotor: "Students will [observable physical/procedural/writing behavior] [measurable criterion, e.g. in 3 out of 3 sentences]."
+  * affective: "Students will [observable participation, collaboration, or confidence, e.g. by contributing at least one relevant idea]."
 - Visuals must be fully described with content, not just titles.
 - Materials must be precise and organized by stage.
-- Adapt complexity for ${grade}.`;
+- Adapt complexity for ${grade}.
+
+CRITICAL LANGUAGE ARTS REQUIREMENTS:
+1. Purity: Absolutely zero mathematics terminology (no "solve problems", "show all your working", "algorithm", "calculation", "computational errors", "reverse operation", "box your answers", "number line", or "place value").
+2. Morphology Accuracy:
+   - Do NOT teach that every word can be divided into prefix + standalone root word.
+   - Use accurate terminology: prefix, base word (standalone word), root or root element (bound element), whole-word meaning.
+   - Teach the 4-step strategy: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING.
+   - Clear transparent examples: submerge (sub- + merge), transport (trans- + port), preview (pre- + view), interact (inter- + act), intertidal (inter- + tidal), international (inter- + national).
+   - Distinguish between a true base word and a bound root element.
+3. Real Worksheets: Under studentMaterials, generate complete printable questions with the 4-step strategy (NEVER use placeholders like "[Foundational Practice Problem]").
+4. Real Answer Keys: Provide explicit model answers and grading criteria for all items.
+5. Pre-Lesson Reflection: reflectionDashboard MUST be anticipatory planning notes ("What do I anticipate students may find difficult?", "What evidence will I collect?", "What will I adjust if students struggle?"). Do NOT write fake claims that the lesson has already been taught, and do NOT invent student names.
+6. Scoring Consistency:
+   - If the exit ticket has 3 questions: Score = /3, Mastery = 3/3 (100%) or 2/3 (67% approaching mastery). NEVER mention 8/10 when the exit ticket is out of 3!
+   - If the exit ticket is out of 10: Score = /10, Mastery = 8/10.
+7. Teacher Script: Separate from the main lesson plan, authentic think-aloud modeling the 4-step strategy without generic "Step 1, I write down... Step 2, I notice that... Step 3, I verify my answer..." placeholders.`;
 
   const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
     model,
@@ -906,6 +977,7 @@ export const generateLanguageArtsDailyPlan = async (params: {
   week: number;
   day: number;
   date?: string;
+  subject?: string;
   topic: string;
   subtopic?: string;
   lessonTitle?: string;
@@ -932,7 +1004,7 @@ export const generateLanguageArtsDailyPlan = async (params: {
     lessonTitle, 
     objectives, 
     learningOutcome, 
-    duration = '45 minutes', 
+    duration, 
     teachingModel = 'Direct Instruction (I Do, We Do, You Do)', 
     specialNotes, 
     style = 'Standard Teacher', 
@@ -942,8 +1014,10 @@ export const generateLanguageArtsDailyPlan = async (params: {
     components 
   } = params;
 
+  const isLA = true;
+  const resolvedDuration = (duration && duration !== '45 minutes') ? duration : '90 minutes';
   const teachingDay = calendarDays.find(d => d.date === params.date || (d.week === week && d.dayNumber === day));
-  const actualDuration = teachingDay?.type === 'Half Day' ? '30 minutes' : duration;
+  const actualDuration = teachingDay?.type === 'Half Day' ? '45 minutes' : resolvedDuration;
 
   // Enforce exactly 2 components
   let selectedComps = components;
@@ -1482,7 +1556,9 @@ export const generateFullWeek = async (params: {
       lessonTitle: weeklyStructure.daily_lesson_titles![i],
       objectives: weeklyStructure.daily_objectives![i],
       learningOutcome: weeklyStructure.weekly_learning_outcomes![0] || '',
-      duration: teachingDay?.type === 'Half Day' ? '30 minutes' : '45 minutes',
+      duration: isLanguageArtsSubject(subject) 
+        ? (teachingDay?.type === 'Half Day' ? '45 minutes' : '90 minutes')
+        : (teachingDay?.type === 'Half Day' ? '30 minutes' : '45 minutes'),
       teachingModel,
       specialNotes: teachingDay ? `This lesson is scheduled for ${safeFormat(teachingDay.date, 'EEEE, MMM do')}. Day type: ${teachingDay.type}.` : undefined
     });

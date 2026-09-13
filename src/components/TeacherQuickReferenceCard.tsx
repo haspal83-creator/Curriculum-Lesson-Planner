@@ -108,10 +108,10 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
         {/* Duration */}
         <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-emerald-500" /> Validated Duration
+            <Clock className="w-3.5 h-3.5 text-emerald-500" /> Lesson Duration
           </span>
           <p className="text-sm font-bold text-emerald-700">{duration}</p>
-          <p className="text-xs text-emerald-600 font-medium">Sum of stages verified ✓</p>
+          <p className="text-xs text-gray-500 font-medium">Planned Instructional Time</p>
         </div>
 
         {/* Mastery Target */}

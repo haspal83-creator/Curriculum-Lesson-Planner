@@ -94,6 +94,7 @@ import { TeacherQuickReferenceCard } from './TeacherQuickReferenceCard';
 import { LessonAtAGlanceTable } from './LessonAtAGlanceTable';
 import { TeacherPrepModeView } from './TeacherPrepModeView';
 import { LiveTeachModeView } from './LiveTeachModeView';
+import { InstructionalAlignmentChain } from './InstructionalAlignmentChain';
 import { enrichAndGuaranteeTeachReady } from '../lib/lessonQualityGate';
 
 // Helper Components for the new Layout
@@ -267,6 +268,7 @@ export function LessonPlanDisplay({
 
   const navItems = [
     { id: 'summary', label: 'Overview', icon: Layout },
+    { id: 'alignment', label: '16-Step Chain', icon: Layers },
     { id: 'strategies', label: 'Strategies', icon: Sparkles },
     { id: 'objectives', label: 'Objectives', icon: Target },
     { id: 'materials', label: 'Materials', icon: Package },
@@ -279,6 +281,7 @@ export function LessonPlanDisplay({
   ];
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     summary: true,
+    alignment: true,
     strategies: true,
     objectives: true,
     materials: true,
@@ -1508,6 +1511,14 @@ export function LessonPlanDisplay({
                       {/* LESSON AT A GLANCE (TIMING-ARITHMETIC VERIFIED TABLE) */}
                       <LessonAtAGlanceTable plan={enrichedPlan} />
 
+                      {/* INSTRUCTIONAL ALIGNMENT CHAIN (16-STEP COMPLETE PEDAGOGICAL PIPELINE) */}
+                      <div id="alignment">
+                        <InstructionalAlignmentChain 
+                          plan={enrichedPlan} 
+                          onNavigateToSection={scrollToSection} 
+                        />
+                      </div>
+
                       {/* SECTION 1: LESSON OVERVIEW */}
                       <Card id="summary" className={cn(
                         "rounded-2xl shadow-sm border-gray-200 bg-white transition-all",
@@ -1626,8 +1637,8 @@ export function LessonPlanDisplay({
                                 </h2>
                               </div>
                               <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-                                <span className="bg-emerald-600 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-sm">
-                                  2 of 5 Active
+                                <span className="bg-emerald-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-sm">
+                                  Two-Component Focus
                                 </span>
                               </div>
                             </div>
@@ -2436,48 +2447,74 @@ export function LessonPlanDisplay({
                         isTeachMode ? "p-8 sm:p-12" : "p-6 sm:p-8"
                       )}>
                         <div className="space-y-6">
-                          <div className="flex items-center gap-3 text-indigo-600 border-b border-gray-100 pb-4">
-                            <StickyNote className="w-6 h-6" />
-                            <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
-                              Teacher Reflection Dashboard
-                            </h2>
+                          <div className="flex items-center justify-between flex-wrap gap-3 border-b border-gray-100 pb-4">
+                            <div className="flex items-center gap-3 text-indigo-600">
+                              <StickyNote className="w-6 h-6" />
+                              <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                                Pre-Lesson Reflection & Planning Notes
+                              </h2>
+                            </div>
+                            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full uppercase tracking-wider border border-indigo-100">
+                              Pre-Lesson Notes (Anticipatory)
+                            </span>
                           </div>
 
                           {plan.reflectionDashboard ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div className="space-y-4">
-                                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
-                                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-2.5">What Worked Well</p>
+                                <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 shadow-xs">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                                    <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider">Anticipated Learning Difficulties</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 italic mb-2">What do I anticipate students may find difficult?</p>
                                   <BulletList items={plan.reflectionDashboard.whatWorked} icon={CheckCircle2} isTeachMode={isTeachMode} />
                                 </div>
-                                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-5">
-                                  <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] mb-2.5">Needs Improvement</p>
+                                <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-5 shadow-xs">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                                    <p className="text-[11px] font-black text-blue-800 uppercase tracking-wider">Assessment Evidence to Collect</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 italic mb-2">What evidence will I collect during instruction?</p>
                                   <BulletList items={plan.reflectionDashboard.needsImprovement} icon={AlertCircle} isTeachMode={isTeachMode} />
                                 </div>
                               </div>
                               <div className="space-y-4">
-                                <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-5">
-                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-2.5">Follow-up Students</p>
+                                <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-5 shadow-xs">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Users className="w-4 h-4 text-purple-600" />
+                                    <p className="text-[11px] font-black text-purple-800 uppercase tracking-wider">Follow-Up Grouping & Support</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 italic mb-2">Record students requiring follow-up after the lesson:</p>
                                   <BulletList items={plan.reflectionDashboard.followUpStudents} icon={Users} isTeachMode={isTeachMode} />
                                 </div>
-                                <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-5">
-                                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-2.5">Next Steps</p>
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-xs">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <ArrowRight className="w-4 h-4 text-emerald-600" />
+                                    <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wider">Responsive Adjustments If Struggling</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 italic mb-2">What will I adjust if students struggle?</p>
                                   <BulletList items={plan.reflectionDashboard.nextSteps} icon={ArrowRight} isTeachMode={isTeachMode} />
                                 </div>
                               </div>
                             </div>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">What went well?</label>
-                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[110px] text-sm text-gray-800" placeholder="Record what succeeded during the lesson..." />
+                          ) : null}
+
+                          <div className="mt-6 pt-6 border-t border-gray-100">
+                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">
+                              Teacher Post-Lesson Observation Log (Complete After Teaching)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actual Student Successes & Engagement</label>
+                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-3 text-sm text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[90px]" placeholder="Record specific instructional successes observed during class..." />
                               </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Challenges & Next Steps</label>
-                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[110px] text-sm text-gray-800" placeholder="Record adjustments needed for the next lesson..." />
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Observed Misconceptions & Tomorrow's Adjustments</label>
+                                <textarea className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-3 text-sm text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none min-h-[90px]" placeholder="Record student misconceptions observed and reteaching plan..." />
                               </div>
                             </div>
-                          )}
+                          </div>
                         </div>
                       </Card>
 

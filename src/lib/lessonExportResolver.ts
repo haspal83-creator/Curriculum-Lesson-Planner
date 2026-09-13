@@ -10,6 +10,7 @@ import {
   LessonResourceNew
 } from '../types';
 import { normalizeLearningObjectives } from './learningObjectivesHelper';
+import { enforceLanguageArtsPurityAndQuality, isLanguageArtsSubject } from './languageArtsQualityGate';
 
 // ==========================================
 // CONSTANTS & SCHOOL POLICIES
@@ -330,25 +331,26 @@ Hope for the reef's future is visible through innovative coral regeneration nurs
 };
 
 const TEST_CASE_ANCHOR_CHART = {
-  title: "Complex Prefixes Anchor Chart: Mastering Advanced Word Structures",
-  layout: "Four-Column Morphology Matrix with Central Morphological Tree Diagram",
-  headerText: "Language Arts Focus: Decoding Complex Prefixes, Roots, and Suffixes",
-  tableHeaders: ["PREFIX / SUFFIX", "MEANING", "MENTOR EXAMPLE", "MEANING OF WORD"],
+  title: "Advanced Word Analysis: Prefixes, Base Words, & Roots Anchor Chart",
+  layout: "Five-Column Morphology Matrix with 4-Step Strategic Reading Pathway",
+  headerText: "Language Arts Strategic Sequence: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING",
+  tableHeaders: ["PREFIX / AFFIX", "MEANING", "MENTOR EXAMPLE", "BASE WORD / ROOT", "WHOLE-WORD MEANING"],
   tableRows: [
-    { col1: "inter-", col2: "between / among", col3: "international", col4: "involving or situated between multiple nations" },
-    { col1: "trans-", col2: "across / through", col3: "transport", col4: "carry across or move through from one place to another" },
-    { col1: "sub-", col2: "under / below", col3: "submarine / subtropical", col4: "a vessel operating under water / regions just below the tropics" },
-    { col1: "anti-", col2: "against / opposed to", col3: "anti-pollution", col4: "working against or preventing environmental pollution" },
-    { col1: "-able / -ible", col2: "capable of being", col3: "sustainable", col4: "capable of being maintained or preserved over time" },
-    { col1: "-tion / -sion", col2: "act, state, or process of", col3: "preservation / regeneration", col4: "the act or process of keeping safe / renewing and restoring" }
+    { col1: "sub-", col2: "under / below", col3: "submerge / submersible", col4: "merge (base word)", col5: "to plunge completely under water; vessel operating under sea" },
+    { col1: "trans-", col2: "across / beyond", col3: "transport / transatlantic", col4: "port (base word)", col5: "to carry across places; crossing across the Atlantic Ocean" },
+    { col1: "inter-", col2: "between / among", col3: "interact / international", col4: "act / nation (base words)", col5: "act between or with each other; involving multiple nations" },
+    { col1: "pre-", col2: "before", col3: "preview / prehistoric", col4: "view / historic (base words)", col5: "view beforehand; period before recorded history" },
+    { col1: "anti-", col2: "against / opposed to", col3: "anti-pollution", col4: "pollution (base word)", col5: "working against or preventing environmental contamination" },
+    { col1: "-able / -ible", col2: "capable of being", col3: "sustainable", col4: "sustain (base word)", col5: "capable of being maintained or preserved over time" },
+    { col1: "-tion / -sion", col2: "act, state, or process of", col3: "preservation / regeneration", col4: "preserve / generate (base words)", col5: "the act of keeping safe / renewing and restoring coral" }
   ],
   keyRulesOrDefinitions: [
-    "Rule 1 (Root First): Always identify and isolate the base root word before analyzing attached affixes.",
-    "Rule 2 (Prefix Function): Prefixes attach to the beginning of a root to adjust direction, negation, time, or spatial relationship.",
-    "Rule 3 (Suffix Function): Suffixes attach to the end of a root to alter its grammatical part of speech (verb to noun/adjective) or indicate an ongoing state/process."
+    "4-Step Strategy: 1. Identify Prefix → 2. Locate Base Word or Root Element → 3. Check Sentence Context → 4. Synthesize Whole-Word Meaning.",
+    "Base Word vs. Root: A 'base word' can stand alone in English (e.g., merge, port, act, nation). A 'root element' cannot stand alone and requires affixes to form modern English words.",
+    "Context Confirmation: A prefix provides directional or relational clues, but reading the whole sentence is essential to confirm the exact whole-word meaning."
   ],
-  visualDiagramDescription: "Draw a central 'Tree of Language' graphic: The Root System at the base represents core base words (e.g., 'serve', 'nation', 'struct'). The Left Branch represents Prefixes (inter-, trans-, sub-, anti-) with directional guide arrows. The Right Branch represents Suffixes (-able, -tion, -ment) with word-class indicator tags. Below the trunk, display the 3 Golden Morphological Rules in high-contrast colored frames.",
-  studentKeyTakeaway: "When we break complex academic words into their prefixes, roots, and suffixes, we unlock their precise meanings and expand our reading comprehension and expressive writing."
+  visualDiagramDescription: "Center display: 4-Step Strategic Pathway [1. PREFIX] ➔ [2. BASE/ROOT] ➔ [3. CONTEXT] ➔ [4. WHOLE-WORD MEANING]. Left branch displays prefixes with directional arrows. Right branch illustrates standalone base words vs. bound roots.",
+  studentKeyTakeaway: "We do not guess unfamiliar words. We apply: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING to unlock precise academic vocabulary."
 };
 
 const TEST_CASE_WORKSHEET = {
@@ -441,8 +443,8 @@ const TEST_CASE_EXIT_TICKET = {
     }
   ],
   scoringGuidance: "Total Points: 3. Question 1 (1 pt), Question 2 (1 pt), Question 3 (1 pt).",
-  masteryThreshold: "80% Mastery Benchmark: Score of 3/3 or 2/3 with correct morphological identification on Question 1 or 2.",
-  groupingRuleTomorrow: "Students achieving 3/3 proceed to independent creative writing extension. Students scoring 0-1 join the Teacher Guided Table during tomorrow's 10-minute warm-up for targeted morphological re-teaching."
+  masteryThreshold: "80% Mastery Benchmark: Score of 3/3 (100%) or 2/3 (67% approaching mastery).",
+  groupingRuleTomorrow: "Students achieving 3/3 proceed to independent creative writing extension. Students scoring 2/3 or below receive targeted small-group intervention with tactile affix tiles during tomorrow's small-group table."
 };
 
 const TEST_CASE_TEACHER_SCRIPT = {
@@ -450,39 +452,39 @@ const TEST_CASE_TEACHER_SCRIPT = {
   sections: [
     {
       heading: "Stage 1: Hook & Introduction Dialogue",
-      dialogue: `"Good morning, Standard 6 scholars! Look closely at the word I have written on the chalkboard: 'international'. If you came across this word in an informational book and had never seen it before, how would you figure out its meaning? Today, we are not going to guess. We are going to become word surgeons. We will learn how to dissect complex words into their prefixes, roots, and suffixes to unlock their true meanings instantly."`,
-      notes: "Teacher writes 'international' on the front board in large clear block letters."
+      dialogue: `"Good morning, Standard 6 scholars! Look closely at the word I have written on the chalkboard: 'international'. If you came across this word in an informational book and had never seen it before, how would you figure out its meaning? Today, we are not going to guess. We will learn our 4-step strategic reading sequence: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING. By dissecting complex words into meaningful structural units, we can unlock their precise meanings every time."`,
+      notes: "Teacher writes 'international' on the front board in large clear block letters and points to the 4-step strategic pathway chart."
     },
     {
-      heading: "Stage 2: Explicit Modeling & Think-Aloud",
-      dialogue: `"Watch me closely as I analyze our first mentor word from today's text: 'unsustainable'. 
-First, I perform a root check. I scan through the word and spot the base root: 'sustain'—which means to keep something alive or maintain it over time. 
-Next, I examine the front: the prefix 'un-'. What does 'un-' mean? It means 'not' or the opposite of. 
-Finally, I examine the end: the suffix '-able'. '-able' means 'capable of being'. 
-Now, I assemble the pieces like a puzzle: 'not' + 'capable of being sustained'. 
-In our reading passage about the Belize Barrier Reef, the author discusses 'unsustainable fishing'. That means fishing so excessively that the fish population cannot survive! Notice how dissecting the word told me the exact definition before I even looked at a glossary."`,
-      notes: "Teacher underlines the prefix 'un-' in blue, circles the root 'sustain' in white, and underlines the suffix '-able' in yellow."
+      heading: "Stage 2: Explicit Modeling & Think-Aloud (The 4-Step Strategy)",
+      dialogue: `"Watch me closely as I analyze our first mentor word from today's text: 'submerge'. Notice how I follow our 4-step strategy:
+Step 1: I scan the word for its base word or root element. Here, 'merge' means to plunge or sink into liquid.
+Step 2: I isolate the prefix at the front: 'sub-'. 'Sub-' means under or below.
+Step 3: I read the whole sentence to check the context: 'The research vessel prepares to submerge beneath the surface of the Belize Barrier Reef.'
+Step 4: I synthesize the whole-word meaning: to plunge or sink completely under water.
+Notice how the prefix gave us a directional clue, but checking the base word and sentence verified the exact meaning! Now let's examine 'unsustainable': 'un-' (not) + 'sustain' (keep alive/maintain) + '-able' (capable of being). In context, unsustainable fishing means harvesting so excessively that the fish population cannot survive."`,
+      notes: "Teacher marks the word 'submerge' with color-coded chalk: blue for prefix 'sub-', white for base word 'merge', and yellow underline for context clues."
     },
     {
       heading: "Stage 3: Guided Practice Dialogue & Partner Check",
-      dialogue: `"Now, let us practice together with our table partners. On your desk is our second word: 'subtropical'.
-Partner A, your job is to identify the prefix and what it tells us about position. 
-Partner B, your job is to identify the root word and suffix. 
-Together, agree on what 'subtropical' tells us about the climate of our Belizean waters. You have sixty seconds with your partner. Begin!"`,
-      notes: "Teacher circulates room, listening for morphological vocabulary: 'sub means under or below'."
+      dialogue: `"Now, let us practice our 4-step strategy together with our table partners. On your desk is our second word: 'transport'.
+Partner A: What is the prefix, and what directional clue does it provide?
+Partner B: What is the base word, and can it stand alone in English?
+Together: Read the sentence from paragraph 2, test the whole-word meaning in context, and write your verified definition on your mini-whiteboards. You have sixty seconds. Begin!"`,
+      notes: "Teacher circulates room, listening for morphological precision: 'trans- means across, and port means carry'."
     },
     {
       heading: "Stage 4: Formative Check & Error Intervention",
-      dialogue: `"Teacher Check: 'Class, what does the prefix anti- tell us in the term anti-pollution?'
-Expected Student Response: 'It means against or working to prevent pollution.'
-If Correct: 'Spot on! Anti-pollution policies are rules created to fight against pollution.'
-If Incorrect Remediation: 'Remember our medical example: an antibody fights against disease. When you see anti- on the front of a word, it means against or opposing. So what is anti-pollution fighting against?'"`,
+      dialogue: `"Teacher Check: 'Class, in the term anti-pollution, what does anti- tell us, and what is its base word?'
+Expected Student Response: 'Anti- means against or opposed to, and the base word is pollution.'
+If Correct: 'Spot on! Anti-pollution policies are legal rules designed to fight against environmental contamination.'
+If Incorrect Remediation: 'Look at the front of the word: anti-. Just like an antibody fights against disease, anti- means against or opposing. The base word is pollution. So what does anti-pollution work against?'"`,
       notes: "Checks for 100% choral or hand-signal response across all student pairs."
     },
     {
       heading: "Stage 5: Synthesis & Closure Dialogue",
-      dialogue: `"Scholars, today we proved that long academic words are not intimidating when you know how to dissect them. Whenever you encounter challenging informational texts, find the root, isolate the affixes, and piece together the meaning. Clear your desks and complete your Daily Exit Ticket independently."`,
-      notes: "Administer 3-question diagnostic exit slips."
+      dialogue: `"Scholars, today we proved that long academic words are never intimidating when you apply the 4-step strategy: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING. Whenever you encounter challenging informational texts in science, social studies, or reading, dissect the word parts, check the context, and unlock the meaning. Clear your desks and complete your Daily Exit Ticket independently."`,
+      notes: "Administer 3-question diagnostic exit slips under silent conditions."
     }
   ]
 };
@@ -491,9 +493,13 @@ If Incorrect Remediation: 'Remember our medical example: an antibody fights agai
 // COMPLETE RESOURCE RESOLUTION ENGINE
 // ==========================================
 export function resolveCompleteLessonResources(
-  plan: LessonPlan, 
+  planInput: LessonPlan, 
   options: { schoolName?: string; teacherName?: string } = {}
 ): ResolvedLessonResources {
+  const plan = isLanguageArtsSubject(planInput.subject) 
+    ? enforceLanguageArtsPurityAndQuality(planInput)
+    : planInput;
+
   // 1. School Name Resolution
   let school = options.schoolName || (plan as any).schoolName || OFFICIAL_SCHOOL_NAME;
   if (!school || school.trim() === '' || school.includes('St. Jude')) {
@@ -510,7 +516,8 @@ export function resolveCompleteLessonResources(
   // 4. Basic Metadata
   const grade = sanitizeExportText(plan.grade || 'Standard 6');
   const subject = sanitizeExportText(plan.subject || 'Language Arts');
-  const duration = sanitizeExportText(plan.duration || '60 Minutes');
+  const isLA = isLanguageArtsSubject(plan.subject || subject);
+  const duration = sanitizeExportText(isLA ? '90 Minutes' : (plan.duration || '45 Minutes'));
   const topic = sanitizeExportText(plan.topic || 'Advanced Word Analysis through Prefixes and Suffixes');
   const subtopic = sanitizeExportText(plan.subtopic || 'Decoding Multisyllabic Academic Words in Belizean Mentor Texts');
   const strand = sanitizeExportText(plan.strand || (subject.includes('Language') ? 'Reading and Writing / Word Analysis' : 'Core Curriculum Strand'));
@@ -635,14 +642,24 @@ export function resolveCompleteLessonResources(
     '80% student mastery on core practice worksheet and diagnostic exit ticket'
   );
 
-  // 8. 5 Stages Procedure
-  const stageDefs = [
-    { num: 1, name: 'Introduction / Warm-Up', dur: '10 min' },
-    { num: 2, name: 'Explicit Teaching (I Do)', dur: '15 min' },
-    { num: 3, name: 'Guided Practice (We Do)', dur: '15 min' },
-    { num: 4, name: 'Independent Practice (You Do)', dur: '15 min' },
-    { num: 5, name: 'Closure & Exit Ticket', dur: '5 min' }
-  ];
+  // 8. Instructional Stages Procedure (7 Stages for 90-Min Language Arts, 5 Stages for standard subjects)
+  const stageDefs = isLA
+    ? [
+        { num: 1, name: 'Stage 1: Engage & Prior Knowledge', dur: '8 min' },
+        { num: 2, name: 'Stage 2: Explore: Belizean Reading Passage', dur: '15 min' },
+        { num: 3, name: 'Stage 3: Explicit Instruction / Teacher Think-Aloud', dur: '15 min' },
+        { num: 4, name: 'Stage 4: Guided Morphological Analysis', dur: '15 min' },
+        { num: 5, name: 'Stage 5: Collaborative Word-Building / Application', dur: '10 min' },
+        { num: 6, name: 'Stage 6: Independent Reading & Writing Application', dur: '15 min' },
+        { num: 7, name: 'Stage 7: Exit Assessment & Closure', dur: '12 min' }
+      ]
+    : [
+        { num: 1, name: 'Introduction / Warm-Up', dur: '10 min' },
+        { num: 2, name: 'Explicit Teaching (I Do)', dur: '15 min' },
+        { num: 3, name: 'Guided Practice (We Do)', dur: '15 min' },
+        { num: 4, name: 'Independent Practice (You Do)', dur: '15 min' },
+        { num: 5, name: 'Closure & Exit Ticket', dur: '5 min' }
+      ];
 
   const stages = stageDefs.map((st, idx) => {
     const exPhase = plan.executionBoard?.[idx];
@@ -662,63 +679,99 @@ export function resolveCompleteLessonResources(
 
     // Fallbacks if empty
     if (teacherActs.length === 0) {
-      if (idx === 0) {
-        teacherActs = isBenchmarkTestCase
-          ? [
-              'Writes the word "international" on chalkboard; activates prior knowledge on base roots.',
-              'Introduces the lesson objective and connects morphology to reading comprehension in Belize.',
-              'Presents the mentor context: Guardians of the Belize Barrier Reef.'
-            ]
-          : toCleanBullets(plan.introduction || 'Introduce lesson hook, activate prior knowledge, and state clear learning goals.');
-      } else if (idx === 1) {
-        teacherActs = isBenchmarkTestCase
-          ? [
-              'Explicitly models morphological dissection of "unsustainable" on chalkboard.',
-              'Demonstrates how prefixes (un-) change meaning and suffixes (-able) alter part of speech.',
-              'Guides students through the Complex Prefixes Anchor Chart with think-aloud strategy.'
-            ]
-          : toCleanBullets(plan.development || 'Model target concept explicitly, demonstrate worked examples on board, and emphasize academic vocabulary.');
-      } else if (idx === 2) {
-        teacherActs = isBenchmarkTestCase
-          ? [
-              'Circulates room while student pairs analyze "subtropical" and "anti-pollution".',
-              'Scaffolds paired verbal explanations and provides immediate corrective feedback.',
-              'Directs attention to mentor sentences in the reading passage.'
-            ]
-          : toCleanBullets(plan.guidedPractice || 'Circulate classroom, scaffold paired practice, and provide immediate targeted feedback.');
-      } else if (idx === 3) {
-        teacherActs = isBenchmarkTestCase
-          ? [
-              'Distributes Student Practice Worksheet and monitors independent completion.',
-              'Maintains teacher guided table for students requiring tier-2 scaffolding.',
-              'Checks accuracy on word decomposition tables.'
-            ]
-          : toCleanBullets(plan.independentPractice || 'Observe individual students, record formative notes, and provide tiered assistance where needed.');
+      if (isLA) {
+        if (idx === 0) {
+          teacherActs = [
+            'Writes the mentor words "submerge" and "international" on chalkboard; activates prior knowledge on base words.',
+            'Introduces the 4-step word analysis strategy (PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING).',
+            'Connects morphological decoding to authentic reading comprehension of Belizean environmental texts.'
+          ];
+        } else if (idx === 1) {
+          teacherActs = [
+            'Guides choral and paired reading of "Guardians of the Belize Barrier Reef".',
+            'Draws student focus to targeted academic vocabulary: interconnected, subtropical, anti-pollution, biodiversity, sustainable.',
+            'Poses initial text-dependent questions connecting marine preservation to community livelihoods.'
+          ];
+        } else if (idx === 2) {
+          teacherActs = [
+            'Explicitly models the 4-step morphological reading sequence on "submerge" (sub- + merge) and "unsustainable" (un- + sustain + -able).',
+            'Demonstrates how prefixes alter meaning/direction and suffixes alter word form.',
+            'Guides students through the Complex Prefixes Anchor Chart with explicit think-aloud strategy.'
+          ];
+        } else if (idx === 3) {
+          teacherActs = [
+            'Circulates room while student pairs analyze "transport", "subtropical", and "anti-pollution".',
+            'Scaffolds paired verbal explanations and provides immediate corrective feedback on context verification.',
+            'Directs attention to mentor sentences in the reading passage.'
+          ];
+        } else if (idx === 4) {
+          teacherActs = [
+            'Distributes affix cards (trans-, inter-, sub-, anti-) and base word cards (port, act, ocean, pollution).',
+            'Facilitates collaborative team construction of valid academic words and original sentences.',
+            'Highlights model student sentences situated in Belizean community contexts.'
+          ];
+        } else if (idx === 5) {
+          teacherActs = [
+            'Distributes Student Practice Worksheet and monitors independent completion.',
+            'Maintains teacher guided table for students requiring tier-2 scaffolding.',
+            'Checks accuracy on word decomposition tables and context sentences.'
+          ];
+        } else {
+          teacherActs = [
+            'Facilitates whole-group synthesis reviewing the 4-step strategy and key affixes.',
+            'Administers 3-question diagnostic Daily Exit Ticket under silent exam conditions.',
+            'Collects exit tickets to group students for tomorrow\'s targeted re-teaching or extension.'
+          ];
+        }
       } else {
-        teacherActs = isBenchmarkTestCase
-          ? [
-              'Facilitates whole-group synthesis reviewing key prefixes and suffixes.',
-              'Administers 3-question Daily Exit Ticket under silent exam conditions.',
-              'Collects exit tickets for diagnostic analysis.'
-            ]
-          : toCleanBullets(plan.closurePanel?.recap || plan.closure || 'Facilitate whole-class synthesis, review success criteria, and administer exit slip.');
+        if (idx === 0) {
+          teacherActs = toCleanBullets(plan.introduction || 'Introduce lesson hook, activate prior knowledge, and state clear learning goals.');
+        } else if (idx === 1) {
+          teacherActs = toCleanBullets(plan.development || 'Model target concept explicitly, demonstrate worked examples on board, and emphasize academic vocabulary.');
+        } else if (idx === 2) {
+          teacherActs = toCleanBullets(plan.guidedPractice || 'Circulate classroom, scaffold paired practice, and provide immediate targeted feedback.');
+        } else if (idx === 3) {
+          teacherActs = toCleanBullets(plan.independentPractice || 'Observe individual students, record formative notes, and provide tiered assistance where needed.');
+        } else {
+          teacherActs = toCleanBullets(plan.closurePanel?.recap || plan.closure || 'Facilitate whole-class synthesis, review success criteria, and administer exit slip.');
+        }
       }
     }
 
     if (studentActs.length === 0) {
-      if (idx === 0) studentActs = ['Examine board prompt, participate in choral response, and record lesson goals.'];
-      else if (idx === 1) studentActs = ['Listen actively, annotate anchor chart notes, and track modeled think-aloud examples.'];
-      else if (idx === 2) studentActs = ['Collaborate in pairs to dissect assigned words and justify prefix/suffix meanings orally.'];
-      else if (idx === 3) studentActs = ['Complete individual practice worksheet tasks accurately and independently.'];
-      else studentActs = ['Summarize key learnings and complete the 3-question exit ticket.'];
+      if (isLA) {
+        if (idx === 0) studentActs = ['Examine board prompts, participate in choral response, and recite lesson goals.'];
+        else if (idx === 1) studentActs = ['Read mentor text actively with partner, annotate target vocabulary in context, and discuss reef conservation.'];
+        else if (idx === 2) studentActs = ['Listen actively, annotate anchor chart notes, and track modeled think-aloud examples.'];
+        else if (idx === 3) studentActs = ['Collaborate in pairs to dissect assigned words and justify prefix/suffix meanings orally.'];
+        else if (idx === 4) studentActs = ['Manipulate affix and base word cards in small groups, construct valid words, and compose sentences.'];
+        else if (idx === 5) studentActs = ['Complete individual practice worksheet tasks accurately and independently.'];
+        else studentActs = ['Summarize key learnings and complete the 3-question diagnostic exit ticket independently.'];
+      } else {
+        if (idx === 0) studentActs = ['Examine board prompt, participate in choral response, and record lesson goals.'];
+        else if (idx === 1) studentActs = ['Listen actively, annotate notes, and track modeled think-aloud examples.'];
+        else if (idx === 2) studentActs = ['Collaborate in pairs to solve assigned tasks and justify reasoning orally.'];
+        else if (idx === 3) studentActs = ['Complete individual practice tasks accurately and independently.'];
+        else studentActs = ['Summarize key learnings and complete the exit slip.'];
+      }
     }
 
     if (!check) {
-      if (idx === 0) check = 'Diagnostic questioning on base roots and affixes';
-      else if (idx === 1) check = 'Formative thumbs check and white-board responses';
-      else if (idx === 2) check = 'Paired oral justification and teacher spot-checks';
-      else if (idx === 3) check = 'Accuracy review of individual worksheet Part 1';
-      else check = 'Diagnostic scoring of 3-question Daily Exit Ticket';
+      if (isLA) {
+        if (idx === 0) check = 'Diagnostic questioning on base words and prefix meanings';
+        else if (idx === 1) check = 'Text-dependent comprehension check and vocabulary annotation review';
+        else if (idx === 2) check = 'Formative thumbs check and white-board responses';
+        else if (idx === 3) check = 'Paired oral justification and teacher spot-checks';
+        else if (idx === 4) check = 'Group word-building accuracy check on constructed sentences';
+        else if (idx === 5) check = 'Accuracy review of individual worksheet Part 1 and Part 2';
+        else check = 'Diagnostic scoring of 3-question Daily Exit Ticket';
+      } else {
+        if (idx === 0) check = 'Diagnostic questioning on prior knowledge';
+        else if (idx === 1) check = 'Formative thumbs check and white-board responses';
+        else if (idx === 2) check = 'Paired oral justification and teacher spot-checks';
+        else if (idx === 3) check = 'Accuracy review of individual practice';
+        else check = 'Diagnostic scoring of exit slip';
+      }
     }
 
     // Clean cross-subject strings

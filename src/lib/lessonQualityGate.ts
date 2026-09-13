@@ -21,6 +21,7 @@ import {
 } from '../types';
 import { normalizeLearningObjectives } from './learningObjectivesHelper';
 import { validateAndBalanceLessonTiming, parseMinutes } from './timingValidation';
+import { enforceLanguageArtsPurityAndQuality, isLanguageArtsSubject } from './languageArtsQualityGate';
 
 export interface QualityGateCheckItem {
   id: string;
@@ -249,6 +250,32 @@ export function validateLessonPlanQuality(plan: Partial<LessonPlan>): QualityGat
     });
   }
 
+  // 15. 16-Step Pedagogical Alignment Chain Check
+  const hasAlignmentChain = Boolean(
+    (plan.learningOutcome || plan.topic) && // 1. Outcome
+    plan.topic && // 2. Focus
+    plan.learningObjectivesBoard?.condition && // 3. Objectives
+    plan.learningObjectivesBoard?.successCriteria?.length && // 4. Success Criteria
+    (plan.priorKnowledgeActivation?.whatTheyKnow || plan.previousKnowledge) && // 5. Prior Knowledge
+    ((plan.executionBoard && plan.executionBoard.length > 0) || plan.introduction?.length) && // 6-10. Engage, Explore, Model, Guided, Independent
+    (plan.instructionalSequence?.weDo?.teacherPrompts?.length || plan.finalAssessmentBoard?.evidenceOfLearning) && // 11. Formative Assessment
+    plan.differentiationFramework && // 12. Differentiated Response
+    (plan.exitTicketPackage?.questions?.length || plan.closurePanel?.exitQuestion) && // 13. Exit Ticket
+    (plan.exitTicketPackage?.masteryThreshold || plan.finalAssessmentBoard?.criteriaForSuccess?.length) && // 14. Mastery Decision
+    (plan.exitTicketPackage?.groupingRuleTomorrow || plan.closurePanel?.nextLessonConnection) && // 15. Next-Lesson Action
+    plan.reflectionDashboard // 16. Post-Lesson Reflection
+  );
+  checks.push({
+    id: 'pedagogical_alignment_chain',
+    name: '16-Step Unbroken Pedagogical Alignment Chain',
+    category: 'Curriculum',
+    passed: hasAlignmentChain,
+    score: hasAlignmentChain ? 100 : 70,
+    details: hasAlignmentChain
+      ? '16/16 Nodes Verified: Outcome → Focus → Objectives → Success Criteria → Prior Knowledge → Engage → Explore → Modeling → Guided Practice → Independent Application → Formative Assessment → Differentiated Response → Exit Ticket → Mastery Decision → Next-Lesson Action → Post-Lesson Reflection'
+      : 'One or more pedagogical chain links require completion'
+  });
+
   const totalScore = Math.round(checks.reduce((sum, c) => sum + c.score, 0) / checks.length);
   const isFullyTeachReady = totalScore >= 90 && checks.every(c => c.passed);
 
@@ -276,12 +303,22 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   const cycle = plan.cycle || context?.cycle || 2;
   const learningOutcome = plan.learningOutcome || context?.learningOutcome || `Demonstrate understanding and practical application of ${topic}.`;
 
+  const isLA = isLanguageArtsSubject(subject);
+
   // 1. Normalize Learning Objectives with One Shared Condition
   const normObj = normalizeLearningObjectives(plan, { topic, materials: plan.materials });
-  const condition = normObj.condition || `Given concrete models, guided practice exercises, and primary workbook activities,`;
-  const cognitiveObj = normObj.cognitive || `Students will identify, explain, and solve problems involving ${topic} with at least 80% accuracy.`;
-  const psychomotorObj = normObj.psychomotor || `Students will write step-by-step solutions, manipulate models, and record observations accurately in their exercise books.`;
-  const affectiveObj = normObj.affective || `Students will actively participate in partner discussions, ask clarifying questions, and show confidence in their mathematical reasoning.`;
+  const condition = normObj.condition || (isLA 
+    ? `Given a Belizean informational passage, an affix anchor chart, and guided word study activities:`
+    : `Given concrete models, guided practice exercises, and primary workbook activities,`);
+  const cognitiveObj = normObj.cognitive || (isLA
+    ? `Students will identify, define, and interpret target words and sentences related to ${topic} with at least 80% accuracy.`
+    : `Students will identify, explain, and solve problems involving ${topic} with at least 80% accuracy.`);
+  const psychomotorObj = normObj.psychomotor || (isLA
+    ? `Students will underline word parts, write original sentences, and record morphological notes accurately in their exercise books.`
+    : `Students will write step-by-step solutions, manipulate models, and record observations accurately in their exercise books.`);
+  const affectiveObj = normObj.affective || (isLA
+    ? `Students will actively participate in partner reading discussions, ask clarifying questions, and express confidence in their language reasoning.`
+    : `Students will actively participate in partner discussions, ask clarifying questions, and show confidence in their mathematical reasoning.`);
 
   plan.learningObjectivesBoard = {
     ...plan.learningObjectivesBoard,
@@ -294,11 +331,15 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
     affective: affectiveObj,
     successCriteria: plan.learningObjectivesBoard?.successCriteria?.length 
       ? plan.learningObjectivesBoard.successCriteria 
-      : [
+      : (isLA ? [
+          `I can define and explain ${topic} in my own words using academic vocabulary.`,
+          `I can identify and analyze target word parts in mentor sentences from the text.`,
+          `I can explain the meaning of new words to a partner and write complete, accurate sentences.`
+        ] : [
           `I can define and explain ${topic} in my own words using academic vocabulary.`,
           `I can correctly follow the step-by-step method to solve representative problems.`,
           `I can explain my reasoning to a partner and verify my final answers.`
-        ]
+        ])
   };
 
   // 2. Teacher Quick Reference
@@ -318,12 +359,16 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
       teachingStrategy: plan.teachingModel || 'Direct Instruction (I Do, We Do, You Do) with Concrete-Pictorial-Abstract Scaffolding',
       assessment: 'Formative CFU questioning, paired check-in, independent problem set, and exit slip',
       masteryTarget: '80% of students demonstrate independent procedural and conceptual mastery on the exit check.',
-      duration: plan.duration || '45 minutes'
+      duration: isLanguageArtsSubject(plan.subject) ? '90 minutes' : (plan.duration || '45 minutes')
     };
   }
 
   // 3. Timing Validation & Rebalancing
-  const { plan: timedPlan } = validateAndBalanceLessonTiming(plan, plan.duration || '45 minutes');
+  const targetDuration = isLanguageArtsSubject(plan.subject) 
+    ? ((!plan.duration || plan.duration === '45 minutes' || plan.duration === '60 minutes') ? '90 minutes' : plan.duration)
+    : (plan.duration || '45 minutes');
+  plan.duration = targetDuration;
+  const { plan: timedPlan } = validateAndBalanceLessonTiming(plan, targetDuration);
   Object.assign(plan, timedPlan);
 
   // 4. Teacher Preparation Briefing ("What You Need to Know")
@@ -945,6 +990,10 @@ As they continued along the Macal River, they watched yellow-headed parrots fly 
       sensory: rawInclusion?.sensory || `Reduced auditory distractions and ergonomic flexible seating near front whiteboard.`
     }
   };
+
+  if (isLanguageArtsSubject(plan.subject)) {
+    return enforceLanguageArtsPurityAndQuality(plan);
+  }
 
   return plan;
 }

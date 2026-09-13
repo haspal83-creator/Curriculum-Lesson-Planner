@@ -1070,46 +1070,46 @@ export async function exportToWord(
     ...res.closure.map(c => createBullet(c)),
 
     // ----------------------------------------------------
-    // SECTION 18: TEACHER REFLECTION
+    // SECTION 18: TEACHER REFLECTION & PLANNING NOTES
     // ----------------------------------------------------
-    createSectionHeading("Teacher Reflection", 240),
+    createSectionHeading("Pre-Lesson Reflection & Planning Notes", 240),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
         new TableRow({
           children: [
-            createCell("Reflection Focus", 32, { isHeader: true }),
-            createCell("Post-Lesson Notes & Adjustments", 68, { isHeader: true })
+            createCell("Planning & Reflection Focus", 35, { isHeader: true }),
+            createCell("Pre-Lesson Anticipations & Responsive Notes", 65, { isHeader: true })
           ]
         }),
         new TableRow({
           children: [
-            createCell("What went well?", 32, { isLabel: true }),
-            createCell(res.reflection.whatWorked || " ", 68)
+            createCell("What do I anticipate students may find difficult?", 35, { isLabel: true }),
+            createCell(res.reflection.whatWorked || " ", 65)
           ]
         }),
         new TableRow({
           children: [
-            createCell("What challenges occurred?", 32, { isLabel: true }),
-            createCell(res.reflection.challenges || " ", 68)
+            createCell("What evidence will I collect during the lesson?", 35, { isLabel: true }),
+            createCell(res.reflection.challenges || " ", 65)
           ]
         }),
         new TableRow({
           children: [
-            createCell("Which students require follow-up?", 32, { isLabel: true }),
-            createCell(res.reflection.followUpStudents || " ", 68)
+            createCell("Which students or groups require follow-up?", 35, { isLabel: true }),
+            createCell(res.reflection.followUpStudents || " ", 65)
           ]
         }),
         new TableRow({
           children: [
-            createCell("What should be adjusted for next lesson?", 32, { isLabel: true }),
-            createCell(res.reflection.adjustments || " ", 68)
+            createCell("What will I adjust if students struggle?", 35, { isLabel: true }),
+            createCell(res.reflection.adjustments || " ", 65)
           ]
         }),
         new TableRow({
           children: [
-            createCell("Next Steps & Connections", 32, { isLabel: true }),
-            createCell(res.reflection.nextSteps || " ", 68)
+            createCell("Next Lesson Connection", 35, { isLabel: true }),
+            createCell(res.reflection.nextSteps || " ", 65)
           ]
         })
       ]
@@ -1620,12 +1620,12 @@ EVALUATION CRITERIA: ${res.assessment.evaluationCriteria}
 CLOSURE
 ${res.closure.map(c => `- ${c}`).join('\n')}
 
-TEACHER REFLECTION
-What went well? ${res.reflection.whatWorked}
-What challenges occurred? ${res.reflection.challenges}
-Which students require follow-up? ${res.reflection.followUpStudents}
-What should be adjusted for the next lesson? ${res.reflection.adjustments}
-Next Steps: ${res.reflection.nextSteps}
+PRE-LESSON REFLECTION & PLANNING NOTES
+Anticipated Difficulties: ${res.reflection.whatWorked}
+Assessment Evidence to Collect: ${res.reflection.challenges}
+Follow-Up Grouping & Support: ${res.reflection.followUpStudents}
+Responsive Adjustments If Struggling: ${res.reflection.adjustments}
+Next Lesson Connection: ${res.reflection.nextSteps}
 `;
 
   return output;
