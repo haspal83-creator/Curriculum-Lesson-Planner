@@ -73,7 +73,8 @@ import {
   PanelLeftClose,
   PanelRight,
   PanelRightClose,
-  BookOpenCheck
+  BookOpenCheck,
+  X
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Button, Card, LessonStatusBadge, DropdownMenu, Tabs, TabsList, TabsTrigger, TabsContent, Badge } from './ui';
@@ -260,7 +261,22 @@ export function LessonPlanDisplay({
   const [isSplitView, setIsSplitView] = useState(true);
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isMobileAssistantOpen, setIsMobileAssistantOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
+
+  const navItems = [
+    { id: 'summary', label: 'Overview', icon: Layout },
+    { id: 'strategies', label: 'Strategies', icon: Sparkles },
+    { id: 'objectives', label: 'Objectives', icon: Target },
+    { id: 'materials', label: 'Materials', icon: Package },
+    { id: 'procedures', label: 'Execution Flow', icon: PenTool },
+    { id: 'assessment', label: 'Assessment', icon: ListChecks },
+    { id: 'differentiation', label: 'Differentiation', icon: Users },
+    { id: 'closure', label: 'Exit Ticket', icon: XCircle },
+    { id: 'reflection', label: 'Reflection', icon: StickyNote },
+    { id: 'assets', label: 'Lesson Assets', icon: FileText },
+  ];
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     summary: true,
     strategies: true,
@@ -301,9 +317,12 @@ export function LessonPlanDisplay({
   }, [plan]);
 
   const scrollToSection = (id: string) => {
+    setIsMobileNavOpen(false);
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const yOffset = -90;
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
       setActiveSection(id);
     }
   };
@@ -328,9 +347,10 @@ export function LessonPlanDisplay({
 
   const handleExportWord = async () => {
     try {
-      showToast("Generating professional Word document (.docx)...", "info");
-      await exportToWord(plan, auth.currentUser?.displayName || undefined);
-      showToast("Lesson plan exported successfully as .docx!", "success");
+      showToast("Generating complete lesson pack (.docx)...", "info");
+      const teacher = auth.currentUser?.displayName || (auth.currentUser?.email?.startsWith('haspal') ? 'Hassan' : undefined) || plan.studentTeacherName || 'Hassan';
+      await exportToWord(plan, teacher, 'SAN JUAN BOSCO R.C. SCHOOL');
+      showToast("Complete lesson pack exported successfully as .docx!", "success");
     } catch (err) {
       console.error("Export error:", err);
       showToast("Failed to export Word document.", "error");
@@ -502,7 +522,162 @@ export function LessonPlanDisplay({
 
   return (
     <>
-      <div className="space-y-6 print:hidden">
+      {/* Mobile / Tablet Left Navigation Drawer */}
+      {isMobileNavOpen && (
+        <div className="fixed inset-0 z-50 min-[1200px]:hidden flex">
+          <div 
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-xs transition-opacity" 
+            onClick={() => setIsMobileNavOpen(false)}
+          />
+          <div className="relative w-80 max-w-[85vw] bg-white h-full shadow-2xl z-10 flex flex-col p-5 overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <PanelLeft className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-gray-900 text-sm">Lesson Sections</h3>
+              </div>
+              <button 
+                onClick={() => setIsMobileNavOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5 py-4 flex-1">
+              {navItems.map(item => (
+                <button 
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  className={cn(
+                    "h-11 w-full rounded-xl px-3 flex items-center justify-between text-sm font-bold transition-all group",
+                    activeSection === item.id 
+                      ? "bg-indigo-50 text-indigo-600 shadow-xs" 
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <item.icon className={cn(
+                      "w-4 h-4 shrink-0",
+                      activeSection === item.id ? "text-indigo-600" : "text-gray-400 group-hover:text-indigo-500"
+                    )} />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {activeSection === item.id && (
+                    <div className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-gray-100 space-y-2 text-xs">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lesson Info</p>
+              <div className="flex justify-between text-gray-600">
+                <span>Duration:</span>
+                <span className="font-bold text-gray-900">{plan.duration}m</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Grade:</span>
+                <span className="font-bold text-gray-900">{plan.grade}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Subject:</span>
+                <span className="font-bold text-gray-900">{plan.subject}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile / Tablet Right Assistant Drawer */}
+      {isMobileAssistantOpen && (
+        <div className="fixed inset-0 z-50 min-[1440px]:hidden flex justify-end">
+          <div 
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-xs transition-opacity" 
+            onClick={() => setIsMobileAssistantOpen(false)}
+          />
+          <div className="relative w-84 max-w-[85vw] bg-white h-full shadow-2xl z-10 flex flex-col p-5 overflow-y-auto space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Settings2 className="w-5 h-5" />
+                <h3 className="font-bold text-gray-900 text-sm">Assistant & Actions</h3>
+              </div>
+              <button 
+                onClick={() => setIsMobileAssistantOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Teaching Resources</p>
+              <div className="space-y-2">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-11 rounded-xl border-gray-200 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600"
+                  onClick={() => {
+                    setIsMobileAssistantOpen(false);
+                    setActiveTab('resources');
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2.5 text-gray-400" /> 
+                  Teaching Resources
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-11 rounded-xl border-gray-200 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600"
+                  onClick={() => {
+                    setIsMobileAssistantOpen(false);
+                    setActiveTab('board-plan');
+                  }}
+                >
+                  <Presentation className="w-4 h-4 mr-2.5 text-gray-400" /> 
+                  Board Plan
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-11 rounded-xl border-gray-200 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600"
+                  onClick={() => {
+                    setIsMobileAssistantOpen(false);
+                    setActiveTab('ai-video');
+                  }}
+                >
+                  <Video className="w-4 h-4 mr-2.5 text-gray-400" /> 
+                  AI Video Lesson
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Teaching Actions</p>
+              <div className="space-y-2">
+                <Button 
+                  variant="primary" 
+                  className="w-full justify-start h-11 rounded-xl font-bold text-xs" 
+                  onClick={() => {
+                    setIsMobileAssistantOpen(false);
+                    onGenerateReteach?.();
+                  }}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" /> Generate Reteach
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  className="w-full justify-start h-11 rounded-xl font-bold text-xs" 
+                  onClick={() => {
+                    setIsMobileAssistantOpen(false);
+                    onGenerateIntervention?.();
+                  }}
+                >
+                  <Zap className="w-4 h-4 mr-2" /> Intervention Plan
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6 print:hidden w-full min-w-0">
         {/* Header & Mode Toggle */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm print:hidden">
         <div className="flex items-center gap-6">
@@ -571,10 +746,10 @@ export function LessonPlanDisplay({
         </div>
       </div>
 
-      <Card className="overflow-hidden border-gray-100 shadow-xl print:shadow-none print:border-none print:hidden">
+      <Card className="overflow-hidden border-gray-100 shadow-xl print:shadow-none print:border-none print:hidden w-full min-w-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="bg-white border-b border-gray-100 px-8 pt-6 print:hidden">
-            <TabsList className="bg-transparent h-auto p-0 gap-8 overflow-x-auto flex-nowrap no-scrollbar">
+          <div className="bg-white border-b border-gray-100 px-4 sm:px-8 pt-6 print:hidden">
+            <TabsList className="bg-transparent h-auto p-0 gap-6 sm:gap-8 overflow-x-auto flex-nowrap no-scrollbar">
               <TabsTrigger value="plan" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-4 data-[state=active]:border-indigo-600 rounded-none pb-4 text-sm font-black uppercase tracking-widest transition-all">
                 Lesson Plan
               </TabsTrigger>
@@ -611,7 +786,7 @@ export function LessonPlanDisplay({
             </TabsList>
           </div>
 
-          <div className="p-8 print:p-0">
+          <div className={cn("w-full min-w-0 print:p-0", activeTab === 'plan' ? "p-0" : "p-4 sm:p-6 lg:p-8")}>
             <TabsContent value="ai-video" className="mt-0 space-y-8">
               {plan.lessonVideo ? (
                 <div className="space-y-8">
@@ -1007,18 +1182,18 @@ export function LessonPlanDisplay({
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="plan" className="mt-0 relative bg-gray-50/30 min-h-screen">
+            <TabsContent value="plan" className="mt-0 relative bg-gray-50/30 min-h-screen w-full min-w-0">
               {/* 1. STICKY TOP ACTION BAR */}
-              <div className="sticky top-0 z-50 h-[72px] border-b border-gray-200 bg-white/90 backdrop-blur-md print:hidden">
-                <div className="max-w-[1800px] mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+              <div className="sticky top-0 z-40 h-[68px] sm:h-[72px] border-b border-gray-200 bg-white/95 backdrop-blur-md print:hidden px-3 sm:px-6 flex items-center justify-between gap-3">
+                <div className="w-full mx-auto h-full flex items-center justify-between gap-2 sm:gap-4 min-w-0">
                   {/* Left Controls: Mode & Panel Toggles */}
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
                     <div className="flex items-center bg-gray-100/70 p-1 rounded-2xl border border-gray-200/60">
                       <Button 
                         variant={currentMode === 'planner' ? "primary" : "ghost"} 
                         size="sm" 
                         className={cn(
-                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          "h-8 sm:h-9 px-2.5 sm:px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
                           currentMode === 'planner' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
                         )}
                         onClick={() => {
@@ -1026,13 +1201,13 @@ export function LessonPlanDisplay({
                           setIsTeachMode(false);
                         }}
                       >
-                        Planner View
+                        Planner
                       </Button>
                       <Button 
                         variant={currentMode === 'prep' ? "primary" : "ghost"} 
                         size="sm" 
                         className={cn(
-                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          "h-8 sm:h-9 px-2.5 sm:px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
                           currentMode === 'prep' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
                         )}
                         onClick={() => {
@@ -1040,13 +1215,13 @@ export function LessonPlanDisplay({
                           setIsTeachMode(false);
                         }}
                       >
-                        Prep Mode
+                        Prep
                       </Button>
                       <Button 
                         variant={currentMode === 'teach' ? "primary" : "ghost"} 
                         size="sm" 
                         className={cn(
-                          "h-9 px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
+                          "h-8 sm:h-9 px-2.5 sm:px-3.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all duration-300", 
                           currentMode === 'teach' ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-800"
                         )}
                         onClick={() => {
@@ -1054,7 +1229,7 @@ export function LessonPlanDisplay({
                           setIsTeachMode(true);
                         }}
                       >
-                        Teach Mode
+                        Teach
                       </Button>
                     </div>
 
@@ -1062,16 +1237,16 @@ export function LessonPlanDisplay({
                       variant="outline"
                       size="sm"
                       onClick={() => setShowTeachMeTopicModal(true)}
-                      className="h-9 px-3 rounded-xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                      className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold hidden sm:flex items-center gap-1.5 shadow-xs"
                       title="Instant Teacher Conceptual Mastery Briefing"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                      <span className="hidden sm:inline">Teach Me This Topic</span>
+                      <span>Teach Me This</span>
                     </Button>
 
                     {!isTeachMode && (
                       <>
-                        <div className="h-6 w-px bg-gray-200 hidden sm:block mx-0.5" />
+                        <div className="h-6 w-px bg-gray-200 hidden min-[1200px]:block mx-0.5" />
                         
                         {/* Focus Lesson Toggle */}
                         <Button
@@ -1089,7 +1264,7 @@ export function LessonPlanDisplay({
                             }
                           }}
                           className={cn(
-                            "h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all",
+                            "h-8 sm:h-9 px-2.5 sm:px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all",
                             isFocusMode 
                               ? "bg-indigo-600 text-white shadow-sm border-indigo-600" 
                               : "border-gray-200 text-gray-700 hover:bg-gray-50"
@@ -1097,16 +1272,40 @@ export function LessonPlanDisplay({
                           title={isFocusMode ? "Exit Focus Mode (Restore sidebars)" : "Focus Mode (Maximize lesson reading area)"}
                         >
                           {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                          <span className="hidden md:inline">{isFocusMode ? "Exit Focus" : "Focus Lesson"}</span>
+                          <span className="hidden md:inline">{isFocusMode ? "Exit Focus" : "Focus"}</span>
                         </Button>
 
-                        {/* Navigation Sidebar Toggle */}
+                        {/* Drawer Buttons for Smaller Screens */}
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsMobileNavOpen(true)}
+                            className="h-8 sm:h-9 px-2 sm:px-3 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 flex min-[1200px]:hidden items-center gap-1.5"
+                            title="Open Section Navigation"
+                          >
+                            <PanelLeft className="w-4 h-4 text-indigo-600" />
+                            <span className="hidden sm:inline">Sections</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsMobileAssistantOpen(true)}
+                            className="h-8 sm:h-9 px-2 sm:px-3 rounded-xl border-indigo-200 text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 flex min-[1440px]:hidden items-center gap-1.5"
+                            title="Open Assistant"
+                          >
+                            <Settings2 className="w-4 h-4 text-indigo-600" />
+                            <span className="hidden sm:inline">Assistant</span>
+                          </Button>
+                        </div>
+
+                        {/* Desktop Navigation Sidebar Toggle (>= 1200px) */}
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setIsNavCollapsed(!isNavCollapsed)}
                           className={cn(
-                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden lg:flex items-center gap-1.5 border border-gray-200/80 transition-all",
+                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden min-[1200px]:flex items-center gap-1.5 border border-gray-200/80 transition-all",
                             isNavCollapsed && "bg-indigo-50 text-indigo-600 border-indigo-200"
                           )}
                           title={isNavCollapsed ? "Show Navigation Sidebar" : "Collapse Navigation Sidebar"}
@@ -1115,13 +1314,13 @@ export function LessonPlanDisplay({
                           <span className="text-[11px]">{isNavCollapsed ? "Show Nav" : "Nav"}</span>
                         </Button>
 
-                        {/* Assistant Panel Toggle */}
+                        {/* Desktop Assistant Panel Toggle (>= 1440px) */}
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setIsAssistantCollapsed(!isAssistantCollapsed)}
                           className={cn(
-                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden lg:flex items-center gap-1.5 border border-gray-200/80 transition-all",
+                            "h-9 px-2.5 rounded-xl text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 hidden min-[1440px]:flex items-center gap-1.5 border border-gray-200/80 transition-all",
                             isAssistantCollapsed && "bg-indigo-50 text-indigo-600 border-indigo-200"
                           )}
                           title={isAssistantCollapsed ? "Show Assistant Panel" : "Collapse Assistant Panel"}
@@ -1134,23 +1333,23 @@ export function LessonPlanDisplay({
                   </div>
 
                   {/* Right Controls: Actions & Exports */}
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <div className="hidden sm:flex items-center gap-2">
-                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handlePrint}>
-                        <Printer className="w-4 h-4 mr-2 text-gray-500" /> Print
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <div className="hidden sm:flex items-center gap-1.5">
+                      <Button variant="outline" className="h-9 px-3 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handlePrint}>
+                        <Printer className="w-3.5 h-3.5 mr-1.5 text-gray-500" /> Print
                       </Button>
-                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportPDF}>
-                        <FileDown className="w-4 h-4 mr-2 text-gray-500" /> PDF
+                      <Button variant="outline" className="h-9 px-3 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportPDF}>
+                        <FileDown className="w-3.5 h-3.5 mr-1.5 text-gray-500" /> PDF
                       </Button>
-                      <Button variant="outline" className="h-10 px-4 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportWord}>
-                        <FileEdit className="w-4 h-4 mr-2 text-indigo-600" /> Word (.docx)
+                      <Button variant="outline" className="h-9 px-3 rounded-xl border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all" onClick={handleExportWord}>
+                        <FileEdit className="w-3.5 h-3.5 mr-1.5 text-indigo-600" /> Word (.docx)
                       </Button>
                     </div>
                     <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block" />
                     <DropdownMenu
                       trigger={
-                        <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-gray-200 hover:bg-gray-50 transition-all">
-                          <MoreHorizontal className="w-5 h-5 text-gray-500" />
+                        <Button variant="outline" className="h-9 w-9 p-0 rounded-xl border-gray-200 hover:bg-gray-50 transition-all">
+                          <MoreHorizontal className="w-4 h-4 text-gray-500" />
                         </Button>
                       }
                       items={[
@@ -1167,7 +1366,7 @@ export function LessonPlanDisplay({
               </div>
 
               {/* 2. OUTER WORKSPACE CONTAINER */}
-              <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <div className="w-full px-3 sm:px-5 lg:px-6 py-6 transition-all min-w-0">
                 {currentMode === 'teach' ? (
                   <LiveTeachModeView 
                     plan={enrichedPlan} 
@@ -1187,16 +1386,25 @@ export function LessonPlanDisplay({
                     }} 
                   />
                 ) : (
-                  /* 3. MAIN WORKSPACE FLEX LAYOUT */
-                  <div className={cn(
-                    "flex items-start gap-8 w-full transition-all",
-                    isTeachMode && "block"
-                  )}>
+                  <div 
+                    className={cn(
+                      "w-full min-w-0 transition-all",
+                      isTeachMode
+                        ? "block max-w-none"
+                        : isFocusMode
+                          ? "block max-w-5xl mx-auto"
+                          : "lesson-workspace-grid"
+                    )}
+                    style={{
+                      '--nav-width': isNavCollapsed ? '60px' : '250px',
+                      '--asst-width': isAssistantCollapsed ? '52px' : '300px',
+                    } as React.CSSProperties}
+                  >
                   
                   {/* 4. LEFT SIDEBAR — NAVIGATION */}
                   {!isTeachMode && !isFocusMode && (
                     isNavCollapsed ? (
-                      <div className="hidden lg:flex flex-col items-center py-4 px-2 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
+                      <div className="hidden min-[1200px]:flex flex-col items-center py-4 px-1.5 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
                         <button
                           onClick={() => setIsNavCollapsed(false)}
                           className="h-10 w-10 p-0 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
@@ -1206,18 +1414,7 @@ export function LessonPlanDisplay({
                         </button>
                         <div className="w-6 h-px bg-gray-200 my-3" />
                         <div className="flex flex-col gap-2">
-                          {[
-                            { id: 'summary', icon: Layout, title: 'Overview' },
-                            { id: 'strategies', icon: Sparkles, title: 'Strategies' },
-                            { id: 'objectives', icon: Target, title: 'Objectives' },
-                            { id: 'materials', icon: Package, title: 'Materials' },
-                            { id: 'procedures', icon: PenTool, title: 'Execution Flow' },
-                            { id: 'assessment', icon: ListChecks, title: 'Assessment' },
-                            { id: 'differentiation', icon: Users, title: 'Differentiation' },
-                            { id: 'closure', icon: XCircle, title: 'Exit Ticket' },
-                            { id: 'reflection', icon: StickyNote, title: 'Reflection' },
-                            { id: 'assets', icon: FileText, title: 'Lesson Assets' },
-                          ].map(item => (
+                          {navItems.map(item => (
                             <button
                               key={item.id}
                               onClick={() => scrollToSection(item.id)}
@@ -1227,7 +1424,7 @@ export function LessonPlanDisplay({
                                   ? "bg-indigo-50 text-indigo-600 shadow-sm" 
                                   : "text-gray-400 hover:text-gray-700 hover:bg-gray-50"
                               )}
-                              title={item.title}
+                              title={item.label}
                             >
                               <item.icon className="w-4 h-4" />
                             </button>
@@ -1235,9 +1432,9 @@ export function LessonPlanDisplay({
                         </div>
                       </div>
                     ) : (
-                      <aside className="hidden lg:block w-56 xl:w-64 shrink-0 sticky top-24 print:hidden">
-                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                          <div className="flex items-center justify-between mb-4 px-1">
+                      <aside className="hidden min-[1200px]:block w-[250px] shrink-0 sticky top-24 print:hidden">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                          <div className="flex items-center justify-between mb-3 px-1">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Navigation</p>
                             <button
                               onClick={() => setIsNavCollapsed(true)}
@@ -1248,29 +1445,18 @@ export function LessonPlanDisplay({
                             </button>
                           </div>
                           <div className="space-y-1">
-                            {[
-                              { id: 'summary', label: 'Overview', icon: Layout },
-                              { id: 'strategies', label: 'Strategies', icon: Sparkles },
-                              { id: 'objectives', label: 'Objectives', icon: Target },
-                              { id: 'materials', label: 'Materials', icon: Package },
-                              { id: 'procedures', label: 'Execution Flow', icon: PenTool },
-                              { id: 'assessment', label: 'Assessment', icon: ListChecks },
-                              { id: 'differentiation', label: 'Differentiation', icon: Users },
-                              { id: 'closure', label: 'Exit Ticket', icon: XCircle },
-                              { id: 'reflection', label: 'Reflection', icon: StickyNote },
-                              { id: 'assets', label: 'Lesson Assets', icon: FileText },
-                            ].map(item => (
+                            {navItems.map(item => (
                               <button 
                                 key={item.id}
                                 onClick={() => scrollToSection(item.id)}
                                 className={cn(
-                                  "h-10 w-full rounded-xl px-3 flex items-center justify-between text-xs font-bold transition-all duration-200 group",
+                                  "h-9 w-full rounded-xl px-2.5 flex items-center justify-between text-xs font-bold transition-all duration-200 group",
                                   activeSection === item.id 
                                     ? "bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-100/50" 
                                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                                 )}
                               >
-                                <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex items-center gap-2.5 min-w-0">
                                   <item.icon className={cn(
                                     "w-4 h-4 shrink-0 transition-colors",
                                     activeSection === item.id ? "text-indigo-600" : "text-gray-400 group-hover:text-indigo-500"
@@ -1284,9 +1470,9 @@ export function LessonPlanDisplay({
                             ))}
                           </div>
 
-                          <div className="mt-6 pt-5 border-t border-gray-100">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 px-1">Quick Stats</p>
-                            <div className="space-y-2.5 px-1 text-xs">
+                          <div className="mt-5 pt-4 border-t border-gray-100">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 px-1">Quick Stats</p>
+                            <div className="space-y-2 px-1 text-xs">
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-500">Duration</span>
                                 <span className="font-bold text-gray-900">{plan.duration}m</span>
@@ -1307,12 +1493,9 @@ export function LessonPlanDisplay({
                   )}
 
                   {/* 5. CENTER MAIN LESSON CONTENT AREA */}
-                  <div className={cn(
-                    "flex-1 min-w-0 w-full transition-all",
-                    isFocusMode && "max-w-5xl xl:max-w-6xl mx-auto"
-                  )}>
+                  <div className="w-full min-w-0 max-w-none">
                     <main className={cn(
-                      "space-y-8 w-full",
+                      "space-y-8 w-full min-w-0",
                       isTeachMode && "p-4 sm:p-8"
                     )}>
 
@@ -1343,33 +1526,36 @@ export function LessonPlanDisplay({
                             {plan.lessonTitle}
                           </h1>
                           
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-100">
-                            <div className="space-y-1">
+                          <div 
+                            className="grid gap-4 pt-6 border-t border-gray-100 w-full"
+                            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}
+                          >
+                            <div className="space-y-1 min-w-0">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Subject</p>
                               <div className="flex items-center gap-2">
                                 <BookOpen className="w-4 h-4 text-indigo-500 shrink-0" />
-                                <span className="font-bold text-gray-800">{plan.subject}</span>
+                                <span className="font-bold text-gray-800 truncate">{plan.subject}</span>
                               </div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 min-w-0">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Grade</p>
                               <div className="flex items-center gap-2">
                                 <GraduationCap className="w-4 h-4 text-emerald-500 shrink-0" />
-                                <span className="font-bold text-gray-800">{plan.grade}</span>
+                                <span className="font-bold text-gray-800 truncate">{plan.grade}</span>
                               </div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 min-w-0">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Duration</p>
                               <div className="flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-rose-500 shrink-0" />
-                                <span className="font-bold text-gray-800">{plan.duration} mins</span>
+                                <span className="font-bold text-gray-800 truncate">{plan.duration} mins</span>
                               </div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 min-w-0">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Topic</p>
                               <div className="flex items-start gap-2">
                                 <Target className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                                <span className="font-bold text-gray-800 leading-snug">{plan.topic}</span>
+                                <span className="font-bold text-gray-800 leading-snug break-words">{plan.topic}</span>
                               </div>
                             </div>
                           </div>
@@ -1903,36 +2089,39 @@ export function LessonPlanDisplay({
                               </div>
 
                               {/* 3 Domain Cards: Cognitive, Psychomotor, Affective */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                              <div 
+                                className="grid gap-5 w-full min-w-0"
+                                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+                              >
                                 {/* 1. Cognitive Domain */}
-                                <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5 space-y-3">
+                                <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5 space-y-3 min-w-0">
                                   <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase tracking-wider">
                                     <BookOpen className="w-4 h-4" />
                                     Cognitive Domain
                                   </div>
-                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed break-words">
                                     {normalizedObjectives.cognitive}
                                   </p>
                                 </div>
 
                                 {/* 2. Psychomotor / Skills Domain */}
-                                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 space-y-3">
+                                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 space-y-3 min-w-0">
                                   <div className="flex items-center gap-2 text-emerald-700 font-black text-xs uppercase tracking-wider">
                                     <PenTool className="w-4 h-4" />
                                     Psychomotor / Skills Domain
                                   </div>
-                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed break-words">
                                     {normalizedObjectives.psychomotor}
                                   </p>
                                 </div>
 
                                 {/* 3. Affective Domain */}
-                                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-5 space-y-3">
+                                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-5 space-y-3 min-w-0">
                                   <div className="flex items-center gap-2 text-purple-700 font-black text-xs uppercase tracking-wider">
                                     <Users className="w-4 h-4" />
                                     Affective Domain
                                   </div>
-                                  <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                  <p className="text-gray-800 font-medium text-sm leading-relaxed break-words">
                                     {normalizedObjectives.affective}
                                   </p>
                                 </div>
@@ -2098,56 +2287,105 @@ export function LessonPlanDisplay({
                               {/* Struggling Learners */}
                               <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-5 space-y-3">
                                 <p className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em]">Struggling Learners</p>
-                                <BulletList 
-                                  items={[
-                                    ...(plan.differentiationFramework.strugglingLearners.scaffolds || []), 
-                                    ...(plan.differentiationFramework.strugglingLearners.visuals || []), 
-                                    ...(plan.differentiationFramework.strugglingLearners.manipulatives || []), 
-                                    plan.differentiationFramework.strugglingLearners.simplifiedInstructions, 
-                                    plan.differentiationFramework.strugglingLearners.guidedSupport
-                                  ].filter(Boolean)} 
-                                  icon={AlertCircle} 
-                                  isTeachMode={isTeachMode} 
-                                />
+                                {(() => {
+                                  const struggling = plan.differentiationFramework?.strugglingLearners as any;
+                                  const items = [
+                                    ...(struggling?.scaffolds || []), 
+                                    ...(struggling?.visuals || []), 
+                                    ...(struggling?.manipulatives || []), 
+                                    ...(struggling?.guidedPrompts || []),
+                                    ...(struggling?.materials || []),
+                                    struggling?.simplifiedInstructions, 
+                                    struggling?.guidedSupport
+                                  ].filter(Boolean);
+                                  const finalItems = items.length > 0 ? items : [
+                                    "Provide concrete manipulatives and visual anchor chart reference.",
+                                    "Step-by-step teacher guided support at small group table.",
+                                    "Simplified prompt checklist and vocabulary cue cards."
+                                  ];
+                                  return (
+                                    <BulletList 
+                                      items={finalItems} 
+                                      icon={AlertCircle} 
+                                      isTeachMode={isTeachMode} 
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               {/* On-Level Learners */}
                               <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5 space-y-3">
                                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">On-Level Learners</p>
-                                <BulletList 
-                                  items={[
-                                    plan.differentiationFramework.onLevelLearners.participationExpectations, 
-                                    plan.differentiationFramework.onLevelLearners.independentWorkExpectations, 
-                                    plan.differentiationFramework.onLevelLearners.peerCollaboration
-                                  ].filter(Boolean)} 
-                                  icon={Check} 
-                                  isTeachMode={isTeachMode} 
-                                />
+                                {(() => {
+                                  const onLevel = plan.differentiationFramework?.onLevelLearners;
+                                  const items = [
+                                    onLevel?.participationExpectations, 
+                                    onLevel?.independentWorkExpectations, 
+                                    onLevel?.peerCollaboration
+                                  ].filter(Boolean);
+                                  const finalItems = items.length > 0 ? items : [
+                                    "Active participation in all guided and whole-class discussions.",
+                                    "Complete standard practice tasks with accuracy and clear work steps.",
+                                    "Collaborate respectfully and constructively with learning peers."
+                                  ];
+                                  return (
+                                    <BulletList 
+                                      items={finalItems} 
+                                      icon={Check} 
+                                      isTeachMode={isTeachMode} 
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               {/* Advanced Learners */}
                               <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-5 space-y-3">
                                 <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Advanced Learners</p>
-                                <BulletList 
-                                  items={[
-                                    ...(plan.differentiationFramework.advancedLearners.challengeTasks || []), 
-                                    ...(plan.differentiationFramework.advancedLearners.deeperThinkingPrompts || []), 
-                                    plan.differentiationFramework.advancedLearners.extensionActivity, 
-                                    plan.differentiationFramework.advancedLearners.leadershipRole
-                                  ].filter(Boolean)} 
-                                  icon={Zap} 
-                                  isTeachMode={isTeachMode} 
-                                />
+                                {(() => {
+                                  const adv = plan.differentiationFramework?.advancedLearners as any;
+                                  const items = [
+                                    ...(adv?.challengeTasks || []), 
+                                    ...(adv?.deeperThinkingPrompts || []), 
+                                    ...(adv?.extensions || []),
+                                    ...(adv?.higherOrderQuestions || []),
+                                    ...(adv?.independentTasks || []),
+                                    adv?.extensionActivity, 
+                                    adv?.leadershipRole
+                                  ].filter(Boolean);
+                                  const finalItems = items.length > 0 ? items : [
+                                    "Higher-order extension challenge and multi-step investigation.",
+                                    "Peer mentor role assisting table partners after verifying own work.",
+                                    "Formulate creative real-world application problems."
+                                  ];
+                                  return (
+                                    <BulletList 
+                                      items={finalItems} 
+                                      icon={Zap} 
+                                      isTeachMode={isTeachMode} 
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               {/* Inclusion Support */}
                               <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-5 space-y-3">
                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em]">Inclusion Support</p>
-                                <BulletList 
-                                  items={Object.values(plan.differentiationFramework?.inclusionSupport || {}).filter(Boolean) as string[]} 
-                                  icon={Layers} 
-                                  isTeachMode={isTeachMode} 
-                                />
+                                {(() => {
+                                  const rawInclusion = plan.differentiationFramework?.inclusionSupport || {};
+                                  const items = Object.values(rawInclusion).filter(Boolean) as string[];
+                                  const finalItems = items.length > 0 ? items : [
+                                    "Multi-sensory cues (visual, auditory, kinesthetic) throughout lesson.",
+                                    "Extended time and structured frequent check-ins.",
+                                    "Positive reinforcement and strategic peer seating."
+                                  ];
+                                  return (
+                                    <BulletList 
+                                      items={finalItems} 
+                                      icon={Layers} 
+                                      isTeachMode={isTeachMode} 
+                                    />
+                                  );
+                                })()}
                               </div>
                             </div>
                           ) : (
@@ -2326,7 +2564,7 @@ export function LessonPlanDisplay({
                   {/* 6. RIGHT SIDEBAR — ASSISTANT PANEL */}
                   {!isTeachMode && !isFocusMode && (
                     isAssistantCollapsed ? (
-                      <div className="hidden lg:flex flex-col items-center py-4 px-2 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
+                      <div className="hidden min-[1440px]:flex flex-col items-center py-4 px-1.5 bg-white border border-gray-200 rounded-2xl sticky top-24 shrink-0 shadow-sm print:hidden">
                         <button
                           onClick={() => setIsAssistantCollapsed(false)}
                           className="h-10 w-10 p-0 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
@@ -2336,11 +2574,11 @@ export function LessonPlanDisplay({
                         </button>
                       </div>
                     ) : (
-                      <aside className="hidden lg:block w-72 xl:w-80 shrink-0 sticky top-24 print:hidden">
-                        <div className="space-y-5">
-                          <Card className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                      <aside className="hidden min-[1440px]:block w-[300px] shrink-0 sticky top-24 print:hidden">
+                        <div className="space-y-4">
+                          <Card className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-1.5">
                                 <Settings2 className="w-4 h-4" /> Assistant Panel
                               </h4>
                               <button
@@ -2351,10 +2589,10 @@ export function LessonPlanDisplay({
                                 <PanelRightClose className="w-4 h-4" />
                               </button>
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                               <Button 
                                 variant="outline" 
-                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                className="w-full justify-start h-9 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
                                 onClick={() => setActiveTab('resources')}
                               >
                                 <FileText className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
@@ -2362,7 +2600,7 @@ export function LessonPlanDisplay({
                               </Button>
                               <Button 
                                 variant="outline" 
-                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                className="w-full justify-start h-9 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
                                 onClick={() => setActiveTab('board-plan')}
                               >
                                 <Presentation className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
@@ -2370,7 +2608,7 @@ export function LessonPlanDisplay({
                               </Button>
                               <Button 
                                 variant="outline" 
-                                className="w-full justify-start h-10 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
+                                className="w-full justify-start h-9 rounded-xl border-gray-100 text-gray-700 font-bold text-xs hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all group"
                                 onClick={() => setActiveTab('ai-video')}
                               >
                                 <Video className="w-4 h-4 mr-2.5 text-gray-400 group-hover:text-indigo-500 shrink-0" /> 
@@ -2379,13 +2617,13 @@ export function LessonPlanDisplay({
                             </div>
                           </Card>
 
-                          <Card className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-3">Teaching Actions</h4>
+                          <Card className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2.5">Teaching Actions</h4>
                             <div className="space-y-2">
                               <Button 
                                 variant="primary" 
                                 size="sm" 
-                                className="w-full justify-start h-10 rounded-xl font-bold shadow-sm text-xs" 
+                                className="w-full justify-start h-9 rounded-xl font-bold shadow-sm text-xs" 
                                 onClick={onGenerateReteach}
                               >
                                 <RefreshCw className="w-4 h-4 mr-2 shrink-0" /> Generate Reteach
@@ -2393,7 +2631,7 @@ export function LessonPlanDisplay({
                               <Button 
                                 variant="secondary" 
                                 size="sm" 
-                                className="w-full justify-start h-10 rounded-xl font-bold text-xs" 
+                                className="w-full justify-start h-9 rounded-xl font-bold text-xs" 
                                 onClick={onGenerateIntervention}
                               >
                                 <Zap className="w-4 h-4 mr-2 shrink-0" /> Intervention Plan
@@ -3222,7 +3460,11 @@ export function LessonPlanDisplay({
       </div>
       {/* FORMAL PRINT TEMPLATE - ONLY VISIBLE DURING PRINT */}
       <div className="hidden print:block fixed inset-0 bg-white z-[9999] overflow-visible">
-        <PrintableLessonPlan plan={plan} teacherName={auth.currentUser?.displayName || undefined} />
+        <PrintableLessonPlan 
+          plan={plan} 
+          teacherName={auth.currentUser?.displayName || (auth.currentUser?.email?.startsWith('haspal') ? 'Hassan' : undefined) || plan.studentTeacherName || 'Hassan'} 
+          schoolName="SAN JUAN BOSCO R.C. SCHOOL"
+        />
       </div>
     </>
   );

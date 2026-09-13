@@ -188,7 +188,7 @@ export const LessonExecutionBoard: React.FC<LessonExecutionBoardProps> = ({
   }
 
   return (
-    <div id="procedures" className="space-y-8">
+    <div className="space-y-8 w-full min-w-0">
       <div className="flex items-center gap-6 mb-10">
         <div className="w-16 h-16 rounded-3xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
           <PenTool className="w-8 h-8" />

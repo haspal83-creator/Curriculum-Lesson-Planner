@@ -95,7 +95,7 @@ import { useToasts } from './context/ToastContext';
 import { cn } from './lib/utils';
 
 const DEFAULT_SETTINGS: UserSettings = {
-  schoolName: '',
+  schoolName: 'SAN JUAN BOSCO R.C. SCHOOL',
   defaultGrade: 'Standard 4',
   defaultSubject: 'Language Arts',
   curriculumStructure: 'Cycles',
@@ -1399,12 +1399,15 @@ export default function App() {
         )}
 
         <div className={cn(
-          "flex-1 p-4 md:p-6 lg:p-8 w-full",
-          selectedPlan ? "max-w-[1920px] mx-auto" : (!isReadyToTeach && "max-w-7xl mx-auto")
+          "flex-1 w-full min-w-0 transition-all",
+          ['planner', 'saved-detail', 'daily-detail', 'la-weekly-detail', 'weekly-detail', 'ready-to-teach', 'mapping', 'calendar'].includes(activeTab) || selectedPlan
+            ? "p-2 sm:p-4 md:p-6 w-full max-w-none"
+            : "p-4 md:p-6 lg:p-8 max-w-7xl mx-auto"
         )}>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab + (selectedPlan?.id || '')}
+              className="w-full min-w-0"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}

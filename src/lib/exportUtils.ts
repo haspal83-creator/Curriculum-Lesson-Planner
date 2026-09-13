@@ -12,7 +12,8 @@ import {
   HeadingLevel,
   PageNumber,
   Footer,
-  Header
+  Header,
+  PageBreak
 } from 'docx';
 import { 
   LessonPlan, 
@@ -23,7 +24,15 @@ import {
   DailyLessonPlan, 
   WeeklyLessonPlan 
 } from '../types';
-import { normalizeLearningObjectives, validateLearningObjectives } from './learningObjectivesHelper';
+import { 
+  resolveCompleteLessonResources, 
+  validateLessonExport, 
+  purgeCrossSubjectContamination, 
+  OFFICIAL_SCHOOL_NAME, 
+  sanitizeExportText, 
+  toCleanBullets as toCleanBulletsResolved,
+  ResolvedLessonResources
+} from './lessonExportResolver';
 
 // ==========================================
 // COLOR PALETTE & DESIGN CONSTANTS
@@ -40,71 +49,13 @@ const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: BORDER_COLOR };
 const cellBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
 const cellMargins = { top: 90, bottom: 90, left: 130, right: 130 };
 
-// ==========================================
-// ROBUST TEXT CLEANUP & QUALITY CONTROL
-// ==========================================
+// Backward compatibility export
 export function cleanText(text: any): string {
-  if (text === null || text === undefined) return '';
-  let str = Array.isArray(text) ? text.join(' ') : String(text);
-
-  // Strip Markdown links [text](url) -> text
-  str = str.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
-  // Strip Markdown bold and italics syntax
-  str = str.replace(/\*\*(.*?)\*\*/g, '$1');
-  str = str.replace(/\*(.*?)\*/g, '$1');
-  str = str.replace(/_{2,}(.*?)_{2,}/g, '$1');
-  str = str.replace(/_([^_]+)_/g, '$1');
-
-  // Strip heading marks (#, ##, ###)
-  str = str.replace(/#{1,6}\s*/g, '');
-
-  // Strip code blocks and backticks
-  str = str.replace(/`{1,3}[^`]*`{1,3}/g, '');
-  str = str.replace(/`+/g, '');
-
-  // Strip markdown horizontal rules and separators
-  str = str.replace(/^-{3,}$/gm, '');
-  str = str.replace(/^={3,}$/gm, '');
-  str = str.replace(/^[_\s-]{3,}$/gm, '');
-
-  // Strip markdown table pipes
-  str = str.replace(/^\|\s*|\s*\|$/gm, '');
-  str = str.replace(/\|\s*[-:]+[-| :]*\|/g, '');
-
-  // Strip leading bullet markers if attached to the line
-  str = str.replace(/^[-•*]\s+/gm, '');
-
-  // Strip raw HTML tags if any were generated
-  str = str.replace(/<[^>]*>?/gm, '');
-
-  // Normalize newlines
-  str = str.replace(/\r\n/g, '\n');
-
-  // Automatic grammar cleanup for common primary school curriculum phrasing
-  str = str.replace(/\b([Gg]iven|[Ww]ith|[Uu]sing|[Aa]s|[Ff]or|[Ii]n)\s+[Aa]\s+(extended|integer|angle|hour|eight|eleven|example|open|informal|accurate|easy|interactive|array|area|equivalent|individual|explicit|estimate|effective|equation|operation|odd)\b/gi, (_match, p1, p2) => `${p1} an ${p2}`);
-  str = str.replace(/\b[Aa]\s+(extended|integer|angle|hour|eight|eleven|example|open|informal|accurate|easy|interactive|array|area|equivalent|individual|explicit|estimate|effective|equation|operation|odd)\b/gi, 'an $1');
-
-  str = str.trim();
-
-  // Replace placeholder hyphens or n/a with 'Not provided'
-  if (str === '-' || str === '--' || str === '---' || str === 'N/A' || str === 'n/a' || str === '') {
-    return 'Not provided';
-  }
-
-  return str;
+  return sanitizeExportText(text);
 }
 
 export function toCleanBullets(text: any): string[] {
-  if (!text) return [];
-  if (Array.isArray(text)) {
-    return text.flatMap(t => toCleanBullets(t));
-  }
-  const content = String(text);
-  return content
-    .split(/\n+|(?<=[.!?])\s+(?=[A-Z0-9])/)
-    .map(line => cleanText(line))
-    .filter(line => line.length > 0 && line !== 'Not provided');
+  return toCleanBulletsResolved(text);
 }
 
 // ==========================================
@@ -171,25 +122,6 @@ function createBullet(text: string): Paragraph {
   });
 }
 
-function createChecklistItem(text: string): Paragraph {
-  return new Paragraph({
-    spacing: { before: 40, after: 40, line: 276 },
-    children: [
-      new TextRun({
-        text: '☐  ',
-        bold: true,
-        size: 24,
-        color: SUCCESS_COLOR
-      }),
-      new TextRun({
-        text: cleanText(text),
-        size: 22,
-        color: TEXT_MAIN
-      })
-    ]
-  });
-}
-
 function createCell(
   content: string | Paragraph | Paragraph[],
   widthPercent: number,
@@ -239,133 +171,972 @@ export async function downloadDocx(doc: Document, fileName: string): Promise<voi
 }
 
 // ==========================================
-// 1. PRIMARY LESSON PLAN EXPORT TO WORD (.DOCX)
+// 1. MASTER LESSON EXPORT TO WORD (.DOCX)
 // ==========================================
-export async function exportToWord(plan: LessonPlan, teacherName?: string): Promise<void> {
-  const teacher = teacherName || plan.studentTeacherName || "Not provided";
-  const today = new Date();
-  const dateStr = plan.date || `${today.getDate()}th ${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`;
+export async function exportToWord(
+  plan: LessonPlan, 
+  teacherName?: string, 
+  schoolName?: string
+): Promise<void> {
+  // 1. Resolve all complete lesson resources using unified single source of truth
+  const res: ResolvedLessonResources = resolveCompleteLessonResources(plan, { schoolName, teacherName });
 
-  // Validate and normalize Learning Objectives to guarantee one shared condition across all 3 domains
-  const normObjectives = normalizeLearningObjectives(plan, {
-    topic: plan.topic,
-    materials: plan.materialsBoard?.map(m => m.name) || plan.materials
-  });
-  const conditionObj = cleanText(normObjectives.condition);
-  const cognitiveObj = cleanText(normObjectives.cognitive);
-  const psychomotorObj = cleanText(normObjectives.psychomotor);
-  const affectiveObj = cleanText(normObjectives.affective);
-
-  // Success Criteria
-  const scItems = plan.learningObjectivesBoard?.successCriteria && plan.learningObjectivesBoard.successCriteria.length > 0
-    ? plan.learningObjectivesBoard.successCriteria.map(sc => cleanText(sc.startsWith('I can') ? sc : `I can ${sc}`))
-    : [
-        `I can accurately define and identify key concepts related to ${cleanText(plan.topic)}.`,
-        "I can apply standard procedural methods to solve representative problems.",
-        "I can justify my reasoning clearly to a partner or teacher using academic vocabulary."
-      ];
-
-  // Key Vocabulary terms
-  const vocabRaw = plan.vocabularyFocus?.keyVocabulary?.map(v => v.term) ||
-    plan.keyVocabulary ||
-    plan.structured_json?.vocabulary ||
-    [plan.topic, plan.subtopic, "Key concept", "Application", "Procedure"].filter(Boolean);
-  const vocabList = Array.isArray(vocabRaw)
-    ? vocabRaw.map(cleanText).filter(v => v.length > 0 && v !== 'Not provided')
-    : [cleanText(plan.topic)];
-
-  // Lesson snapshot & overview
-  const lessonDesc = cleanText(
-    plan.lessonSnapshot?.about || 
-    plan.lessonSnapshot?.learning || 
-    plan.content?.slice(0, 350) || 
-    `A comprehensive primary-level lesson designed to build conceptual clarity, procedural competence, and practical application in ${plan.topic}.`
-  );
-  const priorKnowledge = cleanText(
-    plan.priorKnowledgeActivation?.whatTheyKnow || 
-    plan.previousKnowledge || 
-    "Students have previously explored foundational prerequisites and related grade-level standards in preceding units."
-  );
-
-  // Lesson Procedure Stages
-  const introTeacher = toCleanBullets(plan.introduction || plan.executionBoard?.[0]?.teacherActions || "Introduce lesson hook, activate prior knowledge, and state clear learning goals.");
-  const introStudent = toCleanBullets(plan.executionBoard?.[0]?.studentActions || "Respond to inquiry prompt, share prior experiences, and write down lesson objective.");
-  const introCheck = cleanText(plan.executionBoard?.[0]?.checkForUnderstanding || plan.executionBoard?.[0]?.assessmentOpportunity || "Diagnostic questioning check");
-
-  const explicitTeacher = toCleanBullets(plan.development || plan.executionBoard?.[1]?.teacherActions || "Model target concept explicitly, demonstrate worked examples on board, and emphasize academic vocabulary.");
-  const explicitStudent = toCleanBullets(plan.executionBoard?.[1]?.studentActions || "Observe demonstration, record guided notes in workbook, and ask clarifying questions.");
-  const explicitCheck = cleanText(plan.executionBoard?.[1]?.checkForUnderstanding || plan.executionBoard?.[1]?.assessmentOpportunity || "Check for understanding via thumbs-up/down or whiteboards");
-
-  const guidedTeacher = toCleanBullets(plan.guidedPractice || plan.executionBoard?.[2]?.teacherActions || "Circulate classroom, scaffold paired practice, and provide immediate targeted feedback.");
-  const guidedStudent = toCleanBullets(plan.executionBoard?.[2]?.studentActions || "Collaborate with assigned partner to complete practice tasks and articulate problem-solving steps.");
-  const guidedCheck = cleanText(plan.executionBoard?.[2]?.checkForUnderstanding || plan.executionBoard?.[2]?.assessmentOpportunity || "Active circulation and oral checks");
-
-  const indepTeacher = toCleanBullets(plan.independentPractice || plan.executionBoard?.[3]?.teacherActions || "Observe individual students, record formative notes, and provide tiered assistance where needed.");
-  const indepStudent = toCleanBullets(plan.independentPractice || plan.executionBoard?.[3]?.studentActions || "Complete assigned individual practice worksheet or workbook problems independently.");
-  const indepCheck = cleanText(plan.executionBoard?.[3]?.checkForUnderstanding || plan.executionBoard?.[3]?.assessmentOpportunity || "Review of independent student work");
-
-  const closureTeacher = toCleanBullets(plan.closurePanel?.recap || plan.closure || plan.executionBoard?.[4]?.teacherActions || "Facilitate whole-class synthesis, review success criteria, and administer exit slip.");
-  const closureStudent = toCleanBullets(plan.closurePanel?.demonstration || plan.executionBoard?.[4]?.studentActions || "Complete individual exit ticket and reflect on achievement of success criteria.");
-  const closureCheck = cleanText(plan.closurePanel?.exitQuestion || "Formative exit ticket evaluation");
-
-  // Questions
-  const qList: string[] = (
-    plan.structured_json?.questions || 
-    (plan.executionBoard?.flatMap((b: any) => b.questions || b.questionsToAsk || []) as string[]) || 
-    []
-  ).map(cleanText).filter(q => q.length > 0 && q !== 'Not provided');
-
-  // Materials rows
-  const materialsData: { name: string; purpose: string; usedIn: string }[] = [];
-  if (plan.materialsBoard && plan.materialsBoard.length > 0) {
-    plan.materialsBoard.forEach(m => {
-      materialsData.push({
-        name: cleanText(m.name),
-        purpose: cleanText(m.purpose || "Instructional support and practice"),
-        usedIn: cleanText(m.lessonPhase || "Classroom Instruction")
-      });
-    });
-  } else if (plan.materials && plan.materials.length > 0) {
-    plan.materials.forEach(m => {
-      materialsData.push({
-        name: cleanText(m),
-        purpose: "Instructional modeling and student practice",
-        usedIn: "Whole Class & Small Group"
-      });
-    });
+  // 2. Validate lesson export
+  const validation = validateLessonExport(res);
+  if (!validation.isValid) {
+    console.warn("Export validation warnings/errors:", validation.errors);
   } else {
-    materialsData.push(
-      { name: "Core Textbooks & Student Workbooks", purpose: "Structured exercises and guided reference", usedIn: "Guided & Independent Practice" },
-      { name: "Visual Anchor Charts & Manipulatives", purpose: "Concrete conceptual modeling", usedIn: "Explicit Teaching" },
-      { name: "Practice Worksheets & Exit Slips", purpose: "Formative evaluation and mastery check", usedIn: "Independent Practice & Closure" }
-    );
+    console.log("Export validation passed successfully:", validation.checksPassed);
   }
 
-  // Question levels
-  const questionsTableRows = [
-    { level: "Remember / Identify", q: qList[0] || `What is the core term or rule we used today in our study of ${cleanText(plan.topic)}?` },
-    { level: "Understand", q: qList[1] || `How would you explain this concept in your own words to a classmate?` },
-    { level: "Apply", q: qList[2] || `How can we apply this method to solve a new problem accurately?` },
-    { level: "Analyze", q: qList[3] || `What patterns, relationships, or differences do you notice in these examples?` },
-    { level: "Evaluate / Create", q: qList[4] || `Can you justify your solution or formulate a challenging problem for your peers?` }
+  const children: (Paragraph | Table)[] = [
+    // ----------------------------------------------------
+    // SECTION 1: HEADER BLOCK
+    // ----------------------------------------------------
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({
+          text: res.schoolName,
+          bold: true,
+          size: 32, // 16pt
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 60 },
+      children: [
+        new TextRun({
+          text: "OFFICIAL LESSON PLAN & INSTRUCTIONAL RESOURCE PACK",
+          bold: true,
+          size: 20, // 10pt
+          color: TEXT_MUTED
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 180 },
+      children: [
+        new TextRun({
+          text: res.lessonTitle,
+          bold: true,
+          size: 26, // 13pt
+          color: PRIMARY_NAVY
+        }),
+        ...(res.subtopic && res.subtopic !== 'Not provided' ? [
+          new TextRun({
+            text: ` — ${res.subtopic}`,
+            italics: true,
+            size: 22,
+            color: TEXT_MUTED
+          })
+        ] : [])
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 2: LESSON INFORMATION TABLE
+    // ----------------------------------------------------
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("School", 20, { isLabel: true }),
+            createCell(res.schoolName, 30),
+            createCell("Teacher", 20, { isLabel: true }),
+            createCell(res.teacherName, 30)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Grade / Class", 20, { isLabel: true }),
+            createCell(res.grade, 30),
+            createCell("Subject", 20, { isLabel: true }),
+            createCell(res.subject, 30)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Date", 20, { isLabel: true }),
+            createCell(res.dateStr, 30),
+            createCell("Duration", 20, { isLabel: true }),
+            createCell(res.duration, 30)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Topic", 20, { isLabel: true }),
+            createCell(res.topic, 30),
+            createCell("Subtopic", 20, { isLabel: true }),
+            createCell(res.subtopic, 30)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 3: CURRICULUM ALIGNMENT TABLE
+    // ----------------------------------------------------
+    createSectionHeading("Curriculum Alignment", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Curriculum / Framework", 32, { isLabel: true }),
+            createCell("Belize National Primary School Curriculum Framework", 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Cycle / Strand", 32, { isLabel: true }),
+            createCell(`Cycle ${res.cycle} | Strand: ${res.strand}`, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Curriculum Outcome", 32, { isLabel: true }),
+            createCell(res.learningOutcome, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Competency / Standard", 32, { isLabel: true }),
+            createCell(res.competencies, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Curriculum Code", 32, { isLabel: true }),
+            createCell(res.curriculumCode, 68)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 4: LEARNING OBJECTIVES & SUCCESS CRITERIA TABLE
+    // ----------------------------------------------------
+    createSectionHeading("Learning Objectives and Success Criteria", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Shared Condition", 32, { isLabel: true }),
+            createCell(new Paragraph({
+              children: [new TextRun({ text: res.condition, italics: true, size: 20 })]
+            }), 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Cognitive Domain", 32, { isLabel: true }),
+            createCell(res.cognitive, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Psychomotor / Skills Domain", 32, { isLabel: true }),
+            createCell(res.psychomotor, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Affective Domain", 32, { isLabel: true }),
+            createCell(res.affective, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Success Criteria", 32, { isLabel: true }),
+            createCell(res.successCriteria.map(sc => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: sc, size: 20, bold: true, color: SUCCESS_COLOR })]
+              })
+            ), 68)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 5: LESSON OVERVIEW TABLE
+    // ----------------------------------------------------
+    createSectionHeading("Lesson Overview", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Lesson Description", 32, { isLabel: true }),
+            createCell(res.lessonDescription, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Prior Knowledge Activation", 32, { isLabel: true }),
+            createCell(res.priorKnowledge, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Key Vocabulary Focus", 32, { isLabel: true }),
+            createCell(res.vocabularyList.map(v => 
+              new Paragraph({
+                spacing: { before: 20, after: 20 },
+                children: [
+                  new TextRun({ text: `${v.term}: `, bold: true, size: 20, color: PRIMARY_NAVY }),
+                  new TextRun({ text: v.definition, size: 20 })
+                ]
+              })
+            ), 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Materials and Resources", 32, { isLabel: true }),
+            createCell(res.materialsList.map(m => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [
+                  new TextRun({ text: m.name, bold: true, size: 20 }),
+                  ...(m.purpose ? [new TextRun({ text: ` — ${m.purpose}`, size: 20 })] : [])
+                ]
+              })
+            ), 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Teaching Strategy & Methodology", 32, { isLabel: true }),
+            createCell(`${res.teachingStrategy} | ${res.methodology}`, 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Mastery Target", 32, { isLabel: true }),
+            createCell(new Paragraph({
+              children: [new TextRun({ text: res.masteryTarget, bold: true, color: SUCCESS_COLOR, size: 20 })]
+            }), 68)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 6: LESSON PROCEDURE (5-STAGE EXECUTION TABLE)
+    // ----------------------------------------------------
+    createSectionHeading("Lesson Procedure (5-Stage Instructional Execution)", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Phase / Duration", 18, { isHeader: true }),
+            createCell("Teacher Actions", 30, { isHeader: true }),
+            createCell("Student Actions", 28, { isHeader: true }),
+            createCell("Assessment & Check", 24, { isHeader: true })
+          ]
+        }),
+        ...res.stages.map(stage => new TableRow({
+          children: [
+            createCell([
+              new Paragraph({ children: [new TextRun({ text: stage.title, bold: true, size: 20, color: PRIMARY_NAVY })] }),
+              new Paragraph({ children: [new TextRun({ text: `(${stage.duration})`, size: 18, italics: true, color: TEXT_MUTED })] }),
+              ...(stage.resources.length > 0 ? [
+                new Paragraph({
+                  spacing: { before: 40 },
+                  children: [
+                    new TextRun({ text: "Resources: ", bold: true, size: 16 }),
+                    new TextRun({ text: stage.resources.join(', '), size: 16, color: TEXT_MUTED })
+                  ]
+                })
+              ] : [])
+            ], 18, { isLabel: true }),
+            createCell(stage.teacherActions.map(act => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: act, size: 20 })]
+              })
+            ), 30),
+            createCell(stage.studentActions.map(act => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: act, size: 20 })]
+              })
+            ), 28),
+            createCell([
+              new Paragraph({ children: [new TextRun({ text: stage.assessment, size: 20 })] }),
+              ...(stage.keyQuestions.length > 0 ? [
+                new Paragraph({
+                  spacing: { before: 40 },
+                  children: [
+                    new TextRun({ text: "Key Question: ", bold: true, size: 18, color: PRIMARY_NAVY }),
+                    new TextRun({ text: stage.keyQuestions[0], size: 18, italics: true })
+                  ]
+                })
+              ] : [])
+            ], 24)
+          ]
+        }))
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 7: QUESTIONING STRATEGIES TABLE
+    // ----------------------------------------------------
+    createSectionHeading("Questioning Strategies (Cognitive Hierarchy)", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Cognitive Level", 30, { isHeader: true }),
+            createCell("Target Question", 70, { isHeader: true })
+          ]
+        }),
+        ...res.questioningStrategies.map(q => new TableRow({
+          children: [
+            createCell(q.level, 30, { isLabel: true }),
+            createCell(q.question, 70)
+          ]
+        }))
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 8: EXPLICIT TEACHER SCRIPT (WORD-FOR-WORD)
+    // ----------------------------------------------------
+    ...(res.teacherScript.hasScript ? [
+      createSectionHeading(res.teacherScript.title, 260),
+      ...res.teacherScript.sections.flatMap(sec => [
+        createSubheading(sec.heading, 120),
+        new Paragraph({
+          spacing: { before: 40, after: 80, line: 280 },
+          children: [
+            new TextRun({
+              text: sec.dialogue,
+              italics: true,
+              size: 21,
+              color: TEXT_MAIN
+            })
+          ]
+        }),
+        ...(sec.notes ? [
+          new Paragraph({
+            spacing: { before: 20, after: 100 },
+            children: [
+              new TextRun({ text: "Teacher Note: ", bold: true, size: 18, color: TEXT_MUTED }),
+              new TextRun({ text: sec.notes, size: 18, color: TEXT_MUTED })
+            ]
+          })
+        ] : [])
+      ])
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 9: STUDENT MATERIALS OVERVIEW
+    // ----------------------------------------------------
+    createSectionHeading("Student Materials Overview", 240),
+    ...res.studentMaterialsOverview.map(item => createBullet(item)),
+
+    // ----------------------------------------------------
+    // SECTION 10: COMPLETE READING PASSAGE (PAGE BREAK)
+    // ----------------------------------------------------
+    ...(res.readingPassage && res.readingPassage.hasPassage ? [
+      new Paragraph({ children: [new PageBreak()] }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 40 },
+        children: [
+          new TextRun({
+            text: "OFFICIAL STUDENT READING PASSAGE",
+            bold: true,
+            size: 20,
+            color: TEXT_MUTED
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({
+            text: res.readingPassage.title,
+            bold: true,
+            size: 32,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 160 },
+        children: [
+          new TextRun({
+            text: `Grade Level: ${res.readingPassage.gradeLevel}  |  Genre: ${res.readingPassage.genre}  |  Word Count: ${res.readingPassage.wordCount} words`,
+            size: 20,
+            color: TEXT_MUTED
+          })
+        ]
+      }),
+      ...(res.readingPassage.vocabularyHighlighted.length > 0 ? [
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                createCell([
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Target Morphological Words in Passage: ", bold: true, size: 20, color: PRIMARY_NAVY }),
+                      new TextRun({ text: res.readingPassage.vocabularyHighlighted.join(' • '), size: 20, bold: true })
+                    ]
+                  })
+                ], 100, { isLabel: true })
+              ]
+            })
+          ]
+        })
+      ] : []),
+      new Paragraph({ spacing: { before: 120, after: 60 } }),
+      ...res.readingPassage.paragraphs.map(p => new Paragraph({
+        spacing: { before: 60, after: 120, line: 300 },
+        children: [new TextRun({ text: p, size: 22 })]
+      })),
+      createSectionHeading("Passage Comprehension & Word Analysis Questions", 240),
+      ...res.readingPassage.comprehensionQuestions.flatMap(cq => [
+        new Paragraph({
+          spacing: { before: 80, after: 40 },
+          children: [
+            new TextRun({ text: `${cq.number}. [${cq.cognitiveLevel}]: `, bold: true, size: 21, color: PRIMARY_NAVY }),
+            new TextRun({ text: cq.question, size: 21 })
+          ]
+        }),
+        new Paragraph({
+          spacing: { before: 40, after: 120 },
+          children: [
+            new TextRun({ text: "Student Response: _____________________________________________________________________________", size: 18, color: TEXT_MUTED })
+          ]
+        })
+      ]),
+      createSectionHeading("Reading Passage Answer Key & Teacher Notes", 240),
+      ...res.readingPassage.comprehensionQuestions.map(cq => new Paragraph({
+        spacing: { before: 40, after: 60 },
+        children: [
+          new TextRun({ text: `Question ${cq.number} Key: `, bold: true, size: 20, color: PRIMARY_NAVY }),
+          new TextRun({ text: cq.answer, size: 20 })
+        ]
+      }))
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 11: ANCHOR CHART BLUEPRINT (PAGE BREAK)
+    // ----------------------------------------------------
+    ...(res.anchorChart && res.anchorChart.hasChart ? [
+      new Paragraph({ children: [new PageBreak()] }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 40 },
+        children: [
+          new TextRun({
+            text: "CLASSROOM DISPLAY ANCHOR CHART BLUEPRINT",
+            bold: true,
+            size: 20,
+            color: TEXT_MUTED
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({
+            text: res.anchorChart.title,
+            bold: true,
+            size: 32,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 160 },
+        children: [
+          new TextRun({
+            text: res.anchorChart.headerText,
+            bold: true,
+            size: 22,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      ...(res.anchorChart.tableRows && res.anchorChart.tableRows.length > 0 ? [
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: res.anchorChart.tableHeaders.map((th, i) => 
+                createCell(th, i === 0 ? 20 : i === 1 ? 25 : i === 2 ? 25 : 30, { isHeader: true })
+              )
+            }),
+            ...res.anchorChart.tableRows.map(row => new TableRow({
+              children: [
+                createCell(row.col1, 20, { isLabel: true }),
+                createCell(row.col2, 25),
+                createCell(row.col3, 25),
+                createCell(row.col4, 30)
+              ]
+            }))
+          ]
+        })
+      ] : []),
+      createSectionHeading("Core Rules and Systematic Definitions", 240),
+      ...res.anchorChart.keyRulesOrDefinitions.map(rule => createBullet(rule)),
+      createSectionHeading("Classroom Whiteboard Diagram & Visual Layout Guide", 200),
+      createParagraph(res.anchorChart.visualDiagramDescription),
+      createSectionHeading("Student Key Takeaway", 200),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createCell(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 60, after: 60 },
+                children: [
+                  new TextRun({
+                    text: `"${res.anchorChart.studentKeyTakeaway}"`,
+                    bold: true,
+                    size: 24,
+                    color: PRIMARY_NAVY
+                  })
+                ]
+              }), 100, { isLabel: true })
+            ]
+          })
+        ]
+      })
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 12: STUDENT PRACTICE WORKSHEET (PAGE BREAK)
+    // ----------------------------------------------------
+    ...(res.worksheet && res.worksheet.hasWorksheet ? [
+      new Paragraph({ children: [new PageBreak()] }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 40 },
+        children: [
+          new TextRun({
+            text: res.schoolName,
+            bold: true,
+            size: 22,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({
+            text: res.worksheet.title,
+            bold: true,
+            size: 28,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createCell("Name: ____________________________________", 40),
+              createCell("Date: ____________________", 35),
+              createCell("Score: _______ / 10", 25, { isLabel: true })
+            ]
+          })
+        ]
+      }),
+      new Paragraph({
+        spacing: { before: 120, after: 80 },
+        children: [
+          new TextRun({ text: "Instructions: ", bold: true, size: 21, color: PRIMARY_NAVY }),
+          new TextRun({ text: res.worksheet.instructions, size: 21, italics: true })
+        ]
+      }),
+      ...res.worksheet.sections.flatMap(sec => [
+        createSubheading(sec.sectionTitle, 160),
+        new Paragraph({
+          spacing: { before: 20, after: 60 },
+          children: [new TextRun({ text: sec.instructions, size: 20, italics: true, color: TEXT_MUTED })]
+        }),
+        ...sec.questions.map(q => new Paragraph({
+          spacing: { before: 40, after: 60 },
+          children: [
+            new TextRun({ text: `${q.number}. `, bold: true, size: 20, color: PRIMARY_NAVY }),
+            new TextRun({ text: q.prompt, size: 20 })
+          ]
+        }))
+      ]),
+      ...(res.worksheet.answerKey && res.worksheet.answerKey.length > 0 ? [
+        createSectionHeading("Worksheet Teacher Answer Key & Model Responses", 240),
+        ...res.worksheet.answerKey.flatMap(akSec => [
+          createSubheading(akSec.sectionTitle, 120),
+          ...akSec.answers.map(ans => new Paragraph({
+            spacing: { before: 20, after: 40 },
+            children: [
+              new TextRun({ text: `${ans.number}: `, bold: true, size: 20, color: PRIMARY_NAVY }),
+              new TextRun({ text: ans.solution, size: 20 })
+            ]
+          }))
+        ])
+      ] : [])
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 13: EXTENSION ACTIVITY (PAGE BREAK)
+    // ----------------------------------------------------
+    ...(res.extensionActivity && res.extensionActivity.hasActivity ? [
+      new Paragraph({ children: [new PageBreak()] }),
+      createSectionHeading(res.extensionActivity.title, 60),
+      createParagraph(res.extensionActivity.instructions, { italic: true }),
+      ...res.extensionActivity.tasks.map((task, idx) => new Paragraph({
+        spacing: { before: 40, after: 60 },
+        children: [
+          new TextRun({ text: `Task ${idx + 1}: `, bold: true, size: 21, color: PRIMARY_NAVY }),
+          new TextRun({ text: task, size: 21 })
+        ]
+      })),
+      ...(res.extensionActivity.leadershipRole ? [
+        new Paragraph({
+          spacing: { before: 80, after: 40 },
+          children: [
+            new TextRun({ text: "Student Leadership Role: ", bold: true, size: 20, color: PRIMARY_NAVY }),
+            new TextRun({ text: res.extensionActivity.leadershipRole, size: 20 })
+          ]
+        })
+      ] : [])
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 14: DAILY EXIT TICKET (PAGE BREAK)
+    // ----------------------------------------------------
+    ...(res.exitTicket && res.exitTicket.hasTicket ? [
+      new Paragraph({ children: [new PageBreak()] }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 40 },
+        children: [
+          new TextRun({
+            text: res.schoolName,
+            bold: true,
+            size: 22,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({
+            text: res.exitTicket.title,
+            bold: true,
+            size: 28,
+            color: PRIMARY_NAVY
+          })
+        ]
+      }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createCell("Name: ____________________________________", 40),
+              createCell("Date: ____________________", 35),
+              createCell(`Score: _______ / ${res.exitTicket.questions.length}`, 25, { isLabel: true })
+            ]
+          })
+        ]
+      }),
+      new Paragraph({
+        spacing: { before: 100, after: 80 },
+        children: [
+          new TextRun({ text: "Prompt: ", bold: true, size: 21, color: PRIMARY_NAVY }),
+          new TextRun({ text: res.exitTicket.prompt, size: 21, italics: true })
+        ]
+      }),
+      ...res.exitTicket.questions.flatMap(q => [
+        new Paragraph({
+          spacing: { before: 60, after: 40 },
+          children: [
+            new TextRun({ text: `Question ${q.number} (${q.points} pt): `, bold: true, size: 21, color: PRIMARY_NAVY }),
+            new TextRun({ text: q.question, size: 21 })
+          ]
+        }),
+        new Paragraph({
+          spacing: { before: 20, after: 100 },
+          children: [
+            new TextRun({ text: "Student Answer: _______________________________________________________________________________", size: 18, color: TEXT_MUTED })
+          ]
+        })
+      ]),
+      createSectionHeading("Exit Ticket Answer Key & Diagnostic Action", 200),
+      ...res.exitTicket.questions.map(q => new Paragraph({
+        spacing: { before: 30, after: 40 },
+        children: [
+          new TextRun({ text: `Question ${q.number} Key: `, bold: true, size: 20, color: PRIMARY_NAVY }),
+          new TextRun({ text: q.answerKey, size: 20 })
+        ]
+      })),
+      new Paragraph({
+        spacing: { before: 40, after: 20 },
+        children: [
+          new TextRun({ text: "Scoring Guidance: ", bold: true, size: 19 }),
+          new TextRun({ text: res.exitTicket.scoringGuidance, size: 19 })
+        ]
+      }),
+      new Paragraph({
+        spacing: { before: 20, after: 20 },
+        children: [
+          new TextRun({ text: "Mastery Threshold: ", bold: true, size: 19 }),
+          new TextRun({ text: res.exitTicket.masteryThreshold, size: 19 })
+        ]
+      }),
+      new Paragraph({
+        spacing: { before: 20, after: 60 },
+        children: [
+          new TextRun({ text: "Grouping Rule Tomorrow: ", bold: true, size: 19 }),
+          new TextRun({ text: res.exitTicket.groupingRuleTomorrow, size: 19 })
+        ]
+      })
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 15: DIFFERENTIATION FRAMEWORK (PAGE BREAK)
+    // ----------------------------------------------------
+    new Paragraph({ children: [new PageBreak()] }),
+    createSectionHeading("Differentiation Framework (Inclusive Instructional Strategies)", 200),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Learner Profile", 30, { isHeader: true }),
+            createCell("Instructional Scaffolding & Support Strategy", 70, { isHeader: true })
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Students Requiring Additional Support (Tier 1 & 2)", 30, { isLabel: true }),
+            createCell(res.differentiation.strugglingLearners.map(s => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: s, size: 20 })]
+              })
+            ), 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("On-Level Learners (Core Expectations)", 30, { isLabel: true }),
+            createCell(res.differentiation.onLevelLearners.map(s => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: s, size: 20 })]
+              })
+            ), 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Advanced Learners (Extensions & Challenge)", 30, { isLabel: true }),
+            createCell(res.differentiation.advancedLearners.map(s => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: s, size: 20 })]
+              })
+            ), 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Inclusion Supports (Universal Accessibility)", 30, { isLabel: true }),
+            createCell(res.differentiation.inclusionSupports.map(s => 
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { before: 20, after: 20 },
+                children: [new TextRun({ text: s, size: 20 })]
+              })
+            ), 70)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 16: ASSESSMENT & EVALUATION
+    // ----------------------------------------------------
+    createSectionHeading("Assessment and Evaluation", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Assessment Phase", 30, { isHeader: true }),
+            createCell("Method / Evidence of Learning", 70, { isHeader: true })
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Formative Assessment", 30, { isLabel: true }),
+            createCell(res.assessment.formative, 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Guided Practice", 30, { isLabel: true }),
+            createCell(res.assessment.guidedPractice, 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Independent Practice", 30, { isLabel: true }),
+            createCell(res.assessment.independentPractice, 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Exit Ticket", 30, { isLabel: true }),
+            createCell(res.assessment.exitTicket, 70)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Evaluation Criteria", 30, { isLabel: true }),
+            createCell(res.assessment.evaluationCriteria, 70)
+          ]
+        })
+      ]
+    }),
+
+    // Assessment Rubric Table
+    ...(res.assessment.rubric && res.assessment.rubric.length > 0 ? [
+      createSubheading("Assessment Evaluation Rubric", 160),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createCell("Criteria", 25, { isHeader: true }),
+              createCell("Exemplary (4)", 25, { isHeader: true }),
+              createCell("Proficient (3)", 25, { isHeader: true }),
+              createCell("Developing (2)", 25, { isHeader: true })
+            ]
+          }),
+          ...res.assessment.rubric.map(r => new TableRow({
+            children: [
+              createCell(r.criteria, 25, { isLabel: true }),
+              createCell(r.exemplary, 25),
+              createCell(r.proficient, 25),
+              createCell(r.developing, 25)
+            ]
+          }))
+        ]
+      })
+    ] : []),
+
+    // ----------------------------------------------------
+    // SECTION 17: CLOSURE & SYNTHESIS
+    // ----------------------------------------------------
+    createSectionHeading("Closure and Synthesis", 240),
+    ...res.closure.map(c => createBullet(c)),
+
+    // ----------------------------------------------------
+    // SECTION 18: TEACHER REFLECTION
+    // ----------------------------------------------------
+    createSectionHeading("Teacher Reflection", 240),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Reflection Focus", 32, { isHeader: true }),
+            createCell("Post-Lesson Notes & Adjustments", 68, { isHeader: true })
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("What went well?", 32, { isLabel: true }),
+            createCell(res.reflection.whatWorked || " ", 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("What challenges occurred?", 32, { isLabel: true }),
+            createCell(res.reflection.challenges || " ", 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Which students require follow-up?", 32, { isLabel: true }),
+            createCell(res.reflection.followUpStudents || " ", 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("What should be adjusted for next lesson?", 32, { isLabel: true }),
+            createCell(res.reflection.adjustments || " ", 68)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("Next Steps & Connections", 32, { isLabel: true }),
+            createCell(res.reflection.nextSteps || " ", 68)
+          ]
+        })
+      ]
+    }),
+
+    // ----------------------------------------------------
+    // SECTION 19: ADDITIONAL GENERATED ASSETS (IF ANY)
+    // ----------------------------------------------------
+    ...(res.additionalAssets && res.additionalAssets.length > 0 ? [
+      createSectionHeading("Additional Generated Student Materials", 240),
+      ...res.additionalAssets.flatMap(asset => [
+        createSubheading(`${asset.title} (${asset.type})`, 120),
+        createParagraph(asset.content),
+        ...(asset.answerKey ? [
+          new Paragraph({
+            spacing: { before: 20, after: 60 },
+            children: [
+              new TextRun({ text: "Answer Key: ", bold: true, size: 20, color: PRIMARY_NAVY }),
+              new TextRun({ text: asset.answerKey, size: 20 })
+            ]
+          })
+        ] : [])
+      ])
+    ] : [])
   ];
 
-  // Document Construction
   const doc = new Document({
-    styles: {
-      default: {
-        document: {
-          run: {
-            font: 'Calibri',
-            size: 22, // 11pt
-            color: TEXT_MAIN
-          },
-          paragraph: {
-            spacing: { line: 276, before: 60, after: 60 }
-          }
-        }
-      }
-    },
     sections: [{
       properties: {
         page: {
@@ -377,13 +1148,12 @@ export async function exportToWord(plan: LessonPlan, teacherName?: string): Prom
           children: [
             new Paragraph({
               alignment: AlignmentType.RIGHT,
-              spacing: { after: 120 },
+              spacing: { before: 0, after: 60 },
               children: [
                 new TextRun({
-                  text: "LESSONCRAFT PROFESSIONAL LESSON PLAN",
+                  text: `${res.schoolName}  |  ${res.grade} ${res.subject}  |  ${res.topic}`,
                   size: 16,
-                  color: TEXT_MUTED,
-                  bold: true
+                  color: TEXT_MUTED
                 })
               ]
             })
@@ -394,583 +1164,74 @@ export async function exportToWord(plan: LessonPlan, teacherName?: string): Prom
         default: new Footer({
           children: [
             new Paragraph({
-              alignment: AlignmentType.RIGHT,
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 60, after: 0 },
               children: [
-                new TextRun({
-                  text: `${cleanText(plan.grade || 'Primary')} | ${cleanText(plan.subject || 'Curriculum')} | Page `,
-                  size: 18,
-                  color: TEXT_MUTED
-                }),
-                new TextRun({
-                  children: [PageNumber.CURRENT],
-                  size: 18,
-                  color: TEXT_MUTED
-                }),
+                new TextRun({ text: "Page ", size: 18, color: TEXT_MUTED }),
+                new TextRun({ children: [PageNumber.CURRENT], size: 18, color: TEXT_MUTED }),
                 new TextRun({ text: " of ", size: 18, color: TEXT_MUTED }),
-                new TextRun({
-                  children: [PageNumber.TOTAL_PAGES],
-                  size: 18,
-                  color: TEXT_MUTED
-                })
+                new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: TEXT_MUTED })
               ]
             })
           ]
         })
       },
-      children: [
-        // ----------------------------------------------------
-        // SECTION 4: MAIN TITLE (Centered)
-        // ----------------------------------------------------
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 40, after: 40 },
-          children: [
-            new TextRun({
-              text: "LESSON PLAN",
-              bold: true,
-              size: 38, // 19pt
-              color: PRIMARY_NAVY
-            })
-          ]
-        }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 0, after: 160 },
-          children: [
-            new TextRun({
-              text: cleanText(plan.lessonTitle || plan.topic),
-              bold: true,
-              size: 26, // 13pt
-              color: TEXT_MUTED
-            }),
-            ...(plan.subtopic && plan.subtopic !== 'Not provided' ? [
-              new TextRun({
-                text: ` — ${cleanText(plan.subtopic)}`,
-                italics: true,
-                size: 22,
-                color: TEXT_MUTED
-              })
-            ] : [])
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 3: PROFESSIONAL HEADER TABLE
-        // ----------------------------------------------------
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("School", 20, { isLabel: true }),
-                createCell("St. Jude Roman Catholic Primary School", 30),
-                createCell("Teacher", 20, { isLabel: true }),
-                createCell(teacher, 30)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Grade / Class", 20, { isLabel: true }),
-                createCell(cleanText(plan.grade || 'Standard 4'), 30),
-                createCell("Subject", 20, { isLabel: true }),
-                createCell(cleanText(plan.subject || 'Mathematics'), 30)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Date", 20, { isLabel: true }),
-                createCell(dateStr, 30),
-                createCell("Duration", 20, { isLabel: true }),
-                createCell(cleanText(plan.duration || '60 Minutes'), 30)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Topic", 20, { isLabel: true }),
-                createCell(cleanText(plan.topic || 'Not provided'), 30),
-                createCell("Subtopic", 20, { isLabel: true }),
-                createCell(cleanText(plan.subtopic || 'Not provided'), 30)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 5: CURRICULUM ALIGNMENT TABLE
-        // ----------------------------------------------------
-        createSectionHeading("Curriculum Alignment", 260),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Curriculum Element", 32, { isHeader: true }),
-                createCell("Details", 68, { isHeader: true })
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Curriculum / Framework", 32, { isLabel: true }),
-                createCell("Belize National Primary School Curriculum Framework", 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Cycle", 32, { isLabel: true }),
-                createCell(`Cycle ${plan.cycle || 1}`, 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Strand", 32, { isLabel: true }),
-                createCell(cleanText(plan.strand || 'General Strand'), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Topic", 32, { isLabel: true }),
-                createCell(cleanText(plan.topic || 'Not provided'), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Subtopic", 32, { isLabel: true }),
-                createCell(cleanText(plan.subtopic || 'Not provided'), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Curriculum Outcome", 32, { isLabel: true }),
-                createCell(cleanText(plan.learningOutcome || 'Demonstrate understanding and application of grade-level curriculum outcomes.'), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Competency / Standard", 32, { isLabel: true }),
-                createCell(toCleanBullets(plan.structured_json?.competencies).join('; ') || 'Apply foundational competencies in communication, inquiry, problem solving, and mathematical reasoning.', 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Curriculum Code", 32, { isLabel: true }),
-                createCell(cleanText(plan.structured_json?.curriculumCode || 'Not provided'), 68)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 6: LESSON OVERVIEW
-        // ----------------------------------------------------
-        createSectionHeading("Lesson Overview", 240),
-        createSubheading("Lesson Title"),
-        createParagraph(cleanText(plan.lessonTitle || plan.topic)),
-
-        createSubheading("Lesson Description"),
-        createParagraph(lessonDesc),
-
-        createSubheading("Prior Knowledge"),
-        createParagraph(priorKnowledge),
-
-        createSubheading("Key Vocabulary"),
-        createParagraph(vocabList.join(', ')),
-
-        // ----------------------------------------------------
-        // SECTION 7: LEARNING OBJECTIVES
-        // ----------------------------------------------------
-        createSectionHeading("Learning Objectives", 240),
-        createSubheading("Condition"),
-        createParagraph(conditionObj),
-
-        createSubheading("Cognitive Domain"),
-        createBullet(cognitiveObj),
-
-        createSubheading("Psychomotor / Skills Domain"),
-        createBullet(psychomotorObj),
-
-        createSubheading("Affective Domain"),
-        createBullet(affectiveObj),
-
-        // ----------------------------------------------------
-        // SECTION 8: SUCCESS CRITERIA
-        // ----------------------------------------------------
-        createSectionHeading("Success Criteria", 240),
-        ...scItems.map(createChecklistItem),
-
-        // ----------------------------------------------------
-        // SECTION 9: MATERIALS AND RESOURCES
-        // ----------------------------------------------------
-        createSectionHeading("Materials and Resources", 240),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Materials / Resources", 35, { isHeader: true }),
-                createCell("Purpose", 45, { isHeader: true }),
-                createCell("Used In", 20, { isHeader: true })
-              ]
-            }),
-            ...materialsData.map(item => new TableRow({
-              children: [
-                createCell(item.name, 35, { isLabel: true }),
-                createCell(item.purpose, 45),
-                createCell(item.usedIn, 20)
-              ]
-            }))
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 10: LESSON PROCEDURE TABLE
-        // ----------------------------------------------------
-        createSectionHeading("Lesson Procedure", 260),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Stage", 18, { isHeader: true }),
-                createCell("Time", 10, { isHeader: true }),
-                createCell("Teacher Activities", 28, { isHeader: true }),
-                createCell("Student Activities", 28, { isHeader: true }),
-                createCell("Assessment / Check", 16, { isHeader: true })
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("1. Introduction / Warm-Up", 18, { isLabel: true }),
-                createCell("10 min", 10),
-                createCell(introTeacher.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(introStudent.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(introCheck, 16)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("2. Explicit Teaching", 18, { isLabel: true }),
-                createCell("15 min", 10),
-                createCell(explicitTeacher.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(explicitStudent.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(explicitCheck, 16)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("3. Guided Practice", 18, { isLabel: true }),
-                createCell("15 min", 10),
-                createCell(guidedTeacher.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(guidedStudent.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(guidedCheck, 16)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("4. Independent Practice", 18, { isLabel: true }),
-                createCell("15 min", 10),
-                createCell(indepTeacher.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(indepStudent.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(indepCheck, 16)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("5. Closure", 18, { isLabel: true }),
-                createCell("5 min", 10),
-                createCell(closureTeacher.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(closureStudent.map(b => new Paragraph({ children: [new TextRun({ text: `• ${b}`, size: 19 })], spacing: { before: 20, after: 20 } })), 28),
-                createCell(closureCheck, 16)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 11: TEACHER AND STUDENT ACTIONS TABLE
-        // ----------------------------------------------------
-        createSectionHeading("Teacher and Student Actions", 240),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Teacher Actions", 50, { isHeader: true }),
-                createCell("Student Actions", 50, { isHeader: true })
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell([
-                  new Paragraph({ children: [new TextRun({ text: "• Models problem-solving protocols and explicit strategies clearly.", size: 20 })], spacing: { before: 20, after: 20 } }),
-                  new Paragraph({ children: [new TextRun({ text: "• Asks scaffolded questions and guides mathematical discourse.", size: 20 })], spacing: { before: 20, after: 20 } }),
-                  new Paragraph({ children: [new TextRun({ text: "• Circulates room to monitor accuracy and clear misconceptions.", size: 20 })], spacing: { before: 20, after: 20 } })
-                ], 50),
-                createCell([
-                  new Paragraph({ children: [new TextRun({ text: "• Listens actively, records worked examples, and articulates thinking.", size: 20 })], spacing: { before: 20, after: 20 } }),
-                  new Paragraph({ children: [new TextRun({ text: "• Collaborates actively in pairs to solve assigned challenge prompts.", size: 20 })], spacing: { before: 20, after: 20 } }),
-                  new Paragraph({ children: [new TextRun({ text: "• Demonstrates independent mastery on individual practice tasks.", size: 20 })], spacing: { before: 20, after: 20 } })
-                ], 50)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 12: QUESTIONING STRATEGIES TABLE
-        // ----------------------------------------------------
-        createSectionHeading("Questioning Strategies", 240),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Cognitive Level", 26, { isHeader: true }),
-                createCell("Targeted Question", 74, { isHeader: true })
-              ]
-            }),
-            ...questionsTableRows.map(row => new TableRow({
-              children: [
-                createCell(row.level, 26, { isLabel: true }),
-                createCell(row.q, 74)
-              ]
-            }))
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 13: DIFFERENTIATION
-        // ----------------------------------------------------
-        createSectionHeading("Differentiation", 240),
-        createSubheading("Students Requiring Additional Support"),
-        ...toCleanBullets(
-          plan.differentiationFramework?.strugglingLearners?.scaffolds || 
-          plan.differentiation || 
-          "Provide concrete manipulatives, visual place-value charts, simplified step-by-step instructions, and guided teacher assistance during initial practice."
-        ).map(createBullet),
-
-        createSubheading("On-Level Learners"),
-        ...toCleanBullets(
-          plan.differentiationFramework?.onLevelLearners?.independentWorkExpectations || 
-          "Complete standard practice tasks with focus on computational accuracy, written explanation of reasoning, and partner collaboration."
-        ).map(createBullet),
-
-        createSubheading("Advanced / Extension Learners"),
-        ...toCleanBullets(
-          plan.differentiationFramework?.advancedLearners?.challengeTasks || 
-          plan.differentiationFramework?.advancedLearners?.extensionActivity || 
-          plan.homeworkExtension?.task || 
-          "Solve non-standard extension problems, identify real-world mathematical applications, and support peers as instructional leaders."
-        ).map(createBullet),
-
-        createSubheading("Inclusion Supports"),
-        ...toCleanBullets(
-          plan.structured_json?.inclusion || 
-          "Ensure high-contrast visual displays, preferential seating, peer buddy pairings, and extended response time where appropriate."
-        ).map(createBullet),
-
-        // ----------------------------------------------------
-        // SECTION 14: ASSESSMENT AND EVALUATION TABLE
-        // ----------------------------------------------------
-        createSectionHeading("Assessment and Evaluation", 240),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Assessment Type", 30, { isHeader: true }),
-                createCell("Method / Evidence", 70, { isHeader: true })
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Formative Assessment", 30, { isLabel: true }),
-                createCell("Continuous teacher observation, oral response checks, and diagnostic questioning during warm-up.", 70)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Guided Practice", 30, { isLabel: true }),
-                createCell("Active monitoring of paired collaboration, immediate feedback, and white-board checks.", 70)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Independent Practice", 30, { isLabel: true }),
-                createCell("Evaluation of individual student worksheet tasks and procedural accuracy.", 70)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Exit Ticket", 30, { isLabel: true }),
-                createCell(cleanText(plan.closurePanel?.exitQuestion || (plan.closure && plan.closure[0]) || `Demonstrate mastery of ${cleanText(plan.topic)} through a targeted single-question exit slip.`), 70)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Evaluation Criteria", 30, { isLabel: true }),
-                createCell("Students achieve 80% or greater accuracy on core practice tasks and explain procedural rationale clearly.", 70)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 15: CLOSURE
-        // ----------------------------------------------------
-        createSectionHeading("Closure", 240),
-        ...toCleanBullets(
-          plan.closurePanel?.recap || 
-          plan.closure || 
-          `Summarize the key mathematical concepts mastered in today's lesson on ${cleanText(plan.topic)}. Check individual student understanding against success criteria and connect concepts to the upcoming topic.`
-        ).map(createBullet),
-
-        // ----------------------------------------------------
-        // SECTION 16: TEACHER REFLECTION (Bordered writing spaces)
-        // ----------------------------------------------------
-        createSectionHeading("Teacher Reflection", 240),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Reflection Focus", 32, { isHeader: true }),
-                createCell("Post-Lesson Notes & Adjustments", 68, { isHeader: true })
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("What went well?", 32, { isLabel: true }),
-                createCell(new Paragraph({ children: [new TextRun({ text: " ", size: 36 })], spacing: { before: 80, after: 80 } }), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("What challenges occurred?", 32, { isLabel: true }),
-                createCell(new Paragraph({ children: [new TextRun({ text: " ", size: 36 })], spacing: { before: 80, after: 80 } }), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Which students require follow-up?", 32, { isLabel: true }),
-                createCell(new Paragraph({ children: [new TextRun({ text: " ", size: 36 })], spacing: { before: 80, after: 80 } }), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("What should be adjusted for next lesson?", 32, { isLabel: true }),
-                createCell(new Paragraph({ children: [new TextRun({ text: " ", size: 36 })], spacing: { before: 80, after: 80 } }), 68)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Next Steps", 32, { isLabel: true }),
-                createCell(new Paragraph({ children: [new TextRun({ text: " ", size: 36 })], spacing: { before: 80, after: 80 } }), 68)
-              ]
-            })
-          ]
-        }),
-
-        // ----------------------------------------------------
-        // SECTION 17: LESSON RESOURCES
-        // ----------------------------------------------------
-        createSectionHeading("Lesson Resources", 240),
-        createBullet("Printable Student Practice Worksheet & Extension Tasks"),
-        createBullet("Curriculum Anchor Charts & Conceptual Visual Aids"),
-        createBullet("Formative Exit Tickets & Student Self-Assessment Rubrics"),
-        createBullet("Concrete Classroom Manipulatives & Graphic Organizers")
-      ]
+      children
     }]
   });
 
-  await downloadDocx(doc, `${cleanText(plan.lessonTitle || plan.topic)}_Lesson_Plan`);
+  await downloadDocx(doc, `${cleanText(res.lessonTitle || res.topic)}_Complete_Lesson_Pack`);
 }
 
 // ==========================================
-// 2. SAVED LESSON & COMPLETE RESOURCE PACK EXPORT (.DOCX)
+// 2. SAVED LESSON EXPORT (.DOCX)
 // ==========================================
-export async function exportSavedLessonToWord(lesson: SavedLesson, resources: LessonResourceNew[]): Promise<void> {
+export async function exportSavedLessonToWord(
+  lesson: SavedLesson, 
+  resources?: LessonResourceNew[], 
+  teacherName?: string, 
+  schoolName?: string
+): Promise<void> {
+  const planData: LessonPlan = ((lesson as any).lesson_plan as any) || {
+    lessonTitle: lesson.title,
+    topic: lesson.topic,
+    subject: lesson.subject as any,
+    grade: lesson.class_id as any,
+    duration: lesson.duration,
+    studentMaterials: resources?.map(r => ({
+      title: r.title,
+      type: r.resource_type as any,
+      content: typeof r.content === 'string' ? r.content : JSON.stringify(r.content),
+      answerKey: undefined
+    }))
+  };
+
+  await exportToWord(planData, teacherName, schoolName);
+}
+
+// ==========================================
+// 3. WEEKLY LESSON PLAN EXPORT (.DOCX)
+// ==========================================
+export async function exportWeeklyLessonPlanToWord(plan: any, teacherName?: string): Promise<void> {
   const children: (Paragraph | Table)[] = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 40, after: 40 },
       children: [
         new TextRun({
-          text: cleanText(lesson.title),
+          text: OFFICIAL_SCHOOL_NAME,
           bold: true,
-          size: 36,
+          size: 26,
           color: PRIMARY_NAVY
         })
       ]
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
+      spacing: { before: 0, after: 40 },
       children: [
         new TextRun({
-          text: "COMPLETE TEACHING & RESOURCE PACK",
-          bold: true,
-          size: 22,
-          color: TEXT_MUTED
-        })
-      ]
-    }),
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [
-            createCell("Subject", 25, { isLabel: true }),
-            createCell(cleanText(lesson.subject), 25),
-            createCell("Grade / Class", 25, { isLabel: true }),
-            createCell(cleanText(lesson.class_id), 25)
-          ]
-        }),
-        new TableRow({
-          children: [
-            createCell("Topic", 25, { isLabel: true }),
-            createCell(cleanText(lesson.topic), 25),
-            createCell("Duration", 25, { isLabel: true }),
-            createCell(cleanText(lesson.duration), 25)
-          ]
-        })
-      ]
-    })
-  ];
-
-  const sortedResources = [...resources].sort((a, b) => a.resource_type.localeCompare(b.resource_type));
-  sortedResources.forEach(res => {
-    children.push(createSectionHeading(res.title || res.resource_type, 260));
-    if (typeof res.content === 'string') {
-      const cleanParas = res.content.split('\n').map(cleanText).filter(Boolean);
-      cleanParas.forEach(p => children.push(createParagraph(p)));
-    } else if (res.content) {
-      children.push(createParagraph(JSON.stringify(res.content, null, 2)));
-    }
-  });
-
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
-      },
-      children
-    }]
-  });
-
-  await downloadDocx(doc, `${cleanText(lesson.title)}_Complete_Pack`);
-}
-
-// ==========================================
-// 3. WEEKLY LESSON PLAN EXPORT (.DOCX)
-// ==========================================
-export async function exportWeeklyLessonPlanToWord(plan: WeeklyLessonPlan, teacherName?: string): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 40, after: 40 },
-      children: [
-        new TextRun({
-          text: `WEEKLY LESSON PLAN: ${cleanText(plan.week.topic)}`,
+          text: `WEEKLY LESSON PLAN: ${cleanText(plan.week?.topic || plan.topic)}`,
           bold: true,
           size: 34,
           color: PRIMARY_NAVY
@@ -982,7 +1243,7 @@ export async function exportWeeklyLessonPlanToWord(plan: WeeklyLessonPlan, teach
       spacing: { before: 0, after: 160 },
       children: [
         new TextRun({
-          text: `Teacher: ${cleanText(teacherName || 'Not provided')} | ${plan.week.grade} - ${plan.week.subject}`,
+          text: `Teacher: ${cleanText(teacherName || 'Not provided')} | ${plan.week?.grade || plan.grade} - ${plan.week?.subject || plan.subject}`,
           size: 22,
           color: TEXT_MUTED
         })
@@ -990,9 +1251,10 @@ export async function exportWeeklyLessonPlanToWord(plan: WeeklyLessonPlan, teach
     })
   ];
 
-  plan.week.days.forEach(day => {
-    children.push(createSectionHeading(`Day: ${day.day}`, 260));
-    const bullets = toCleanBullets(formatLessonForExport(day.lesson, teacherName));
+  const days: any[] = plan.week?.days || plan.days || [];
+  days.forEach((day: any) => {
+    children.push(createSectionHeading(`Day: ${day.day || day.day_number || ''}`, 260));
+    const bullets = toCleanBullets(formatLessonForExport(day.lesson || day, teacherName));
     bullets.forEach(b => children.push(createBullet(b)));
   });
 
@@ -1005,312 +1267,368 @@ export async function exportWeeklyLessonPlanToWord(plan: WeeklyLessonPlan, teach
     }]
   });
 
-  await downloadDocx(doc, `${cleanText(plan.week.topic)}_Weekly_Plan`);
+  await downloadDocx(doc, `Weekly_Plan_${cleanText(plan.week?.topic || plan.topic || 'Export')}`);
 }
 
-// ==========================================
-// 4. DAILY LESSON PLAN EXPORT (.DOCX)
-// ==========================================
-export async function exportDailyPlanToWord(plan: DailyLessonPlan): Promise<void> {
+export async function exportDailyPlanToWord(plan: any): Promise<void> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 40, after: 40 },
+      children: [
+        new TextRun({
+          text: OFFICIAL_SCHOOL_NAME,
+          bold: true,
+          size: 26,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({
+          text: `DAILY LESSON PLAN: DAY ${plan.day || plan.day_number || 1}`,
+          bold: true,
+          size: 34,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 160 },
+      children: [
+        new TextRun({
+          text: `Date: ${cleanText(plan.date || plan.createdAt || 'Not provided')}`,
+          size: 22,
+          color: TEXT_MUTED
+        })
+      ]
+    })
+  ];
+
+  const strands: any[] = plan.strands || [];
+  strands.forEach((strand: any) => {
+    children.push(createSectionHeading(strand.strand, 260));
+    children.push(createParagraph(`Objective: ${strand.objective}`, { bold: true }));
+    children.push(createParagraph(`Time: ${strand.timeAllocation}`));
+    children.push(createSubheading("Activities", 140));
+    strand.activities.forEach((act: any) => children.push(createBullet(act)));
+  });
+
   const doc = new Document({
     sections: [{
       properties: {
         page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
       },
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 40, after: 40 },
-          children: [
-            new TextRun({
-              text: `DAILY LESSON PLAN: ${cleanText(plan.lesson_title)}`,
-              bold: true,
-              size: 34,
-              color: PRIMARY_NAVY
-            })
-          ]
-        }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Grade", 25, { isLabel: true }),
-                createCell(cleanText(plan.grade), 25),
-                createCell("Subject", 25, { isLabel: true }),
-                createCell(cleanText(plan.subject), 25)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Topic", 25, { isLabel: true }),
-                createCell(cleanText(plan.topic), 25),
-                createCell("Schedule", 25, { isLabel: true }),
-                createCell(`Cycle ${plan.cycle}, Week ${plan.week}, Day ${plan.day}`, 25)
-              ]
-            })
-          ]
-        }),
-        createSectionHeading("Lesson Focus", 220),
-        createParagraph(cleanText(plan.focus)),
-
-        createSectionHeading("Learning Objective", 220),
-        createParagraph(cleanText(plan.objectiveSummary)),
-
-        createSectionHeading("Main Activity", 220),
-        createParagraph(cleanText(plan.mainActivity)),
-
-        createSectionHeading("Assessment Check", 220),
-        createParagraph(cleanText(plan.assessmentCheck)),
-
-        ...(plan.teacher_notes ? [
-          createSectionHeading("Teacher Notes", 220),
-          createParagraph(cleanText(plan.teacher_notes), { italic: true })
-        ] : [])
-      ]
+      children
     }]
   });
 
-  await downloadDocx(doc, `${cleanText(plan.lesson_title)}_Daily_Plan`);
+  await downloadDocx(doc, `Daily_Plan_Day_${plan.day || plan.day_number || 1}`);
 }
 
-// ==========================================
-// 5. LANGUAGE ARTS WEEKLY PLAN EXPORT (.DOCX)
-// ==========================================
-export async function exportLAWeeklyToWord(plan: LanguageArtsWeeklyPlan): Promise<void> {
+export async function exportLAWeeklyToWord(plan: any): Promise<void> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 40, after: 40 },
+      children: [
+        new TextRun({
+          text: OFFICIAL_SCHOOL_NAME,
+          bold: true,
+          size: 26,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({
+          text: `LANGUAGE ARTS WEEKLY PLAN: ${cleanText(plan.weeklyTheme || plan.theme || plan.topic)}`,
+          bold: true,
+          size: 34,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 160 },
+      children: [
+        new TextRun({
+          text: `${plan.grade} | Cycle ${plan.cycle}`,
+          size: 22,
+          color: TEXT_MUTED
+        })
+      ]
+    })
+  ];
+
+  const dailyPlans: any[] = plan.dailyPlans || [];
+  dailyPlans.forEach((dp: any) => {
+    children.push(createSectionHeading(`Day ${dp.day} - ${dp.date}`, 260));
+    dp.strands?.forEach((st: any) => {
+      children.push(createSubheading(st.strand, 140));
+      children.push(createParagraph(`Objective: ${st.objective}`, { bold: true }));
+      children.push(createParagraph(`Time Allocation: ${st.timeAllocation}`));
+      st.activities?.forEach((act: any) => children.push(createBullet(act)));
+    });
+  });
+
   const doc = new Document({
     sections: [{
       properties: {
         page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
       },
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 40, after: 40 },
-          children: [
-            new TextRun({
-              text: `LANGUAGE ARTS WEEKLY PLAN: ${cleanText(plan.theme)}`,
-              bold: true,
-              size: 34,
-              color: PRIMARY_NAVY
-            })
-          ]
-        }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Grade", 25, { isLabel: true }),
-                createCell(cleanText(plan.grade), 25),
-                createCell("Subject", 25, { isLabel: true }),
-                createCell(cleanText(plan.subject), 25)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Cycle", 25, { isLabel: true }),
-                createCell(`Cycle ${plan.cycle}`, 25),
-                createCell("Week", 25, { isLabel: true }),
-                createCell(`Week ${plan.week}`, 25)
-              ]
-            })
-          ]
-        }),
-        createSectionHeading("Weekly Learning Outcomes", 220),
-        ...plan.learningOutcomes.map(cleanText).map(createBullet)
-      ]
+      children
     }]
   });
 
-  await downloadDocx(doc, `${cleanText(plan.theme)}_Weekly_Plan`);
+  await downloadDocx(doc, `LA_Weekly_${cleanText(plan.weeklyTheme || plan.theme || 'Export')}`);
 }
 
-// ==========================================
-// 6. WEEKLY CURRICULUM PLAN EXPORT (.DOCX)
-// ==========================================
-export async function exportWeeklyCurriculumToWord(plan: WeeklyCurriculumPlan): Promise<void> {
+export async function exportWeeklyCurriculumToWord(plan: any): Promise<void> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 40, after: 40 },
+      children: [
+        new TextRun({
+          text: OFFICIAL_SCHOOL_NAME,
+          bold: true,
+          size: 26,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 40 },
+      children: [
+        new TextRun({
+          text: `WEEKLY CURRICULUM PLAN: ${cleanText(plan.theme || plan.topic)}`,
+          bold: true,
+          size: 34,
+          color: PRIMARY_NAVY
+        })
+      ]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 160 },
+      children: [
+        new TextRun({
+          text: `Grade: ${plan.grade} | Subject: ${plan.subject}`,
+          size: 22,
+          color: TEXT_MUTED
+        })
+      ]
+    })
+  ];
+
+  const days: any[] = plan.days || [];
+  days.forEach((day: any) => {
+    children.push(createSectionHeading(`Day ${day.day} - ${day.title}`, 260));
+    children.push(createParagraph(`Objective: ${day.objective}`, { bold: true }));
+    day.activities?.forEach((act: any) => children.push(createBullet(act)));
+  });
+
   const doc = new Document({
     sections: [{
       properties: {
         page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
       },
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 40, after: 40 },
-          children: [
-            new TextRun({
-              text: `WEEKLY CURRICULUM PLAN: ${cleanText(plan.weekly_topic)}`,
-              bold: true,
-              size: 34,
-              color: PRIMARY_NAVY
-            })
-          ]
-        }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: [
-                createCell("Grade Level", 25, { isLabel: true }),
-                createCell(cleanText(plan.grade_level), 25),
-                createCell("Subject", 25, { isLabel: true }),
-                createCell(cleanText(plan.subject), 25)
-              ]
-            }),
-            new TableRow({
-              children: [
-                createCell("Cycle", 25, { isLabel: true }),
-                createCell(`Cycle ${plan.cycle}`, 25),
-                createCell("Week Number", 25, { isLabel: true }),
-                createCell(`Week ${plan.week_number}`, 25)
-              ]
-            })
-          ]
-        }),
-        createSectionHeading("Weekly Big Idea", 220),
-        createParagraph(cleanText(plan.weekly_big_idea), { italic: true }),
-
-        createSectionHeading("Learning Outcomes", 220),
-        ...plan.weekly_learning_outcomes.map(cleanText).map(createBullet)
-      ]
+      children
     }]
   });
 
-  await downloadDocx(doc, `${cleanText(plan.weekly_topic)}_Weekly_Curriculum`);
+  await downloadDocx(doc, `Curriculum_${cleanText(plan.theme || plan.topic || 'Export')}`);
 }
 
 // ==========================================
-// 7. CLEAN PLAIN TEXT FORMATTER (ZERO MARKDOWN)
+// 4. PLAIN TEXT FORMATTER (SINGLE SOURCE OF TRUTH)
 // ==========================================
-export function formatLessonForExport(data: LessonPlan, teacherNameOverride?: string): string {
-  const teacherName = teacherNameOverride || data.studentTeacherName || "Not provided";
-  const today = new Date();
-  const dateStr = data.date || `${today.getDate()}th ${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`;
-  
-  const normObjectives = normalizeLearningObjectives(data, {
-    topic: data.topic,
-    materials: data.materialsBoard?.map(m => m.name) || data.materials
+export function formatLessonForExport(
+  data: LessonPlan, 
+  teacherNameOverride?: string, 
+  schoolNameOverride?: string
+): string {
+  const res = resolveCompleteLessonResources(data, {
+    teacherName: teacherNameOverride,
+    schoolName: schoolNameOverride
   });
-  const conditionObj = cleanText(normObjectives.condition);
-  const cognitiveObj = cleanText(normObjectives.cognitive);
-  const psychomotorObj = cleanText(normObjectives.psychomotor);
-  const affectiveObj = cleanText(normObjectives.affective);
 
-  const scItems = data.learningObjectivesBoard?.successCriteria && data.learningObjectivesBoard.successCriteria.length > 0
-    ? data.learningObjectivesBoard.successCriteria.map(sc => cleanText(sc.startsWith('I can') ? sc : `I can ${sc}`))
-    : [
-        `I can accurately define and identify key concepts related to ${cleanText(data.topic)}.`,
-        "I can apply standard procedural methods to solve representative problems.",
-        "I can justify my reasoning clearly to a partner or teacher using academic vocabulary."
-      ];
+  let output = `LESSON PLAN
+${res.lessonTitle}
 
-  const introBullets = toCleanBullets(data.introduction || data.executionBoard?.[0]?.teacherActions || "Introduce lesson hook, activate prior knowledge, and state clear learning goals.");
-  const explicitBullets = toCleanBullets(data.development || data.executionBoard?.[1]?.teacherActions || "Model target concept explicitly, demonstrate worked examples on board, and emphasize academic vocabulary.");
-  const guidedBullets = toCleanBullets(data.guidedPractice || data.executionBoard?.[2]?.teacherActions || "Circulate classroom, scaffold paired practice, and provide immediate targeted feedback.");
-  const indepBullets = toCleanBullets(data.independentPractice || data.executionBoard?.[3]?.teacherActions || "Observe individual students, record formative notes, and provide tiered assistance where needed.");
-  const closureBullets = toCleanBullets(data.closurePanel?.exitQuestion || data.closure || data.executionBoard?.[4]?.teacherActions || "Facilitate whole-class synthesis, review success criteria, and administer exit slip.");
-
-  const qList: string[] = (
-    data.structured_json?.questions || 
-    (data.executionBoard?.flatMap((b: any) => b.questions || b.questionsToAsk || []) as string[]) || 
-    []
-  ).map(cleanText).filter(q => q.length > 0 && q !== 'Not provided');
-
-  return `LESSON PLAN
-${cleanText(data.lessonTitle || data.topic)}
-
-School: St. Jude Roman Catholic Primary School
-Teacher: ${teacherName}
-Grade/Class: ${cleanText(data.grade || 'Standard 4')}
-Subject: ${cleanText(data.subject || 'Mathematics')}
-Date: ${dateStr}
-Duration: ${cleanText(data.duration || '60 Minutes')}
-Topic: ${cleanText(data.topic || 'Not provided')}
-Subtopic: ${cleanText(data.subtopic || 'Not provided')}
+School: ${res.schoolName}
+Teacher: ${res.teacherName}
+Grade/Class: ${res.grade}
+Subject: ${res.subject}
+Date: ${res.dateStr}
+Duration: ${res.duration}
+Topic: ${res.topic}
+Subtopic: ${res.subtopic}
 
 CURRICULUM ALIGNMENT
 Curriculum/Framework: Belize National Primary School Curriculum Framework
-Cycle: Cycle ${data.cycle || 1}
-Strand: ${cleanText(data.strand || 'General Strand')}
-Topic: ${cleanText(data.topic || 'Not provided')}
-Subtopic: ${cleanText(data.subtopic || 'Not provided')}
-Curriculum Outcome: ${cleanText(data.learningOutcome || 'Demonstrate understanding and application of grade-level curriculum outcomes.')}
-Competency/Standard: ${toCleanBullets(data.structured_json?.competencies).join('; ') || 'Apply foundational competencies in communication, inquiry, problem solving, and mathematical reasoning.'}
-Curriculum Code: ${cleanText(data.structured_json?.curriculumCode || 'Not provided')}
+Cycle: Cycle ${res.cycle}
+Strand: ${res.strand}
+Topic: ${res.topic}
+Subtopic: ${res.subtopic}
+Curriculum Outcome: ${res.learningOutcome}
+Competency/Standard: ${res.competencies}
+Curriculum Code: ${res.curriculumCode}
 
 LESSON OVERVIEW
-LESSON TITLE: ${cleanText(data.lessonTitle || data.topic)}
-LESSON DESCRIPTION: ${cleanText(data.lessonSnapshot?.about || data.lessonSnapshot?.learning || data.content?.slice(0, 300) || `A comprehensive lesson designed to develop understanding and mastery of ${data.topic}.`)}
-PRIOR KNOWLEDGE: ${cleanText(data.priorKnowledgeActivation?.whatTheyKnow || data.previousKnowledge || "Students have previously explored foundational prerequisites and related grade-level standards.")}
-KEY VOCABULARY: ${toCleanBullets(data.structured_json?.vocabulary || [data.topic, data.subtopic || '', "Standard form", "Expanded form"].filter(Boolean)).join(', ')}
+LESSON TITLE: ${res.lessonTitle}
+LESSON DESCRIPTION: ${res.lessonDescription}
+PRIOR KNOWLEDGE: ${res.priorKnowledge}
+KEY VOCABULARY: ${res.vocabularyList.map(v => `${v.term}: ${v.definition}`).join('; ')}
 
 LEARNING OBJECTIVES
-CONDITION: ${conditionObj}
-COGNITIVE DOMAIN: ${cognitiveObj}
-PSYCHOMOTOR/SKILLS DOMAIN: ${psychomotorObj}
-AFFECTIVE DOMAIN: ${affectiveObj}
+CONDITION: ${res.condition}
+COGNITIVE DOMAIN: ${res.cognitive}
+PSYCHOMOTOR/SKILLS DOMAIN: ${res.psychomotor}
+AFFECTIVE DOMAIN: ${res.affective}
 
 SUCCESS CRITERIA
-${scItems.map(sc => `[ ] ${sc}`).join('\n')}
+${res.successCriteria.map(sc => `[ ] ${sc}`).join('\n')}
 
 MATERIALS AND RESOURCES
-${(data.materialsBoard?.map(m => `- ${cleanText(m.name)}: ${cleanText(m.purpose)}`) || data.materials?.map(m => `- ${cleanText(m)}: Instructional support`) || ['- Core textbooks & student workbooks', '- Concrete manipulatives / visual chart', '- Practice worksheet & exit slips']).join('\n')}
+${res.materialsList.map(m => `- ${m.name}: ${m.purpose}`).join('\n')}
 
-LESSON PROCEDURE
-1. Introduction / Warm-Up (10 minutes)
-${introBullets.map(b => `  - ${b}`).join('\n')}
-
-2. Explicit Teaching (15 minutes)
-${explicitBullets.map(b => `  - ${b}`).join('\n')}
-
-3. Guided Practice (15 minutes)
-${guidedBullets.map(b => `  - ${b}`).join('\n')}
-
-4. Independent Practice (15 minutes)
-${indepBullets.map(b => `  - ${b}`).join('\n')}
-
-5. Closure (5 minutes)
-${closureBullets.map(b => `  - ${b}`).join('\n')}
+LESSON PROCEDURE (5-STAGE INSTRUCTIONAL EXECUTION)
+${res.stages.map(st => `
+${st.stageNumber}. ${st.title} (${st.duration})
+Teacher Actions:
+${st.teacherActions.map(a => `  - ${a}`).join('\n')}
+Student Actions:
+${st.studentActions.map(a => `  - ${a}`).join('\n')}
+Assessment & Check for Understanding:
+  ${st.assessment}
+${st.keyQuestions.length > 0 ? `Key Questions:\n${st.keyQuestions.map(q => `  - ${q}`).join('\n')}` : ''}
+`).join('\n')}
 
 QUESTIONING STRATEGIES
-Remember / Identify: ${qList[0] || `What is the key term in today's lesson on ${data.topic}?`}
-Understand: ${qList[1] || `How would you explain this concept in your own words?`}
-Apply: ${qList[2] || `How can we apply this method to solve the given problem?`}
-Analyze: ${qList[3] || `What pattern or relationship do you notice?`}
-Evaluate / Create: ${qList[4] || `Can you justify your answer or create a problem following this rule?`}
+${res.questioningStrategies.map(q => `${q.level}: ${q.question}`).join('\n')}
+
+${res.teacherScript.hasScript ? `
+EXPLICIT TEACHING SCRIPT (WORD-FOR-WORD)
+${res.teacherScript.sections.map(s => `[${s.heading}]\n${s.dialogue}${s.notes ? `\n(Teacher Note: ${s.notes})` : ''}`).join('\n\n')}
+` : ''}
+
+STUDENT MATERIALS OVERVIEW
+${res.studentMaterialsOverview.map(sm => `- ${sm}`).join('\n')}
+
+${res.readingPassage && res.readingPassage.hasPassage ? `
+==================================================
+COMPLETE READING PASSAGE: ${res.readingPassage.title}
+Grade Level: ${res.readingPassage.gradeLevel} | Genre: ${res.readingPassage.genre} | Word Count: ${res.readingPassage.wordCount} words
+Target Vocabulary: ${res.readingPassage.vocabularyHighlighted.join(', ')}
+
+${res.readingPassage.paragraphs.join('\n\n')}
+
+COMPREHENSION & WORD ANALYSIS QUESTIONS:
+${res.readingPassage.comprehensionQuestions.map(q => `${q.number}. [${q.cognitiveLevel}]: ${q.question}`).join('\n')}
+
+READING PASSAGE ANSWER KEY:
+${res.readingPassage.comprehensionQuestions.map(q => `Question ${q.number}: ${q.answer}`).join('\n')}
+==================================================
+` : ''}
+
+${res.anchorChart && res.anchorChart.hasChart ? `
+==================================================
+ANCHOR CHART BLUEPRINT: ${res.anchorChart.title}
+Header: ${res.anchorChart.headerText}
+
+${res.anchorChart.tableRows && res.anchorChart.tableRows.length > 0 ? `
+PREFIX / SUFFIX MATRIX:
+${res.anchorChart.tableRows.map(r => `${r.col1} | ${r.col2} | ${r.col3} | ${r.col4}`).join('\n')}
+` : ''}
+Core Rules:
+${res.anchorChart.keyRulesOrDefinitions.map(r => `- ${r}`).join('\n')}
+
+Visual Layout: ${res.anchorChart.visualDiagramDescription}
+Student Key Takeaway: "${res.anchorChart.studentKeyTakeaway}"
+==================================================
+` : ''}
+
+${res.worksheet && res.worksheet.hasWorksheet ? `
+==================================================
+STUDENT PRACTICE WORKSHEET: ${res.worksheet.title}
+School: ${res.schoolName}
+Instructions: ${res.worksheet.instructions}
+
+${res.worksheet.sections.map(s => `
+[${s.sectionTitle}]
+Instructions: ${s.instructions}
+${s.questions.map(q => `${q.number}. ${q.prompt}`).join('\n')}
+`).join('\n')}
+
+WORKSHEET ANSWER KEY:
+${res.worksheet.answerKey.map(ak => `
+[${ak.sectionTitle}]
+${ak.answers.map(ans => `${ans.number}: ${ans.solution}`).join('\n')}
+`).join('\n')}
+==================================================
+` : ''}
+
+${res.extensionActivity && res.extensionActivity.hasActivity ? `
+EXTENSION ACTIVITY: ${res.extensionActivity.title}
+${res.extensionActivity.tasks.map((t, idx) => `Task ${idx + 1}: ${t}`).join('\n')}
+Leadership Role: ${res.extensionActivity.leadershipRole}
+` : ''}
+
+${res.exitTicket && res.exitTicket.hasTicket ? `
+==================================================
+DAILY EXIT TICKET: ${res.exitTicket.title}
+Prompt: ${res.exitTicket.prompt}
+
+${res.exitTicket.questions.map(q => `Question ${q.number} (${q.points} pt): ${q.question}`).join('\n')}
+
+EXIT TICKET ANSWER KEY & SCORING:
+${res.exitTicket.questions.map(q => `Question ${q.number}: ${q.answerKey}`).join('\n')}
+Scoring Guidance: ${res.exitTicket.scoringGuidance}
+Mastery Threshold: ${res.exitTicket.masteryThreshold}
+Grouping Rule Tomorrow: ${res.exitTicket.groupingRuleTomorrow}
+==================================================
+` : ''}
 
 DIFFERENTIATION
-STUDENTS REQUIRING ADDITIONAL SUPPORT: ${toCleanBullets(data.differentiationFramework?.strugglingLearners?.scaffolds || data.differentiation).join(' ') || 'Provide concrete manipulatives, visual place-value charts, and guided teacher assistance.'}
-ON-LEVEL LEARNERS: ${toCleanBullets(data.differentiationFramework?.onLevelLearners?.independentWorkExpectations || "Complete standard practice problems with focus on procedural accuracy and conceptual explanation.").join(' ')}
-ADVANCED LEARNERS: ${toCleanBullets(data.differentiationFramework?.advancedLearners?.challengeTasks || data.differentiationFramework?.advancedLearners?.extensionActivity || data.homeworkExtension?.task || "Formulate challenging extension problems, analyze non-standard cases, or mentor peers.").join(' ')}
-INCLUSION SUPPORTS: ${toCleanBullets(data.structured_json?.inclusion || "Provide visual anchor charts, enlarged print if required, clear peer buddy pairings, and extended response time.").join(' ')}
+STUDENTS REQUIRING ADDITIONAL SUPPORT:
+${res.differentiation.strugglingLearners.map(s => `  - ${s}`).join('\n')}
+ON-LEVEL LEARNERS:
+${res.differentiation.onLevelLearners.map(s => `  - ${s}`).join('\n')}
+ADVANCED LEARNERS:
+${res.differentiation.advancedLearners.map(s => `  - ${s}`).join('\n')}
+INCLUSION SUPPORTS:
+${res.differentiation.inclusionSupports.map(s => `  - ${s}`).join('\n')}
 
-ASSESSMENT
-FORMATIVE ASSESSMENT: Continuous teacher observation, targeted questioning checks, and feedback during guided practice.
-GUIDED PRACTICE: Paired check-ins and rubric-aligned oral responses.
-INDEPENDENT PRACTICE: Evaluation of individual student practice worksheets and problem-solving accuracy.
-EVALUATION CRITERIA: Students demonstrate 80% or greater accuracy on core curriculum objectives.
-EXIT TICKET: ${cleanText(data.closurePanel?.exitQuestion || (data.closure && data.closure[0]) || `Write one thing you learned today about ${data.topic} and solve one representative question.`)}
+ASSESSMENT & EVALUATION
+FORMATIVE ASSESSMENT: ${res.assessment.formative}
+GUIDED PRACTICE: ${res.assessment.guidedPractice}
+INDEPENDENT PRACTICE: ${res.assessment.independentPractice}
+EXIT TICKET: ${res.assessment.exitTicket}
+EVALUATION CRITERIA: ${res.assessment.evaluationCriteria}
 
 CLOSURE
-- Summarize core concepts and key vocabulary mastered.
-- Reflect on achievement of lesson success criteria.
-- Preview upcoming curriculum topic.
+${res.closure.map(c => `- ${c}`).join('\n')}
 
 TEACHER REFLECTION
-What went well?
-What challenges occurred?
-Which students require follow-up?
-What should be adjusted for the next lesson?
-Next Steps:
-
-LESSON RESOURCES
-- Printable Practice Worksheet & Extension Tasks
-- Anchor Charts & Concrete Visual Aids
-- Formative Exit Tickets & Assessment Slips
+What went well? ${res.reflection.whatWorked}
+What challenges occurred? ${res.reflection.challenges}
+Which students require follow-up? ${res.reflection.followUpStudents}
+What should be adjusted for the next lesson? ${res.reflection.adjustments}
+Next Steps: ${res.reflection.nextSteps}
 `;
+
+  return output;
 }
 
 export const exportToPDF = (plan: LessonPlan) => {

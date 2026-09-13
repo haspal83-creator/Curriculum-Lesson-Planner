@@ -1266,22 +1266,34 @@ Do NOT repeat the condition inside the individual domain objectives.`;
                 type: Type.OBJECT,
                 properties: {
                   scaffolds: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  guidedPrompts: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  materials: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  visuals: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  manipulatives: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  simplifiedInstructions: { type: Type.STRING },
+                  guidedSupport: { type: Type.STRING }
                 },
-                required: ["scaffolds", "guidedPrompts", "materials"]
+                required: ["scaffolds", "visuals", "manipulatives", "simplifiedInstructions", "guidedSupport"]
+              },
+              onLevelLearners: {
+                type: Type.OBJECT,
+                properties: {
+                  participationExpectations: { type: Type.STRING },
+                  independentWorkExpectations: { type: Type.STRING },
+                  peerCollaboration: { type: Type.STRING }
+                },
+                required: ["participationExpectations", "independentWorkExpectations", "peerCollaboration"]
               },
               advancedLearners: {
                 type: Type.OBJECT,
                 properties: {
-                  extensions: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  higherOrderQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  independentTasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  challengeTasks: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  deeperThinkingPrompts: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  extensionActivity: { type: Type.STRING },
+                  leadershipRole: { type: Type.STRING }
                 },
-                required: ["extensions", "higherOrderQuestions", "independentTasks"]
+                required: ["challengeTasks", "deeperThinkingPrompts", "extensionActivity", "leadershipRole"]
               }
             },
-            required: ["strugglingLearners", "advancedLearners"]
+            required: ["strugglingLearners", "onLevelLearners", "advancedLearners"]
           },
           closurePanel: {
             type: Type.OBJECT,

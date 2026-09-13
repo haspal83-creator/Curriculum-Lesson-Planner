@@ -877,7 +877,7 @@ export function PlannerView({
           </div>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full min-w-0">
           <div className="flex justify-between items-center">
             <Button variant="ghost" onClick={() => { setGeneratedPlan(null); setGeneratedLAWeeklyPlan(null); setGeneratedWeeklyPlan(null); }}>
               <ArrowLeft className="w-4 h-4" />

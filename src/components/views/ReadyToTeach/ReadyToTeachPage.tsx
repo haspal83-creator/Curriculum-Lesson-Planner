@@ -194,7 +194,8 @@ export const ReadyToTeachPage: React.FC<ReadyToTeachPageProps> = ({ lessonId, on
   const handleExportWord = async () => {
     if (!lesson) return;
     try {
-      await exportSavedLessonToWord(lesson, resources);
+      const teacher = auth.currentUser?.displayName || (auth.currentUser?.email?.startsWith('haspal') ? 'Hassan' : undefined) || 'Hassan';
+      await exportSavedLessonToWord(lesson, resources, teacher, 'SAN JUAN BOSCO R.C. SCHOOL');
     } catch (err) {
       console.error("Export error:", err);
     }

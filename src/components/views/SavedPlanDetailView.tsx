@@ -54,7 +54,7 @@ export function SavedPlanDetailView({
   initialTab
 }: SavedPlanDetailViewProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" />

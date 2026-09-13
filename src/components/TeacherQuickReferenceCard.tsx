@@ -83,9 +83,12 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
       </div>
 
       {/* Grid of Key Reference Fields */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-6">
+      <div 
+        className="grid gap-4 pt-6 w-full"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}
+      >
         {/* Subject & Cycle */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1">
+        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
             <BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Subject & Cycle
           </span>
@@ -94,7 +97,7 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
         </div>
 
         {/* Strand & Topic */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1">
+        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-purple-500" /> Strand & Topic
           </span>
@@ -103,7 +106,7 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
         </div>
 
         {/* Duration */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1">
+        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-emerald-500" /> Validated Duration
           </span>
@@ -112,7 +115,7 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
         </div>
 
         {/* Mastery Target */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1">
+        <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
             <Award className="w-3.5 h-3.5 text-amber-500" /> Mastery Target
           </span>
@@ -121,7 +124,7 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
       </div>
 
       {/* Curriculum Learning Outcome & One Shared Condition Objective */}
-      <div className="mt-4 bg-white rounded-2xl p-5 border border-indigo-100/90 shadow-xs space-y-4">
+      <div className="mt-4 bg-white rounded-2xl p-5 border border-indigo-100/90 shadow-xs space-y-4 w-full min-w-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Target className="w-4 h-4 text-indigo-600" />
@@ -143,25 +146,28 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
           </div>
           
           <div className="pl-6 space-y-2.5">
-            <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3.5 py-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block mb-0.5">Shared Condition:</span>
-              <p className="text-xs font-bold text-purple-900 leading-relaxed italic">
+            <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-4 py-3 w-full min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block mb-1">Shared Condition:</span>
+              <p className="text-sm font-bold text-purple-900 leading-relaxed italic break-words">
                 "{condition}"
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
-              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+            <div 
+              className="grid gap-3 text-xs w-full min-w-0"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+            >
+              <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 block mb-1">1. Cognitive Domain</span>
-                <p className="text-gray-800 leading-snug font-medium">{cognitive}</p>
+                <p className="text-gray-800 leading-snug font-medium break-words">{cognitive}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block mb-1">2. Psychomotor / Skills</span>
-                <p className="text-gray-800 leading-snug font-medium">{psychomotor}</p>
+                <p className="text-gray-800 leading-snug font-medium break-words">{psychomotor}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-wider text-pink-700 block mb-1">3. Affective Domain</span>
-                <p className="text-gray-800 leading-snug font-medium">{affective}</p>
+                <p className="text-gray-800 leading-snug font-medium break-words">{affective}</p>
               </div>
             </div>
           </div>
@@ -169,7 +175,10 @@ export const TeacherQuickReferenceCard: React.FC<TeacherQuickReferenceCardProps>
       </div>
 
       {/* Concept, Prereqs, Materials, Vocab & Strategy Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 text-xs">
+      <div 
+        className="grid gap-4 mt-4 text-xs w-full min-w-0"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
+      >
         {/* Key Concept & Strategy */}
         <div className="bg-white rounded-2xl p-4 border border-gray-200/70 shadow-xs space-y-2">
           <div>

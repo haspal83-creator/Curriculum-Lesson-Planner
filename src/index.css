@@ -106,4 +106,26 @@
     width: 100%;
     min-width: 0;
   }
+
+  /* Responsive Lesson Workspace Grid */
+  .lesson-workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    width: 100%;
+    max-width: 100%;
+    align-items: start;
+  }
+
+  @media (min-width: 1200px) {
+    .lesson-workspace-grid {
+      grid-template-columns: var(--nav-width, 250px) minmax(0, 1fr);
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .lesson-workspace-grid {
+      grid-template-columns: var(--nav-width, 250px) minmax(0, 1fr) var(--asst-width, 300px);
+    }
+  }
 }

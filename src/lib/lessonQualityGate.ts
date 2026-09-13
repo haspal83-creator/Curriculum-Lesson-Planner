@@ -897,5 +897,54 @@ As they continued along the Macal River, they watched yellow-headed parrots fly 
     }
   }
 
+  // 21. Differentiation Framework Guarantee & Normalization
+  const rawDiff = plan.differentiationFramework as any;
+  const rawStruggling = rawDiff?.strugglingLearners;
+  const rawOnLevel = rawDiff?.onLevelLearners;
+  const rawAdv = rawDiff?.advancedLearners;
+  const rawInclusion = rawDiff?.inclusionSupport;
+
+  plan.differentiationFramework = {
+    strugglingLearners: {
+      scaffolds: rawStruggling?.scaffolds?.length ? rawStruggling.scaffolds : [
+        `Step-by-step graphic organizer breaking down ${topic} into sequential parts.`,
+        `Pre-printed sentence frames and key vocabulary bank.`
+      ],
+      visuals: rawStruggling?.visuals?.length ? rawStruggling.visuals : (rawStruggling?.guidedPrompts?.length ? rawStruggling.guidedPrompts : [
+        `Anchor chart visual reference posted on front board with color-coded steps.`,
+        `Concrete pictorial diagrams illustrating ${topic}.`
+      ]),
+      manipulatives: rawStruggling?.manipulatives?.length ? rawStruggling.manipulatives : (rawStruggling?.materials?.length ? rawStruggling.materials : [
+        `Tactile counters, index cards, or physical word tiles for interactive manipulation.`
+      ]),
+      simplifiedInstructions: rawStruggling?.simplifiedInstructions || `Provide directions in one-step chunks with teacher verification before moving to step 2.`,
+      guidedSupport: rawStruggling?.guidedSupport || `Teacher checks in within first 3 minutes of independent practice at the guided table.`
+    },
+    onLevelLearners: {
+      participationExpectations: rawOnLevel?.participationExpectations || `Active verbal participation in whole-group discussions and paired practice.`,
+      independentWorkExpectations: rawOnLevel?.independentWorkExpectations || `Complete standard independent tasks with at least 80% accuracy within allocated time.`,
+      peerCollaboration: rawOnLevel?.peerCollaboration || `Collaborate respectfully with table partner to explain reasoning and cross-check solutions.`
+    },
+    advancedLearners: {
+      challengeTasks: rawAdv?.challengeTasks?.length ? rawAdv.challengeTasks : (rawAdv?.extensions?.length ? rawAdv.extensions : [
+        `Formulate complex real-world challenge problems applying ${topic} in Belizean contexts.`,
+        `Analyze non-standard cases and explain underlying general patterns.`
+      ]),
+      deeperThinkingPrompts: rawAdv?.deeperThinkingPrompts?.length ? rawAdv.deeperThinkingPrompts : (rawAdv?.higherOrderQuestions?.length ? rawAdv.higherOrderQuestions : [
+        `"How would our rule change if one of the conditions was reversed?"`,
+        `"Can you prove this result holds true in all possible scenarios?"`
+      ]),
+      extensionActivity: rawAdv?.extensionActivity || (rawAdv?.independentTasks?.[0] || `Design a student-created mini anchor chart or teaching game for the classroom library.`),
+      leadershipRole: rawAdv?.leadershipRole || `Act as peer coach to guide table partners using Socratic questions rather than giving away answers.`
+    },
+    inclusionSupport: {
+      dyslexia: rawInclusion?.dyslexia || `High-contrast printed font, visual icons accompanying text, and oral reading option.`,
+      dyscalculia: rawInclusion?.dyscalculia || `Number line visual, color-coded arithmetic steps, and physical counter assistance.`,
+      ell: rawInclusion?.ell || `Dual English/Kriol clarification, visual vocabulary flashcards, and paired peer translator.`,
+      behavior: rawInclusion?.behavior || `Clear structured timers, positive praise reinforcement, and designated calm focus space.`,
+      sensory: rawInclusion?.sensory || `Reduced auditory distractions and ergonomic flexible seating near front whiteboard.`
+    }
+  };
+
   return plan;
 }
