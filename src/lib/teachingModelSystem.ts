@@ -8,7 +8,8 @@ export type TeachingModelCategory =
   | 'experiential' 
   | 'mastery' 
   | 'discourse' 
-  | 'adaptive';
+  | 'adaptive'
+  | 'student-centered';
 
 export interface TeachingModelPhaseSpec {
   phaseName: string;

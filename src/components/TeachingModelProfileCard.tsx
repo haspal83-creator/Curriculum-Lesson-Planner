@@ -72,7 +72,7 @@ export const TeachingModelProfileCard: React.FC<TeachingModelProfileCardProps> =
     `This lesson is built around ${primaryName} to systematically scaffold student thinking through dedicated pedagogical phases.`;
 
   const adaptive = teachingModelProfile?.adaptiveDecisions || 
-    generateAdaptiveDecisions(modelDef.id, topic, subject);
+    generateAdaptiveDecisions(modelDef.id, topic, subject as any);
 
   return (
     <div 

@@ -505,6 +505,13 @@ export default function App() {
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+
+        // Guard against excessively massive files (over 50MB)
+        if (file.size > 50 * 1024 * 1024) {
+          showToast(`"${file.name}" exceeds the 50MB limit. Please upload a smaller file or split it into sections.`, "error");
+          continue;
+        }
+
         const mimeType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
         
         // Convert file to base64 for Gemini
@@ -540,10 +547,14 @@ export default function App() {
           showToast(`No curriculum entries could be extracted from ${file.name}.`, "error");
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Curriculum upload error:", error);
-      setCurriculumUploadError("Failed to parse curriculum file. Please ensure it's a valid PDF or document.");
-      showToast("Failed to upload curriculum", "error");
+      const is413 = error?.message?.includes("413") || error?.message?.toLowerCase()?.includes("too large");
+      const userMessage = is413
+        ? "Curriculum file is too large for processing. Please upload files under 50MB."
+        : (error?.message || "Failed to parse curriculum file. Please ensure it's a valid PDF or document.");
+      setCurriculumUploadError(userMessage);
+      showToast(userMessage, "error");
     } finally {
       setIsUploadingCurriculum(false);
     }

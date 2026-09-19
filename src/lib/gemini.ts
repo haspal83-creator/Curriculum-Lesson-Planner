@@ -84,7 +84,7 @@ export async function generateLessonResources(grade: string, topic: string) {
     }`;
 
     const response = await callWithRetry(() => ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
       config: {
         responseMimeType: "application/json",

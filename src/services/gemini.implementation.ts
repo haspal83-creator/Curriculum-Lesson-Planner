@@ -153,22 +153,39 @@ Every Learning Objectives section must ALWAYS use ONE SHARED CONDITION for all t
 - **No Paragraphs in Procedures:** Use bulleted lists.
 - **Never Output Raw Markdown Asterisks or Heading Symbols in Plain Text Fields.**`;
 
+// Track models that have encountered quota exhaustion or unavailability to avoid repeated failures
+const modelCooldownMap = new Map<string, number>();
+
 /**
  * Executes a Gemini content generation call with automated retry and seamless model fallback.
- * Uses 'gemini-3.8-flash' as primary. If 503 (high demand) or 429 occurs,
- * it retries and automatically falls back to 'gemini-3.1-flash-lite' or 'gemini-flash-latest'.
+ * Uses 'gemini-flash-latest' and 'gemini-3.1-flash-lite' as primary resilient models with automated failover
+ * and intelligent cooldown tracking to bypass exhausted models smoothly.
  */
 export const executeGenAIWithFallback = async (
   requestFactory: (model: string) => Promise<any>,
-  preferredModel = "gemini-3.6-flash",
-  fallbackModels: string[] = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"]
+  preferredModel = "gemini-flash-latest",
+  fallbackModels: string[] = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]
 ) => {
-  const modelsToTry = [preferredModel, ...fallbackModels.filter(m => m !== preferredModel)];
+  const now = Date.now();
+  const allCandidates = [preferredModel, ...fallbackModels.filter(m => m !== preferredModel)];
+  
+  // Sort models: healthy (not in cooldown) first, followed by models whose cooldown has elapsed
+  const modelsToTry = [...allCandidates].sort((a, b) => {
+    const aCool = modelCooldownMap.get(a) || 0;
+    const bCool = modelCooldownMap.get(b) || 0;
+    const aActive = aCool > now ? 1 : 0;
+    const bActive = bCool > now ? 1 : 0;
+    return aActive - bActive;
+  });
+
   let lastError: any = null;
 
   for (const model of modelsToTry) {
     try {
-      return await callWithRetry(() => requestFactory(model), 1, 800);
+      const result = await callWithRetry(() => requestFactory(model), 1, 800);
+      // Successful call clears any past cooldown for this model
+      modelCooldownMap.delete(model);
+      return result;
     } catch (error: any) {
       lastError = error;
       const errorMsg = String(error?.message || '');
@@ -199,8 +216,22 @@ export const executeGenAIWithFallback = async (
         combinedText.includes('limit: 0') ||
         combinedText.includes('Overloaded');
 
-      if (isQuotaOrDemand) {
-        console.warn(`[GenAI Fallback] Model "${model}" capacity limit or high demand. Trying fallback model...`);
+      const isModelUnavailableOrNotFound =
+        error?.status === 404 ||
+        error?.code === 404 ||
+        error?.error?.code === 404 ||
+        error?.error?.status === 'NOT_FOUND' ||
+        combinedText.includes('404') ||
+        combinedText.includes('NOT_FOUND') ||
+        combinedText.includes('no longer available') ||
+        combinedText.includes('not found') ||
+        combinedText.includes('not supported') ||
+        combinedText.includes('deprecated');
+
+      if (isQuotaOrDemand || isModelUnavailableOrNotFound) {
+        // Place model on cooldown (15 minutes for quota/availability issues)
+        modelCooldownMap.set(model, Date.now() + 15 * 60 * 1000);
+        console.info(`[GenAI Adaptive Routing] Model "${model}" hit capacity or availability limit. Transitioning to next available candidate...`);
         continue;
       }
       throw error;

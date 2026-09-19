@@ -28,7 +28,26 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
+  // Allow large payloads for multi-page curriculum PDFs and document uploads
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+  // Gracefully handle payload too large or invalid body formatting
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+      return res.status(413).json({
+        success: false,
+        error: 'The uploaded file or request payload is too large. Please upload files under 50MB.',
+      });
+    }
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid JSON payload received.',
+      });
+    }
+    next(err);
+  });
 
   // Health Check
   app.get("/api/health", (req, res) => {

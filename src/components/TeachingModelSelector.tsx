@@ -80,8 +80,8 @@ export const TeachingModelSelector: React.FC<TeachingModelSelectorProps> = ({
   // Compute recommendation based on context
   const recommendation = useMemo(() => {
     return recommendTeachingModel({
-      subject,
-      grade,
+      subject: subject as any,
+      grade: grade as any,
       topic: topic || 'Unit Topic',
       subtopic,
       duration,
