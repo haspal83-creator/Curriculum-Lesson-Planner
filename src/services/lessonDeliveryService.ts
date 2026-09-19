@@ -38,7 +38,13 @@ export const lessonDeliveryService = {
       'classroom_management'
     ];
 
-    const existingResources = await this.getLessonResources(lesson.id!);
+    const lessonId = lesson.id || (lesson as any).lesson_plan_id || (lesson as any)._id;
+    if (!lessonId) {
+      console.warn("generateMissingResources called with missing lesson id");
+      return;
+    }
+
+    const existingResources = await this.getLessonResources(lessonId);
     const existingTypes = new Set(existingResources.map(r => r.resource_type));
 
     for (const type of resourceTypes) {
@@ -58,18 +64,24 @@ export const lessonDeliveryService = {
   },
 
   async getLessonResources(lessonId: string): Promise<LessonResourceNew[]> {
+    if (!lessonId) return [];
     const q = query(collection(db, 'lesson_resources_new'), where('lesson_id', '==', lessonId));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as LessonResourceNew));
   },
 
   async generateResource(lesson: SavedLesson, type: LessonResourceType): Promise<void> {
+    const lessonId = lesson.id || (lesson as any).lesson_plan_id || (lesson as any)._id;
+    if (!lessonId) {
+      console.warn("generateResource called with missing lesson id", lesson);
+      return;
+    }
     const aiContent = await generateAiResource(type, lesson);
     const resolvedGrade = (lesson.grade || lesson.class_id) as GradeLevel;
     const resolvedClassId = lesson.classId || (resolvedGrade ? getClassId(resolvedGrade) : undefined);
 
     const resource: Omit<LessonResourceNew, 'id'> = {
-      lesson_id: lesson.id!,
+      lesson_id: lessonId,
       classId: resolvedClassId,
       className: lesson.className || resolvedGrade,
       grade: resolvedGrade,

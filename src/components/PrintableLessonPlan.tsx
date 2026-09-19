@@ -469,35 +469,40 @@ export const PrintableLessonPlan: React.FC<PrintableLessonPlanProps> = ({
           <div className="border-2 border-slate-900 p-6 rounded-lg bg-white">
             {/* Student Worksheet Header */}
             <div className="border-b-2 border-slate-900 pb-3 mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-sm text-slate-900">{res.schoolName}</span>
-                <span className="font-semibold text-xs text-slate-600">Grade: {res.grade}</span>
+              <div className="text-center mb-2">
+                <div className="font-black text-sm text-slate-900 uppercase tracking-wide">{res.schoolName}</div>
+                <div className="font-bold text-xs text-slate-600">{res.grade} — {res.subject}</div>
               </div>
-              <h3 className="text-base font-black text-center text-slate-900 uppercase tracking-wider mb-4">
+              <h3 className="text-base font-black text-center text-slate-900 uppercase tracking-wider mb-2">
                 {res.worksheet.title}
               </h3>
+              {res.worksheet.topic && (
+                <div className="text-center text-xs italic text-slate-600 mb-3">
+                  Topic: {res.worksheet.topic}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4 text-xs font-semibold text-slate-800 pt-2 border-t border-slate-200">
                 <div>Name: _______________________________</div>
                 <div>Date: ____________________</div>
-                <div className="text-right">Score: _______ / 10</div>
+                <div className="text-right">Score: _______ / {res.worksheet.totalPoints || res.worksheet.totalQuestions || 10}</div>
               </div>
             </div>
 
             <p className="text-xs italic text-slate-600 mb-6 bg-slate-50 p-2 rounded border border-slate-200">
-              <span className="font-bold text-slate-800">Instructions:</span> {res.worksheet.instructions}
+              <span className="font-bold text-slate-800 not-italic">Instructions:</span> {res.worksheet.instructions}
             </p>
 
             {/* Worksheet Sections */}
             <div className="space-y-6">
               {res.worksheet.sections.map((sec, idx) => (
                 <div key={idx} className="border border-slate-200 rounded p-4">
-                  <h4 className="font-bold text-sm text-slate-900 mb-1">{sec.sectionTitle}</h4>
-                  <p className="text-xs text-slate-600 mb-4">{sec.instructions}</p>
+                  <h4 className="font-bold text-sm text-slate-900 mb-1">SECTION {sec.sectionLetter || String.fromCharCode(65 + idx)}: {sec.sectionTitle.toUpperCase()}</h4>
+                  {sec.instructions && <p className="text-xs italic text-slate-600 mb-4">{sec.instructions}</p>}
                   <div className="space-y-3 text-xs">
                     {sec.questions.map((q) => (
                       <div key={q.number} className="bg-slate-50/70 p-2.5 rounded border border-slate-200">
                         <span className="font-bold text-slate-900">{q.number}.</span>{' '}
-                        <span className="text-slate-800 font-mono text-[11px]">{q.prompt}</span>
+                        <span className="text-slate-800 font-sans text-xs">{q.prompt}</span>
                       </div>
                     ))}
                   </div>
@@ -508,17 +513,17 @@ export const PrintableLessonPlan: React.FC<PrintableLessonPlanProps> = ({
             {/* Worksheet Answer Key */}
             {res.worksheet.answerKey && res.worksheet.answerKey.length > 0 && (
               <div className="border-t-2 border-slate-300 pt-4 mt-6 bg-slate-50 p-4 rounded text-xs">
-                <h5 className="font-bold text-slate-900 uppercase tracking-wider mb-2">
-                  Worksheet Teacher Answer Key & Model Responses
+                <h5 className="font-bold text-emerald-900 uppercase tracking-wider mb-2">
+                  Worksheet Teacher Answer Key & Scoring Guide
                 </h5>
                 <div className="space-y-3">
                   {res.worksheet.answerKey.map((akSec, i) => (
                     <div key={i}>
-                      <span className="font-bold text-blue-900 block mb-1">{akSec.sectionTitle}:</span>
+                      <span className="font-bold text-emerald-900 block mb-1">SECTION {akSec.sectionLetter || String.fromCharCode(65 + i)}: {akSec.sectionTitle.toUpperCase()}</span>
                       <ul className="list-disc pl-5 space-y-1">
                         {akSec.answers.map((ans) => (
                           <li key={ans.number}>
-                            <span className="font-semibold">{ans.number}:</span> {ans.solution}
+                            <span className="font-semibold text-emerald-950">{ans.number}.</span> {ans.solution}
                           </li>
                         ))}
                       </ul>

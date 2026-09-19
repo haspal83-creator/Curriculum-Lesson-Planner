@@ -13,45 +13,63 @@ import {
   isAfter
 } from 'date-fns';
 import { MasterCalendar, CalendarDayType } from '../types';
-import belizeCalendarData from '../data/belize_calendar_2025_2026.json';
+import belizeCalendar2025_2026 from '../data/belize_calendar_2025_2026.json';
+import belizeCalendar2026_2027 from '../data/belize_calendar_2026_2027.json';
 
-const masterCalendar = belizeCalendarData as MasterCalendar;
+export const getMasterCalendar = (academicYear: string = '2026-2027'): MasterCalendar => {
+  if (academicYear === '2025-2026') {
+    return belizeCalendar2025_2026 as MasterCalendar;
+  }
+  return belizeCalendar2026_2027 as MasterCalendar;
+};
 
-export const getMasterCalendar = () => masterCalendar;
-
-export const isHoliday = (date: Date): { name: string; observed: boolean } | null => {
+const resolveCalendarForDate = (date: Date, academicYear?: string): MasterCalendar => {
+  if (academicYear) {
+    return getMasterCalendar(academicYear);
+  }
   const dateStr = format(date, 'yyyy-MM-dd');
-  const holiday = masterCalendar.holidays.find(h => h.date === dateStr || h.observed === dateStr);
+  if (dateStr < '2026-08-01') {
+    return belizeCalendar2025_2026 as MasterCalendar;
+  }
+  return belizeCalendar2026_2027 as MasterCalendar;
+};
+
+export const isHoliday = (date: Date, academicYear?: string): { name: string; observed: boolean } | null => {
+  const cal = resolveCalendarForDate(date, academicYear);
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const holiday = cal.holidays.find(h => h.date === dateStr || h.observed === dateStr);
   if (holiday) {
     return { name: holiday.name, observed: holiday.observed === dateStr };
   }
   return null;
 };
 
-export const isVacation = (date: Date): string | null => {
-  const vacation = masterCalendar.vacations.find(v => 
+export const isVacation = (date: Date, academicYear?: string): string | null => {
+  const cal = resolveCalendarForDate(date, academicYear);
+  const vacation = cal.vacations.find(v => 
     isWithinInterval(date, { start: parseISO(v.start), end: parseISO(v.end) })
   );
   return vacation ? vacation.name : null;
 };
 
-export const isNonTeachingPeriod = (date: Date): string | null => {
-  const period = masterCalendar.nonTeachingPeriods.find(p => 
+export const isNonTeachingPeriod = (date: Date, academicYear?: string): string | null => {
+  const cal = resolveCalendarForDate(date, academicYear);
+  const period = cal.nonTeachingPeriods.find(p => 
     isWithinInterval(date, { start: parseISO(p.start), end: parseISO(p.end) })
   );
   return period ? period.name : null;
 };
 
-export const getDayType = (date: Date): CalendarDayType => {
+export const getDayType = (date: Date, academicYear?: string): CalendarDayType => {
   if (isWeekend(date)) return 'Weekend';
   
-  const holiday = isHoliday(date);
+  const holiday = isHoliday(date, academicYear);
   if (holiday) return 'Public Holiday';
   
-  const vacation = isVacation(date);
+  const vacation = isVacation(date, academicYear);
   if (vacation) return 'School Holiday / Break';
   
-  const nonTeaching = isNonTeachingPeriod(date);
+  const nonTeaching = isNonTeachingPeriod(date, academicYear);
   if (nonTeaching) {
     if (nonTeaching.includes('Professional Development')) return 'Professional Development Day';
     if (nonTeaching.includes('Planning')) return 'Teacher Planning Day';
@@ -61,20 +79,22 @@ export const getDayType = (date: Date): CalendarDayType => {
   return 'Regular School Day';
 };
 
-export const isTeachingDay = (date: Date): boolean => {
-  const type = getDayType(date);
+export const isTeachingDay = (date: Date, academicYear?: string): boolean => {
+  const type = getDayType(date, academicYear);
   return type === 'Regular School Day' || type === 'Half Day' || type === 'Exam / Test Week';
 };
 
-export const getCycleForDate = (date: Date): number | null => {
-  const cycle = masterCalendar.cycles.find(c => 
+export const getCycleForDate = (date: Date, academicYear?: string): number | null => {
+  const cal = resolveCalendarForDate(date, academicYear);
+  const cycle = cal.cycles.find(c => 
     isWithinInterval(date, { start: parseISO(c.start), end: parseISO(c.end) })
   );
   return cycle ? cycle.cycle : null;
 };
 
-export const getWeekNumberInCycle = (date: Date): number | null => {
-  const cycle = masterCalendar.cycles.find(c => 
+export const getWeekNumberInCycle = (date: Date, academicYear?: string): number | null => {
+  const cal = resolveCalendarForDate(date, academicYear);
+  const cycle = cal.cycles.find(c => 
     isWithinInterval(date, { start: parseISO(c.start), end: parseISO(c.end) })
   );
   if (!cycle) return null;
@@ -84,14 +104,15 @@ export const getWeekNumberInCycle = (date: Date): number | null => {
   return Math.floor(diffDays / 7) + 1;
 };
 
-export const getTeachingDaysInWeek = (weekStart: Date): Date[] => {
+export const getTeachingDaysInWeek = (weekStart: Date, academicYear?: string): Date[] => {
   const weekEnd = addDays(weekStart, 6);
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
-  return days.filter(d => isTeachingDay(d));
+  return days.filter(d => isTeachingDay(d, academicYear));
 };
 
-export const getDatesForCycleWeek = (cycleNumber: number, weekNumber: number): Date[] => {
-  const cycle = masterCalendar.cycles.find(c => c.cycle === cycleNumber);
+export const getDatesForCycleWeek = (cycleNumber: number, weekNumber: number, academicYear: string = '2026-2027'): Date[] => {
+  const cal = getMasterCalendar(academicYear);
+  const cycle = cal.cycles.find(c => c.cycle === cycleNumber);
   if (!cycle) return [];
 
   const cycleStart = parseISO(cycle.start);
@@ -105,6 +126,7 @@ export const getDatesForCycleWeek = (cycleNumber: number, weekNumber: number): D
   return eachDayOfInterval({ start: weekStart, end: actualEnd });
 };
 
-export const getAcademicYearStats = () => {
-  return masterCalendar.teachingPeriod;
+export const getAcademicYearStats = (academicYear: string = '2026-2027') => {
+  return getMasterCalendar(academicYear).teachingPeriod;
 };
+

@@ -177,7 +177,7 @@ export function YearlyCalendarView({
           </div>
           <div className="space-y-1">
             <h1 className="text-xl font-black text-gray-900 tracking-tight">Academic Planning</h1>
-            <p className="text-xs text-gray-500 font-medium">Belize Academic Year 2024-2025</p>
+            <p className="text-xs text-gray-500 font-medium">Belize Academic Year {userSettings.defaultAcademicYear || '2026-2027'}</p>
           </div>
           
           <div className="w-px h-10 bg-gray-100 mx-2 hidden md:block" />
@@ -201,12 +201,16 @@ export function YearlyCalendarView({
               options={[
                 { label: 'Mathematics', value: 'Mathematics' },
                 { label: 'Language Arts', value: 'Language Arts' },
-                { label: 'Science', value: 'Science' },
-                { label: 'Social Studies', value: 'Social Studies' }
+                { label: 'Science & Technology', value: 'Science and Technology' },
+                { label: 'Belizean Studies', value: 'Belizean Studies' },
+                { label: 'HFLE', value: 'HFLE' },
+                { label: 'Spanish', value: 'Spanish' },
+                { label: 'PE', value: 'PE' },
+                { label: 'Creative Arts', value: 'Creative Arts' }
               ]} 
               value={selectedSubject} 
               onChange={(val) => setSelectedSubject(val as Subject)} 
-              className="w-40"
+              className="w-48"
             />
           </div>
         </div>

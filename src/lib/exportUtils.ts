@@ -766,7 +766,7 @@ export async function exportToWord(
             children: [
               createCell("Name: ____________________________________", 40),
               createCell("Date: ____________________", 35),
-              createCell("Score: _______ / 10", 25, { isLabel: true })
+              createCell(`Score: _______ / ${res.worksheet.totalPoints || res.worksheet.totalQuestions || 10}`, 25, { isLabel: true })
             ]
           })
         ]
@@ -779,11 +779,13 @@ export async function exportToWord(
         ]
       }),
       ...res.worksheet.sections.flatMap(sec => [
-        createSubheading(sec.sectionTitle, 160),
-        new Paragraph({
-          spacing: { before: 20, after: 60 },
-          children: [new TextRun({ text: sec.instructions, size: 20, italics: true, color: TEXT_MUTED })]
-        }),
+        createSubheading(`SECTION ${sec.sectionLetter || ''}: ${sec.sectionTitle.toUpperCase()}`, 160),
+        ...(sec.instructions ? [
+          new Paragraph({
+            spacing: { before: 20, after: 60 },
+            children: [new TextRun({ text: sec.instructions, size: 20, italics: true, color: TEXT_MUTED })]
+          })
+        ] : []),
         ...sec.questions.map(q => new Paragraph({
           spacing: { before: 40, after: 60 },
           children: [
@@ -793,14 +795,17 @@ export async function exportToWord(
         }))
       ]),
       ...(res.worksheet.answerKey && res.worksheet.answerKey.length > 0 ? [
-        createSectionHeading("Worksheet Teacher Answer Key & Model Responses", 240),
+        createSectionHeading("Worksheet Teacher Answer Key & Scoring Guide", 240),
         ...res.worksheet.answerKey.flatMap(akSec => [
-          createSubheading(akSec.sectionTitle, 120),
+          createSubheading(`SECTION ${akSec.sectionLetter || ''}: ${akSec.sectionTitle.toUpperCase()}`, 120),
           ...akSec.answers.map(ans => new Paragraph({
             spacing: { before: 20, after: 40 },
             children: [
-              new TextRun({ text: `${ans.number}: `, bold: true, size: 20, color: PRIMARY_NAVY }),
-              new TextRun({ text: ans.solution, size: 20 })
+              new TextRun({ text: `${ans.number}. `, bold: true, size: 20, color: SUCCESS_COLOR }),
+              new TextRun({ text: ans.solution, size: 20, bold: true }),
+              ...(ans.criteria ? [
+                new TextRun({ text: ` [${ans.criteria}]`, size: 18, italics: true, color: TEXT_MUTED })
+              ] : [])
             ]
           }))
         ])
@@ -1561,20 +1566,22 @@ Student Key Takeaway: "${res.anchorChart.studentKeyTakeaway}"
 
 ${res.worksheet && res.worksheet.hasWorksheet ? `
 ==================================================
+${res.schoolName.toUpperCase()}
+${res.grade} — ${res.subject}
 STUDENT PRACTICE WORKSHEET: ${res.worksheet.title}
-School: ${res.schoolName}
+${res.worksheet.topic ? `Topic: ${res.worksheet.topic}\n` : ''}Name: ____________________________________  Date: ____________________  Score: ______ / ${res.worksheet.totalPoints || res.worksheet.totalQuestions || 10}
+
 Instructions: ${res.worksheet.instructions}
 
 ${res.worksheet.sections.map(s => `
-[${s.sectionTitle}]
-Instructions: ${s.instructions}
-${s.questions.map(q => `${q.number}. ${q.prompt}`).join('\n')}
+[SECTION ${s.sectionLetter || ''}: ${s.sectionTitle.toUpperCase()}]
+${s.instructions ? `Instructions: ${s.instructions}\n` : ''}${s.questions.map(q => `${q.number}. ${q.prompt}`).join('\n')}
 `).join('\n')}
 
-WORKSHEET ANSWER KEY:
+TEACHER ANSWER KEY & SCORING GUIDE:
 ${res.worksheet.answerKey.map(ak => `
-[${ak.sectionTitle}]
-${ak.answers.map(ans => `${ans.number}: ${ans.solution}`).join('\n')}
+[SECTION ${ak.sectionLetter || ''}: ${ak.sectionTitle.toUpperCase()}]
+${ak.answers.map(ans => `${ans.number}. ${ans.solution}`).join('\n')}
 `).join('\n')}
 ==================================================
 ` : ''}

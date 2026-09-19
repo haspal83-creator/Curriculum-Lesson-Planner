@@ -125,7 +125,36 @@ export const ReadyToTeachPage: React.FC<ReadyToTeachPageProps> = ({ lessonId, on
     
     const unsubscribeLesson = onSnapshot(lessonRef, (docSnap) => {
       if (docSnap.exists()) {
-        setLesson({ id: docSnap.id, ...docSnap.data() } as SavedLesson);
+        const rawData = docSnap.data();
+        const normalizedWeek = typeof rawData.week === 'object' && rawData.week !== null
+          ? (rawData.week_number || rawData.week.week_number || rawData.week.week || rawData.week.number || '1')
+          : (rawData.week || rawData.week_number || '');
+
+        const normalizedSubject = typeof rawData.subject === 'object' && rawData.subject !== null
+          ? (rawData.subject.name || rawData.subject.subject || '')
+          : (rawData.subject || rawData.week?.subject || '');
+
+        const normalizedGrade = typeof rawData.grade === 'object' && rawData.grade !== null
+          ? (rawData.grade.name || rawData.grade.grade || '')
+          : (rawData.grade || rawData.class_id || rawData.week?.grade || '');
+
+        const normalizedTopic = typeof rawData.topic === 'object' && rawData.topic !== null
+          ? (rawData.topic.topic || rawData.topic.name || '')
+          : (rawData.topic || rawData.title || rawData.week?.topic || '');
+
+        const normalizedTitle = typeof rawData.title === 'object' && rawData.title !== null
+          ? (rawData.title.title || rawData.title.name || '')
+          : (rawData.title || rawData.lessonTitle || normalizedTopic || 'Lesson Plan');
+
+        setLesson({ 
+          id: docSnap.id, 
+          ...rawData,
+          title: normalizedTitle,
+          topic: normalizedTopic,
+          subject: normalizedSubject,
+          grade: normalizedGrade,
+          week: normalizedWeek,
+        } as SavedLesson);
       } else {
         setError("Lesson not found");
       }
@@ -275,7 +304,7 @@ export const ReadyToTeachPage: React.FC<ReadyToTeachPageProps> = ({ lessonId, on
                 {lesson.objectives?.slice(0, 3).map((obj, i) => (
                   <li key={i} className="text-xs text-gray-600 flex gap-2">
                     <span className="text-indigo-400 font-bold">•</span>
-                    {obj}
+                    {typeof obj === 'object' && obj !== null ? (obj as any)?.description || (obj as any)?.objective || (obj as any)?.text || JSON.stringify(obj) : String(obj || '')}
                   </li>
                 ))}
               </ul>
@@ -291,7 +320,7 @@ export const ReadyToTeachPage: React.FC<ReadyToTeachPageProps> = ({ lessonId, on
               <div className="flex flex-wrap gap-2">
                 {lesson.key_vocabulary?.map((vocab, i) => (
                   <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md uppercase tracking-wider">
-                    {vocab}
+                    {typeof vocab === 'object' && vocab !== null ? (vocab as any)?.term || (vocab as any)?.word || JSON.stringify(vocab) : String(vocab || '')}
                   </span>
                 ))}
               </div>

@@ -8,7 +8,8 @@ import {
   Calendar, 
   Layers, 
   Zap, 
-  BookOpen 
+  BookOpen,
+  Presentation
 } from 'lucide-react';
 import { Button, Card, Input, Select } from '../ui';
 import { LessonPlan, WeeklyCurriculumPlan, DailyLessonPlan, LanguageArtsWeeklyPlan, GradeLevel } from '../../types';
@@ -34,6 +35,22 @@ interface SavedPlansViewProps {
   onOpenResource: (res: any) => void;
 }
 
+const getSafeTimestamp = (val: any): number => {
+  if (!val) return 0;
+  if (typeof val.toDate === 'function') return val.toDate().getTime();
+  if (typeof val === 'object' && 'seconds' in val) return val.seconds * 1000;
+  const d = new Date(val).getTime();
+  return isNaN(d) ? 0 : d;
+};
+
+const formatSafeDate = (val: any): string => {
+  if (!val) return 'Recently generated';
+  if (typeof val.toDate === 'function') return val.toDate().toLocaleDateString();
+  if (typeof val === 'object' && 'seconds' in val) return new Date(val.seconds * 1000).toLocaleDateString();
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? 'Recently generated' : d.toLocaleDateString();
+};
+
 export function SavedPlansView({ 
   activeClass,
   plans, 
@@ -54,6 +71,47 @@ export function SavedPlansView({
   onOpenResource
 }: SavedPlansViewProps) {
   const [filter, setFilter] = useState<'all' | 'daily' | 'weekly' | 'resource'>('all');
+
+  const allDisplayResources = React.useMemo(() => {
+    const list: any[] = [];
+    
+    // Standalone generated resources
+    (resources || []).forEach(res => {
+      list.push({
+        id: res.id,
+        title: res.title || `${res.type || 'Resource'} - ${res.grade || res.className || 'Lesson'}`,
+        type: res.type || 'Resource',
+        content: res.content,
+        grade: res.grade || res.className,
+        createdAt: res.createdAt,
+        isFromPlan: false,
+        raw: res
+      });
+    });
+
+    // Materials generated inside saved lesson plans
+    (plans || []).forEach(plan => {
+      if (plan.studentMaterials && Array.isArray(plan.studentMaterials)) {
+        plan.studentMaterials.forEach((mat, idx) => {
+          list.push({
+            id: `plan-mat-${plan.id}-${idx}`,
+            title: mat.title,
+            type: mat.type === 'worksheet' ? 'Worksheet' : mat.type === 'exit_ticket' ? 'Exit Ticket' : mat.type === 'quiz' ? 'Quiz' : 'Student Material',
+            content: mat.content,
+            answerKey: mat.answerKey,
+            grade: plan.grade,
+            subject: plan.subject,
+            planTitle: plan.lessonTitle || (plan as any).title || 'Lesson Plan',
+            createdAt: plan.createdAt || plan.date,
+            isFromPlan: true,
+            plan
+          });
+        });
+      }
+    });
+
+    return list.sort((a, b) => getSafeTimestamp(b.createdAt) - getSafeTimestamp(a.createdAt));
+  }, [resources, plans]);
 
   return (
     <div className="space-y-8">
@@ -113,6 +171,12 @@ export function SavedPlansView({
                             Ready to Teach
                           </span>
                         )}
+                        {(plan as any).powerpointPresentation && (
+                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+                            <Presentation className="w-2.5 h-2.5" />
+                            PowerPoint
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-lg font-bold text-gray-900">{'lessonTitle' in plan ? plan.lessonTitle : (plan as DailyLessonPlan).lesson_title}</h3>
                       <p className="text-sm text-gray-500">{(plan as any).topic} • {new Date(plan.createdAt).toLocaleDateString()}</p>
@@ -152,16 +216,34 @@ export function SavedPlansView({
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">{'days' in plan ? (plan as LanguageArtsWeeklyPlan).grade : (plan as WeeklyCurriculumPlan).grade_level}</span>
-                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">{plan.subject}</span>
+                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">
+                          {(() => {
+                            const val = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).grade : (plan as WeeklyCurriculumPlan).grade_level;
+                            return typeof val === 'object' && val !== null ? (val as any).name || '' : String(val || '');
+                          })()}
+                        </span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">
+                          {typeof plan.subject === 'object' && plan.subject !== null ? (plan.subject as any).name || '' : String(plan.subject || '')}
+                        </span>
                         <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest", 'days' in plan ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700")}>
                           {'days' in plan ? "LA Weekly Scope" : "Weekly"}
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900">{'days' in plan ? (plan as LanguageArtsWeeklyPlan).theme : (plan as WeeklyCurriculumPlan).weekly_topic}</h3>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        {(() => {
+                          const val = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).theme : (plan as WeeklyCurriculumPlan).weekly_topic;
+                          return typeof val === 'object' && val !== null ? (val as any).theme || (val as any).topic || '' : String(val || '');
+                        })()}
+                      </h3>
                       <p className="text-sm text-gray-500">
-                        Cycle {'days' in plan ? (plan as LanguageArtsWeeklyPlan).cycle : (plan as WeeklyCurriculumPlan).cycle} • 
-                        Week {'days' in plan ? (plan as LanguageArtsWeeklyPlan).week : (plan as WeeklyCurriculumPlan).week_number} • 
+                        Cycle {(() => {
+                          const val = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).cycle : (plan as WeeklyCurriculumPlan).cycle;
+                          return typeof val === 'object' && val !== null ? (val as any).cycle || '' : String(val || '');
+                        })()} • 
+                        Week {(() => {
+                          const val = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).week : (plan as WeeklyCurriculumPlan).week_number;
+                          return typeof val === 'object' && val !== null ? (val as any).week_number || (val as any).week || '' : String(val || '');
+                        })()} • 
                         {new Date(plan.createdAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -179,8 +261,28 @@ export function SavedPlansView({
               </div>
             ))}
 
-            {(filter === 'all' || filter === 'resource') && (resources || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((res) => (
-              <div key={res.id} className="p-6 hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onOpenResource(res)}>
+            {(filter === 'all' || filter === 'resource') && allDisplayResources.map((res) => (
+              <div 
+                key={res.id} 
+                className="p-6 hover:bg-gray-50 transition-colors group cursor-pointer" 
+                onClick={() => {
+                  if (res.isFromPlan) {
+                    onOpenResource({
+                      id: res.id,
+                      title: res.title,
+                      type: res.type,
+                      content: res.content,
+                      answerKey: res.answerKey,
+                      grade: res.grade,
+                      subject: res.subject,
+                      createdAt: res.createdAt,
+                      planId: res.plan?.id
+                    });
+                  } else {
+                    onOpenResource(res.raw || res);
+                  }
+                }}
+              >
                 <div className="flex justify-between items-start">
                   <div className="flex gap-4">
                     <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
@@ -188,27 +290,40 @@ export function SavedPlansView({
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-black uppercase tracking-widest">Resource</span>
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-black uppercase tracking-widest">{res.type}</span>
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-black uppercase tracking-widest">
+                          {res.isFromPlan ? 'Lesson Material' : 'Generated Resource'}
+                        </span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-black uppercase tracking-widest">
+                          {res.type}
+                        </span>
+                        {res.grade && (
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">
+                            {typeof res.grade === 'object' ? res.grade?.name || '' : String(res.grade)}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900">{res.type} for Lesson</h3>
-                      <p className="text-sm text-gray-500">{new Date(res.createdAt).toLocaleDateString()}</p>
+                      <h3 className="text-lg font-bold text-gray-900">{res.title}</h3>
+                      <p className="text-sm text-gray-500">
+                        {res.planTitle ? `${res.planTitle} • ` : ''}{formatSafeDate(res.createdAt)}
+                      </p>
                     </div>
                   </div>
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteResource(res.id!);
-                    }}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {!res.isFromPlan && (
+                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteResource(res.id!);
+                      }}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                     <ChevronRight className="w-5 h-5 text-gray-300 mt-2" />
                   </div>
                 </div>
               </div>
             ))}
 
-            {(plans || []).length === 0 && (weeklyPlans || []).length === 0 && (laWeeklyPlans || []).length === 0 && (dailyLessonPlans || []).length === 0 && (resources || []).length === 0 && (
+            {(plans || []).length === 0 && (weeklyPlans || []).length === 0 && (laWeeklyPlans || []).length === 0 && (dailyLessonPlans || []).length === 0 && allDisplayResources.length === 0 && (
               <div className="p-12 text-center space-y-4">
                 <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto text-gray-300">
                   <BookOpen className="w-8 h-8" />

@@ -17,7 +17,12 @@ async function callAi(action: string, params: any) {
 
   if (contentType.includes("application/json")) {
     try {
-      data = await response.json();
+      const rawText = await response.text();
+      if (!rawText || !rawText.trim()) {
+        data = "";
+      } else {
+        data = JSON.parse(rawText);
+      }
     } catch (parseError: any) {
       throw new Error(
         `API returned invalid JSON (${response.status}): ${parseError?.message || "JSON parse error"}`
@@ -65,3 +70,5 @@ export const generateYearlyCurriculumMap = (grade: any, subject: any, curriculum
 export const generateCyclePlan = (map: any, cycleNumber: number, calendar: any) => callAi('generateCyclePlan', { map, cycleNumber, calendar });
 export const generateWeeklyTeachingPlan = (cyclePlan: any, weekNumber: number, calendar: any) => callAi('generateWeeklyTeachingPlan', { cyclePlan, weekNumber, calendar });
 export const generateLessonVideo = (lesson: any, voiceSettings: any, avatarSettings: any) => callAi('generateLessonVideo', { lesson, voiceSettings, avatarSettings });
+export const generatePowerPoint = (lesson: any) => callAi('generatePowerPoint', lesson);
+export { callAi };

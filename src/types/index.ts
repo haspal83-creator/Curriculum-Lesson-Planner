@@ -46,7 +46,33 @@ export const getClassNameFromId = (classId: string): GradeLevel => {
 
 export type Subject = 'Mathematics' | 'Language Arts' | 'Science and Technology' | 'Belizean Studies' | 'HFLE' | 'Spanish' | 'PE' | 'Creative Arts';
 export type OutputStyle = 'Standard Teacher' | 'Detailed Teacher' | 'Observation-Ready' | 'Student-Friendly' | 'Ministry-Style Formal';
-export type TeachingModel = '5E' | 'Competency-based' | 'Inquiry-based' | 'Direct instruction' | 'Universal Design for Learning (UDL)';
+export type TeachingModelSelectionMode = 'auto' | 'manual' | 'hybrid';
+export type TeachingModel =
+  | 'Direct Instruction'
+  | '5E Instructional Model'
+  | '5E'
+  | 'Inquiry-Based Learning'
+  | 'Inquiry-based'
+  | 'Problem-Based Learning'
+  | 'Project-Based Learning'
+  | 'Cooperative Learning'
+  | 'Discovery Learning'
+  | 'Guided Discovery'
+  | 'Demonstration Model'
+  | 'Experiential Learning'
+  | 'Discussion-Based Learning'
+  | 'Differentiated Instruction'
+  | 'Scaffolding'
+  | 'Mastery Learning'
+  | 'Socratic/Question-Based Learning'
+  | 'Learning Stations'
+  | 'Game-Based Learning'
+  | 'Peer Teaching'
+  | 'Flipped Learning'
+  | 'Blended Learning'
+  | 'Competency-based'
+  | 'Universal Design for Learning (UDL)'
+  | (string & {});
 export type LessonStatus = 'Not Started' | 'Planned' | 'Ready to Teach' | 'Taught' | 'Completed' | 'Skipped' | 'Postponed' | 'Needs Review' | 'Partially Taught' | 'Reteach Needed';
 
 export type PacingStatus = 'Ahead' | 'On Track' | 'Slightly Behind' | 'Behind' | 'Urgent Adjustment Needed';
@@ -544,8 +570,54 @@ export interface TeachingResources {
   };
 }
 
+export type PowerPointSlideType = 
+  | 'title' 
+  | 'objectives' 
+  | 'warmup' 
+  | 'introduction' 
+  | 'key_concepts' 
+  | 'teacher_explanation' 
+  | 'worked_examples' 
+  | 'visual_diagram' 
+  | 'guided_practice' 
+  | 'student_activity' 
+  | 'independent_practice' 
+  | 'assessment_exit' 
+  | 'summary';
+
+export interface PowerPointSlide {
+  id: string;
+  slideNumber: number;
+  slideType: PowerPointSlideType;
+  title: string;
+  subtitle?: string;
+  bullets: string[];
+  keyTerms?: { term: string; definition: string }[];
+  teacherPromptOrNotes?: string;
+  visualAidSuggestion?: string;
+  practiceProblems?: { problem: string; solution?: string }[];
+  diagramText?: string;
+  backgroundColor?: string;
+}
+
+export interface PowerPointPresentation {
+  id: string;
+  lessonId?: string;
+  title: string;
+  subtitle?: string;
+  subject: string;
+  grade: string;
+  topic: string;
+  subtopic?: string;
+  theme: 'modern_indigo' | 'emerald_nature' | 'warm_amber' | 'deep_ocean' | 'chalkboard_slate';
+  slides: PowerPointSlide[];
+  generatedAt: string;
+  version: number;
+  isCustomized?: boolean;
+}
+
 export interface LessonPhase {
-  phase: 'Introduction' | 'Explicit Teaching' | 'Guided Practice' | 'Independent Practice' | 'Closure';
+  phase: string;
   timeAllocation: string;
   teacherActions: string[];
   studentActions: string[];
@@ -570,6 +642,14 @@ export interface LessonPhase {
   reflectionPromptExitQuestion?: string;
   keyTakeaway?: string;
   homeworkTransitionLink?: string;
+  whatToLookFor?: string;
+  nextStepGuidance?: string;
+  adaptiveDecisions?: {
+    ifDemonstrateUnderstanding: string;
+    ifSomeStruggle: string;
+    ifManyStruggle: string;
+    ifMasteryEarly: string;
+  };
   ongoingAssessment: {
     observe: string;
     evidenceOfLearning: string;
@@ -825,6 +905,41 @@ export interface LessonPlan {
   lessonTitle: string;
   duration: string;
   teachingModel: TeachingModel;
+  teachingModelSelectionMode?: TeachingModelSelectionMode;
+  teachingModelProfile?: {
+    primaryModel: string;
+    supportingModels: string[];
+    rationale: string;
+    selectionMode?: TeachingModelSelectionMode;
+    modelDetails?: {
+      purpose: string;
+      whenAppropriate: string;
+      teacherRole: string;
+      studentRole: string;
+      recommendedActivities: string[];
+      questioningApproach: string;
+      assessmentApproach: string;
+      differentiationConsiderations: string;
+    };
+    adaptiveDecisions?: {
+      ifDemonstrateUnderstanding: string;
+      ifSomeStruggle: string;
+      ifManyStruggle: string;
+      ifMasteryEarly: string;
+    };
+    phases?: {
+      name: string;
+      timeAllocation: string;
+      teacherAction: string;
+      studentAction: string;
+      questions: string[];
+      materials: string[];
+      whatToLookFor: string;
+      differentiation: string;
+      assessmentCheck: string;
+      nextStepGuidance: string;
+    }[];
+  };
   style: OutputStyle;
   includeTeacherScript: boolean;
   includeDifferentiation: boolean;
@@ -958,6 +1073,9 @@ export interface LessonPlan {
   readingPassageFull?: ReadingPassageResource;
   anchorChartBlueprint?: AnchorChartBlueprint;
   exitTicketPackage?: ExitTicketPackage;
+
+  // PowerPoint Presentation
+  powerpointPresentation?: PowerPointPresentation;
 
   updatedAt?: any;
 }
@@ -1377,11 +1495,16 @@ export interface SavedLesson {
   status: 'draft' | 'ready' | 'taught' | 'completed';
   last_opened: string;
   completion_status: Record<string, boolean>;
+  teachingModel?: TeachingModel;
+  teachingModelProfile?: any;
+  powerpointPresentation?: PowerPointPresentation;
 }
 
 export type LessonResourceType = 
   | 'lesson_overview'
   | 'lesson_plan'
+  | 'presentation'
+  | 'powerpoint'
   | 'ai_video'
   | 'teacher_script'
   | 'board_plan'

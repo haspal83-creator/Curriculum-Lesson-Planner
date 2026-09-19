@@ -39,7 +39,7 @@ export function CurriculumManagerView({
   const [filterCycle, setFilterCycle] = useState<number | 'All'>('All');
 
   const [newEntry, setNewEntry] = useState<Partial<CurriculumEntry>>({
-    academicYear: '2025-2026',
+    academicYear: '2026-2027',
     grade: 'Standard 1',
     subject: 'Mathematics',
     cycle: 1,
@@ -57,7 +57,7 @@ export function CurriculumManagerView({
       item.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.subtopic.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.strand?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesYear = filterAcademicYear === 'All' || (item.academicYear || '2025-2026') === filterAcademicYear;
+    const matchesYear = filterAcademicYear === 'All' || (item.academicYear || '2026-2027') === filterAcademicYear;
     const matchesGrade = filterGrade === 'All' || item.grade === filterGrade;
     const matchesSubject = filterSubject === 'All' || item.subject === filterSubject;
     const matchesCycle = filterCycle === 'All' || item.cycle === filterCycle;
@@ -72,7 +72,7 @@ export function CurriculumManagerView({
 
     const entry: CurriculumEntry = {
       id: Math.random().toString(36).substr(2, 9),
-      academicYear: newEntry.academicYear || '2025-2026',
+      academicYear: newEntry.academicYear || '2026-2027',
       grade: newEntry.grade as GradeLevel,
       subject: newEntry.subject as Subject,
       cycle: newEntry.cycle || 1,
@@ -89,7 +89,7 @@ export function CurriculumManagerView({
     await onSave([entry]);
     setIsAdding(false);
     setNewEntry({
-      academicYear: '2025-2026',
+      academicYear: '2026-2027',
       grade: 'Standard 1',
       subject: 'Mathematics',
       cycle: 1,
@@ -143,12 +143,12 @@ export function CurriculumManagerView({
         <Select 
           options={[
             { label: 'All Years', value: 'All' },
-            { label: '2025-2026', value: '2025-2026' },
-            { label: '2026-2027', value: '2026-2027' }
+            { label: '2026-2027 (Current)', value: '2026-2027' },
+            { label: '2025-2026', value: '2025-2026' }
           ]} 
           value={filterAcademicYear} 
           onChange={(val) => setFilterAcademicYear(val)} 
-          className="w-36"
+          className="w-44"
         />
         <Select 
           options={[
@@ -214,10 +214,10 @@ export function CurriculumManagerView({
                   <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
                   <Select 
                     options={[
-                      { label: '2025-2026', value: '2025-2026' },
-                      { label: '2026-2027', value: '2026-2027' }
+                      { label: '2026-2027 (Current)', value: '2026-2027' },
+                      { label: '2025-2026', value: '2025-2026' }
                     ]} 
-                    value={newEntry.academicYear || '2025-2026'} 
+                    value={newEntry.academicYear || '2026-2027'} 
                     onChange={(val) => setNewEntry({ ...newEntry, academicYear: val })} 
                   />
                 </div>

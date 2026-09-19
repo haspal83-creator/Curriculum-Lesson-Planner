@@ -70,13 +70,13 @@ export const AcademicCalendarManager: React.FC<AcademicCalendarManagerProps> = (
         <div className="flex gap-3">
           <Button 
             onClick={() => onUpdate({
-              schoolYear: '2025-2026',
-              startDate: '2025-09-01',
-              endDate: '2026-06-30',
+              schoolYear: '2026-2027',
+              startDate: '2026-09-01',
+              endDate: '2027-06-30',
               cycles: [
-                { number: 1, label: 'Cycle 1', startDate: '2025-09-01', endDate: '2025-11-30' },
-                { number: 2, label: 'Cycle 2', startDate: '2025-12-01', endDate: '2026-03-15' },
-                { number: 3, label: 'Cycle 3', startDate: '2026-03-16', endDate: '2026-06-30' }
+                { number: 1, label: 'Cycle 1', startDate: '2026-09-01', endDate: '2026-11-30' },
+                { number: 2, label: 'Cycle 2', startDate: '2026-12-01', endDate: '2027-03-15' },
+                { number: 3, label: 'Cycle 3', startDate: '2027-03-16', endDate: '2027-06-30' }
               ],
               events: [],
               createdBy: 'System'

@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { normalizeLearningObjectives } from './learningObjectivesHelper';
 import { enforceLanguageArtsPurityAndQuality, isLanguageArtsSubject } from './languageArtsQualityGate';
+import { parseAndNormalizeWorksheet, formatWorksheetMarkdown } from './worksheetSystem';
 
 // ==========================================
 // CONSTANTS & SCHOOL POLICIES
@@ -205,15 +206,23 @@ export interface ResolvedLessonResources {
   worksheet?: {
     hasWorksheet: boolean;
     title: string;
+    schoolName?: string;
+    grade?: string;
+    subject?: string;
+    topic?: string;
     instructions: string;
+    totalPoints?: number;
+    totalQuestions?: number;
     sections: {
+      sectionLetter?: string;
       sectionTitle: string;
       instructions: string;
-      questions: { number: string | number; prompt: string; sampleResponse?: string }[];
+      questions: { number: string | number; prompt: string; sampleResponse?: string; options?: string[]; lines?: number }[];
     }[];
     answerKey: {
+      sectionLetter?: string;
       sectionTitle: string;
-      answers: { number: string | number; solution: string }[];
+      answers: { number: string | number; solution: string; criteria?: string }[];
     }[];
   };
 
@@ -356,64 +365,72 @@ const TEST_CASE_ANCHOR_CHART = {
 const TEST_CASE_WORKSHEET = {
   title: "Student Practice Worksheet: Advanced Word Analysis in Action",
   instructions: "Complete all three sections below. Apply morphological analysis to dissect words, interpret their meanings in context, and construct new academic terms.",
+  totalPoints: 12,
+  totalQuestions: 12,
   sections: [
     {
-      sectionTitle: "Part 1: Morphological Decomposition",
+      sectionLetter: "A",
+      sectionTitle: "Understanding the Concept: Morphological Decomposition",
       instructions: "Break down each target word from 'Guardians of the Belize Barrier Reef' into its component parts and define it.",
       questions: [
-        { number: "1.1", prompt: "Word: international | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
-        { number: "1.2", prompt: "Word: unsustainable | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
-        { number: "1.3", prompt: "Word: subtropical | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
-        { number: "1.4", prompt: "Word: regeneration | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
-        { number: "1.5", prompt: "Word: anti-pollution | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" }
+        { number: 1, prompt: "Word: international | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
+        { number: 2, prompt: "Word: unsustainable | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
+        { number: 3, prompt: "Word: subtropical | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
+        { number: 4, prompt: "Word: regeneration | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" },
+        { number: 5, prompt: "Word: anti-pollution | Prefix: ______ | Root: ______ | Suffix: ______ | Meaning: ____________________________________" }
       ]
     },
     {
-      sectionTitle: "Part 2: Contextual Application",
+      sectionLetter: "B",
+      sectionTitle: "Apply What You Know: Contextual Application",
       instructions: "Fill in each blank using the appropriate word from the Word Bank: [biodiversity, preservation, interconnected, extraordinary, re-populate].",
       questions: [
-        { number: "2.1", prompt: "Marine rangers work hard to ensure the long-term ____________________ of the South Water Caye Marine Reserve." },
-        { number: "2.2", prompt: "Because coral reef organisms are ____________________, harm to one species impacts the entire habitat." },
-        { number: "2.3", prompt: "The barrier reef exhibits an ____________________ variety of colorful aquatic life." },
-        { number: "2.4", prompt: "Coral nurseries help to ____________________ damaged reef sections with young, healthy coral colonies." },
-        { number: "2.5", prompt: "Protecting marine ____________________ ensures that Belizean waters remain healthy for generations." }
+        { number: 6, prompt: "Marine rangers work hard to ensure the long-term ____________________ of the South Water Caye Marine Reserve." },
+        { number: 7, prompt: "Because coral reef organisms are ____________________, harm to one species impacts the entire habitat." },
+        { number: 8, prompt: "The barrier reef exhibits an ____________________ variety of colorful aquatic life." },
+        { number: 9, prompt: "Coral nurseries help to ____________________ damaged reef sections with young, healthy coral colonies." },
+        { number: 10, prompt: "Protecting marine ____________________ ensures that Belizean waters remain healthy for generations." }
       ]
     },
     {
-      sectionTitle: "Part 3: Word Construction & Application",
+      sectionLetter: "C",
+      sectionTitle: "Reasoning & Word Construction",
       instructions: "Use the prefixes and suffixes studied today to build new words and write one complete sentence.",
       questions: [
-        { number: "3.1", prompt: "Combine the prefix 'trans-' with the root 'form' and suffix '-ation' to write the new word: ____________________" },
-        { number: "3.2", prompt: "Write an authentic sentence situated in Belize using your new word: ________________________________________________" }
+        { number: 11, prompt: "Combine the prefix 'trans-' with the root 'form' and suffix '-ation' to write the new word: ____________________" },
+        { number: 12, prompt: "Write an authentic sentence situated in Belize using your new word: ________________________________________________" }
       ]
     }
   ],
   answerKey: [
     {
-      sectionTitle: "Part 1 Answer Key",
+      sectionLetter: "A",
+      sectionTitle: "Understanding the Concept Answer Key",
       answers: [
-        { number: "1.1", solution: "Prefix: inter- | Root: nation | Suffix: -al | Meaning: Involving or situated between multiple nations." },
-        { number: "1.2", solution: "Prefix: un- | Root: sustain | Suffix: -able | Meaning: Not capable of being maintained without depletion." },
-        { number: "1.3", solution: "Prefix: sub- | Root: tropic | Suffix: -al | Meaning: Pertaining to regions just below or bordering the tropics." },
-        { number: "1.4", solution: "Prefix: re- | Root: generate | Suffix: -ion | Meaning: The act or process of renewing and restoring." },
-        { number: "1.5", solution: "Prefix: anti- | Root: pollute | Suffix: -ion | Meaning: Action or rules opposed to environmental contamination." }
+        { number: 1, solution: "Prefix: inter- | Root: nation | Suffix: -al | Meaning: Involving or situated between multiple nations." },
+        { number: 2, solution: "Prefix: un- | Root: sustain | Suffix: -able | Meaning: Not capable of being maintained without depletion." },
+        { number: 3, solution: "Prefix: sub- | Root: tropic | Suffix: -al | Meaning: Pertaining to regions just below or bordering the tropics." },
+        { number: 4, solution: "Prefix: re- | Root: generate | Suffix: -ion | Meaning: The act or process of renewing and restoring." },
+        { number: 5, solution: "Prefix: anti- | Root: pollute | Suffix: -ion | Meaning: Action or rules opposed to environmental contamination." }
       ]
     },
     {
-      sectionTitle: "Part 2 Answer Key",
+      sectionLetter: "B",
+      sectionTitle: "Apply What You Know Answer Key",
       answers: [
-        { number: "2.1", solution: "preservation" },
-        { number: "2.2", solution: "interconnected" },
-        { number: "2.3", solution: "extraordinary" },
-        { number: "2.4", solution: "re-populate" },
-        { number: "2.5", solution: "biodiversity" }
+        { number: 6, solution: "preservation" },
+        { number: 7, solution: "interconnected" },
+        { number: 8, solution: "extraordinary" },
+        { number: 9, solution: "re-populate" },
+        { number: 10, solution: "biodiversity" }
       ]
     },
     {
-      sectionTitle: "Part 3 Answer Key",
+      sectionLetter: "C",
+      sectionTitle: "Reasoning & Word Construction Answer Key",
       answers: [
-        { number: "3.1", solution: "transformation" },
-        { number: "3.2", solution: "Sample: The successful coral nursery brought a visible transformation to the degraded reef near Placencia." }
+        { number: 11, solution: "transformation" },
+        { number: 12, solution: "Sample: The successful coral nursery brought a visible transformation to the degraded reef near Placencia." }
       ]
     }
   ]
@@ -953,47 +970,78 @@ export function resolveCompleteLessonResources(
   let worksheetData: any = null;
   const foundWorksheetMaterial = plan.studentMaterials?.find(m => m.type === 'worksheet');
   if (foundWorksheetMaterial && foundWorksheetMaterial.content) {
+    const combinedContent = foundWorksheetMaterial.answerKey
+      ? `${foundWorksheetMaterial.content}\n\n### TEACHER ANSWER KEY & SCORING GUIDE\n${foundWorksheetMaterial.answerKey}`
+      : foundWorksheetMaterial.content;
+    const normalized = parseAndNormalizeWorksheet(combinedContent, {
+      schoolName: school,
+      grade: plan.grade || 'Standard 6',
+      subject: plan.subject || 'English Language',
+      topic,
+      title: sanitizeExportText(foundWorksheetMaterial.title || `Student Practice Worksheet: ${topic}`)
+    });
     worksheetData = {
       hasWorksheet: true,
-      title: sanitizeExportText(foundWorksheetMaterial.title || "Student Practice Worksheet"),
-      instructions: "Complete all assigned questions independently using learned strategies.",
-      sections: [
-        {
-          sectionTitle: "Practice Tasks",
-          instructions: "Solve each question carefully.",
-          questions: toCleanBullets(foundWorksheetMaterial.content).map((q, idx) => ({
-            number: idx + 1,
-            prompt: q
-          }))
-        }
-      ],
-      answerKey: foundWorksheetMaterial.answerKey ? [
-        {
-          sectionTitle: "Worksheet Answer Key",
-          answers: toCleanBullets(foundWorksheetMaterial.answerKey).map((a, idx) => ({
-            number: idx + 1,
-            solution: a
-          }))
-        }
-      ] : []
+      title: normalized.title,
+      schoolName: normalized.schoolName,
+      grade: normalized.grade,
+      subject: normalized.subject,
+      topic: normalized.topic,
+      instructions: normalized.instructions,
+      totalPoints: normalized.totalPoints,
+      totalQuestions: normalized.totalPoints,
+      sections: normalized.sections.map(s => ({
+        sectionLetter: s.letter,
+        sectionTitle: s.title,
+        instructions: s.instructions,
+        questions: s.tasks.map(t => ({
+          number: t.number,
+          prompt: t.prompt,
+          options: t.options,
+          lines: t.lines
+        }))
+      })),
+      answerKey: normalized.answerKey.map(ak => ({
+        sectionLetter: ak.sectionLetter,
+        sectionTitle: ak.sectionTitle,
+        answers: ak.answers.map(a => ({
+          number: a.number,
+          solution: a.solution,
+          criteria: a.criteria
+        }))
+      }))
     };
   } else if (isBenchmarkTestCase) {
     worksheetData = {
       hasWorksheet: true,
       title: TEST_CASE_WORKSHEET.title,
+      schoolName: school,
+      grade: plan.grade || 'Standard 6',
+      subject: plan.subject || 'English Language',
+      topic,
       instructions: TEST_CASE_WORKSHEET.instructions,
+      totalPoints: TEST_CASE_WORKSHEET.totalPoints,
+      totalQuestions: TEST_CASE_WORKSHEET.totalQuestions,
       sections: TEST_CASE_WORKSHEET.sections,
       answerKey: TEST_CASE_WORKSHEET.answerKey
     };
   } else {
-    // Generate standard worksheet from independent practice tasks
+    // Generate standard worksheet from independent practice tasks using the global standard
     const indepTasks = toCleanBullets(plan.independentPractice || plan.executionBoard?.[3]?.studentActions || [`Apply knowledge of ${topic} to solve core practice problems.`]);
+    const totalQ = indepTasks.length;
     worksheetData = {
       hasWorksheet: true,
       title: `Student Practice Worksheet: ${topic}`,
+      schoolName: school,
+      grade: plan.grade || 'Standard 6',
+      subject: plan.subject || 'English Language',
+      topic,
       instructions: `Complete the practice tasks below. Show all procedural steps and justify your answers.`,
+      totalPoints: totalQ,
+      totalQuestions: totalQ,
       sections: [
         {
+          sectionLetter: "A",
           sectionTitle: "Core Practice Problems",
           instructions: `Work through each question carefully.`,
           questions: indepTasks.map((t, idx) => ({
@@ -1004,7 +1052,8 @@ export function resolveCompleteLessonResources(
       ],
       answerKey: [
         {
-          sectionTitle: "Model Solutions & Evaluation Rationale",
+          sectionLetter: "A",
+          sectionTitle: "Core Practice Problems Answer Key",
           answers: indepTasks.map((_, idx) => ({
             number: idx + 1,
             solution: `Accurate application of standard procedural methods and clear conceptual justification.`

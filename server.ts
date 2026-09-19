@@ -36,7 +36,7 @@ async function startServer() {
   });
 
   // API Routes
-  app.all("/api/ai/generate", (req, res) => {
+  app.all(["/api/ai/generate", "/api/generate"], (req, res) => {
     return generateHandler(req as any, res as any);
   });
 

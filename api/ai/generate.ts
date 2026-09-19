@@ -1,7 +1,41 @@
 import 'dotenv/config';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as geminiService from '../../src/services/gemini.implementation';
+import * as staticGeminiService from '../../src/services/gemini.implementation';
 import { generateLessonResources } from '../../src/lib/gemini';
+
+// Safe module resolution & diagnostic handling (Task 13 & 14)
+let geminiServiceInstance: any = staticGeminiService;
+let moduleResolutionDiagnostic: string | null = null;
+
+async function getGeminiService() {
+  if (geminiServiceInstance && typeof geminiServiceInstance.generateLessonPlan === 'function') {
+    return geminiServiceInstance;
+  }
+
+  try {
+    const mod: any = await import('../../src/services/gemini.implementation');
+    geminiServiceInstance = mod.default || mod;
+    return geminiServiceInstance;
+  } catch (err1: any) {
+    try {
+      // @ts-ignore
+      const mod: any = await import('../../src/services/gemini.implementation.js');
+      geminiServiceInstance = mod.default || mod;
+      return geminiServiceInstance;
+    } catch (err2: any) {
+      try {
+        // @ts-ignore
+        const mod: any = await import('../../src/services/gemini.implementation.ts');
+        geminiServiceInstance = mod.default || mod;
+        return geminiServiceInstance;
+      } catch (err3: any) {
+        moduleResolutionDiagnostic = `Failed to load Gemini service module. Resolution errors: [path: ${err1?.message || 'unknown'}], [.js: ${err2?.message || 'unknown'}], [.ts: ${err3?.message || 'unknown'}]`;
+        console.error('[DIAGNOSTIC ERROR]', moduleResolutionDiagnostic);
+        throw new Error(moduleResolutionDiagnostic);
+      }
+    }
+  }
+}
 
 export default async function handler(
   req: VercelRequest,
@@ -60,6 +94,19 @@ export default async function handler(
     return res.status(500).json({
       success: false,
       error: 'GEMINI_API_KEY is not configured on the server.'
+    });
+  }
+
+  // Task 14 — Verify Gemini service module can be loaded
+  let geminiService: any;
+  try {
+    geminiService = await getGeminiService();
+  } catch (modErr: any) {
+    console.error('Module load failure in /api/ai/generate:', modErr?.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to load internal Gemini service module.',
+      diagnostic: modErr?.message || 'ERR_MODULE_NOT_FOUND: Unable to resolve gemini.implementation'
     });
   }
 
@@ -223,6 +270,11 @@ export default async function handler(
         );
         break;
 
+      case 'generatePowerPoint':
+      case 'rebuildPowerPoint':
+        result = await geminiService.generatePowerPointPresentation(actionParams);
+        break;
+
       default:
         return res.status(400).json({
           success: false,
@@ -230,7 +282,8 @@ export default async function handler(
         });
     }
 
-    return res.status(200).json(result);
+    const payload = result !== undefined && result !== null ? result : "";
+    return res.status(200).json(payload);
 
   } catch (error: any) {
     console.error('Lesson generation API error:', {

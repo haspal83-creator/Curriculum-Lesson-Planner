@@ -25,7 +25,7 @@ export function CycleUnitPlansView({
   setActiveTab, 
   setPrefillData 
 }: CycleUnitPlansViewProps) {
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2025-2026');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2026-2027');
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>('Standard 1');
   const [selectedSubject, setSelectedSubject] = useState<Subject>('Mathematics');
 
@@ -54,12 +54,12 @@ export function CycleUnitPlansView({
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
             <Select 
               options={[
-                { label: '2025-2026', value: '2025-2026' },
-                { label: '2026-2027', value: '2026-2027' }
+                { label: '2026-2027 (Current)', value: '2026-2027' },
+                { label: '2025-2026', value: '2025-2026' }
               ]} 
               value={selectedAcademicYear} 
               onChange={(val) => setSelectedAcademicYear(val)} 
-              className="w-36"
+              className="w-44"
             />
           </div>
           <div className="space-y-1">

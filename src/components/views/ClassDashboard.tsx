@@ -25,6 +25,7 @@ import {
   OutcomeMastery,
   YearlyCalendarPlan
 } from '../../types';
+import { normalizeGrade } from '../../services/curriculumFilterService';
 
 interface ClassDashboardProps {
   activeClass: GradeLevel;
@@ -50,10 +51,10 @@ export const ClassDashboard: React.FC<ClassDashboardProps> = ({
   onSwitchClass
 }) => {
   const stats = useMemo(() => {
-    const classCurriculum = (curriculum || []).filter(c => c.grade === activeClass);
-    const classLessons = (lessonPlans || []).filter(p => p.grade === activeClass);
-    const classMastery = (outcomeMastery || []).filter(m => m.grade === activeClass);
-    const classCalendar = (yearlyCalendars || []).find(c => c.grade === activeClass);
+    const classCurriculum = (curriculum || []).filter(c => normalizeGrade(c.grade || c.className || (c as any).grade_level) === activeClass);
+    const classLessons = (lessonPlans || []).filter(p => normalizeGrade(p.grade || (p as any).grade_level) === activeClass);
+    const classMastery = (outcomeMastery || []).filter(m => normalizeGrade(m.grade || (m as any).grade_level) === activeClass);
+    const classCalendar = (yearlyCalendars || []).find(c => normalizeGrade(c.grade) === activeClass);
 
     let progress = 0;
     if (classCalendar) {
@@ -239,7 +240,7 @@ export const ClassDashboard: React.FC<ClassDashboardProps> = ({
             </h3>
             <div className="space-y-3">
               <CheckItem label="Upload Curriculum Guide" completed={stats.curriculumCount > 0} />
-              <CheckItem label="Generate Yearly Map" completed={(yearlyCalendars || []).some(c => c.grade === activeClass)} />
+              <CheckItem label="Generate Yearly Map" completed={(yearlyCalendars || []).some(c => normalizeGrade(c.grade) === activeClass)} />
               <CheckItem label="Set Up Weekly Plan" completed={(weeklyPlans || []).length > 0} />
               <CheckItem label="Assess First Lesson" completed={(outcomeMastery || []).some(m => m.grade === activeClass)} />
             </div>

@@ -51,7 +51,9 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-gray-900">{lesson.title}</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                {typeof lesson.title === 'object' ? (lesson.title as any)?.title || (lesson.title as any)?.name || (lesson as any).topic || 'Lesson' : (lesson.title || (lesson as any).topic || 'Lesson')}
+              </h1>
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
                 lesson.status === 'ready' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"
@@ -66,25 +68,29 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
               )}
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-              <span className="font-medium text-indigo-600">{lesson.subject}</span>
+              <span className="font-medium text-indigo-600">
+                {typeof lesson.subject === 'object' ? (lesson.subject as any)?.name || (lesson.subject as any)?.subject || 'Subject' : (lesson.subject || 'Subject')}
+              </span>
               <span>•</span>
-              <span>{lesson.class_id}</span>
+              <span>
+                {typeof lesson.class_id === 'object' ? (lesson.class_id as any)?.name || (lesson.class_id as any)?.grade || 'Class' : (lesson.class_id || lesson.grade || 'Class')}
+              </span>
               {lesson.cycle && (
                 <>
                   <span>•</span>
-                  <span>Cycle {lesson.cycle}</span>
+                  <span>Cycle {typeof lesson.cycle === 'object' ? (lesson.cycle as any)?.cycle || (lesson.cycle as any)?.number || '' : lesson.cycle}</span>
                 </>
               )}
               {lesson.week && (
                 <>
                   <span>•</span>
-                  <span>Week {lesson.week}</span>
+                  <span>Week {typeof lesson.week === 'object' ? (lesson.week as any)?.week_number || (lesson.week as any)?.week || (lesson.week as any)?.number || (lesson.week as any)?.topic || '' : lesson.week}</span>
                 </>
               )}
               {lesson.duration && (
                 <>
                   <span>•</span>
-                  <span>{lesson.duration}</span>
+                  <span>{typeof lesson.duration === 'object' ? (lesson.duration as any)?.duration || '' : lesson.duration}</span>
                 </>
               )}
             </div>

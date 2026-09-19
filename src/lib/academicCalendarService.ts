@@ -58,26 +58,55 @@ export async function seedAcademicCalendar() {
 
 export async function generateWeeklyPlans(userId: string, grade: string, subject: string) {
   const classId = getClassId(grade);
-  const cyclesSnap = await getDocs(collection(db, 'cycles'));
-  const holidaysSnap = await getDocs(collection(db, 'holidays'));
-  const vacationsSnap = await getDocs(collection(db, 'vacations'));
+  let cycles: any[] = [];
+  let vacations: any[] = [];
 
-  const cycles = cyclesSnap.docs.map(d => d.data()).sort((a, b) => a.cycle_number - b.cycle_number);
-  const vacations = vacationsSnap.docs.map(d => ({
-    start: (d.data().start_date as any).toDate(),
-    end: (d.data().end_date as any).toDate()
-  }));
+  try {
+    const cyclesSnap = await getDocs(collection(db, 'cycles'));
+    cycles = cyclesSnap.docs.map(d => d.data()).sort((a, b) => a.cycle_number - b.cycle_number);
+  } catch (err) {
+    console.warn("Could not fetch cycles from Firestore, using default academic data:", err);
+  }
 
-  const existingPlansQuery = query(
-    collection(db, 'weekly_plans'),
-    where('userId', '==', userId),
-    where('classId', '==', classId),
-    where('subject', '==', subject)
-  );
-  const existingPlansSnap = await getDocs(existingPlansQuery);
-  const deleteBatch = writeBatch(db);
-  existingPlansSnap.docs.forEach(d => deleteBatch.delete(d.ref));
-  await deleteBatch.commit();
+  if (cycles.length === 0) {
+    cycles = BELIZE_ACADEMIC_DATA.cycles.map(c => ({
+      cycle_number: c.number,
+      start_date: { toDate: () => new Date(c.start) },
+      end_date: { toDate: () => new Date(c.end) }
+    }));
+  }
+
+  try {
+    const vacationsSnap = await getDocs(collection(db, 'vacations'));
+    vacations = vacationsSnap.docs.map(d => ({
+      start: (d.data().start_date as any).toDate(),
+      end: (d.data().end_date as any).toDate()
+    }));
+  } catch (err) {
+    console.warn("Could not fetch vacations from Firestore, using default academic data:", err);
+  }
+
+  if (vacations.length === 0) {
+    vacations = BELIZE_ACADEMIC_DATA.vacations.map(v => ({
+      start: new Date(v.start),
+      end: new Date(v.end)
+    }));
+  }
+
+  try {
+    const existingPlansQuery = query(
+      collection(db, 'weekly_plans'),
+      where('userId', '==', userId),
+      where('classId', '==', classId),
+      where('subject', '==', subject)
+    );
+    const existingPlansSnap = await getDocs(existingPlansQuery);
+    const deleteBatch = writeBatch(db);
+    existingPlansSnap.docs.forEach(d => deleteBatch.delete(d.ref));
+    await deleteBatch.commit();
+  } catch (err) {
+    console.warn("Error cleaning up existing plans:", err);
+  }
 
   const finalBatch = writeBatch(db);
   let overallWeekCounter = 1;

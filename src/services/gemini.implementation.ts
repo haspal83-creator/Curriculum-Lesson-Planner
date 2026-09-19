@@ -34,6 +34,14 @@ import {
 } from "../types";
 
 import { callWithRetry } from "../lib/utils";
+import { buildDeterministicPowerPoint, getThemeForSubject } from "../lib/powerpointService";
+import { 
+  parseAndNormalizeWorksheet, 
+  formatWorksheetMarkdown, 
+  formatAnswerKeyMarkdown, 
+  buildGlobalWorksheetAIPrompt,
+  DEFAULT_SCHOOL_NAME 
+} from "../lib/worksheetSystem";
 
 const safeFormat = (dateStr: string | undefined | null, formatStr: string): string => {
   if (!dateStr) return '';
@@ -411,7 +419,7 @@ export const generateWeeklyBreakdown = async (params: {
   curriculumUnit?: CurriculumUnit;
 }): Promise<Partial<WeeklyCurriculumPlan>> => {
   validateGeminiConfig();
-  const { grade, subject, cycle, week, numDays, entries, previousWeeks = [], calendarDays = [], curriculumUnit, academicYear = '2025-2026' } = params;
+  const { grade, subject, cycle, week, numDays, entries, previousWeeks = [], calendarDays = [], curriculumUnit, academicYear = '2026-2027' } = params;
 
   // Filter for actual teaching days in this week
   const teachingDaysInWeek = calendarDays.filter(d => d.week === week && d.isTeachingDay);
@@ -557,7 +565,7 @@ export const generateLessonPlan = async (params: {
   curriculumUnit?: CurriculumUnit;
 }) => {
   validateGeminiConfig();
-  const { grade, subject, cycle, week, day, topic, subtopic, lessonTitle, objectives, learningOutcome, duration, teachingModel, specialNotes, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [], curriculumUnit, academicYear = '2025-2026' } = params;
+  const { grade, subject, cycle, week, day, topic, subtopic, lessonTitle, objectives, learningOutcome, duration, teachingModel, specialNotes, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [], curriculumUnit, academicYear = '2026-2027' } = params;
 
   const teachingDays = calendarDays.filter(d => d.isTeachingDay);
   const teachingDay = teachingDays[day - 1];
@@ -1010,7 +1018,7 @@ export const generateLanguageArtsDailyPlan = async (params: {
     style = 'Standard Teacher', 
     calendarDays = [], 
     curriculumUnit, 
-    academicYear = '2025-2026',
+    academicYear = '2026-2027',
     components 
   } = params;
 
@@ -1893,37 +1901,112 @@ Ensure the content is age-appropriate for ${grade} and aligns with the Belizean 
   return JSON.parse(cleanJson(response.text));
 };
 
-export const generateResource = async (type: string, lessonContext: LessonPlan, options: any = {}) => {
-  const prompt = `Generate a high-quality ${type} based on the following lesson context:
-Subject: ${lessonContext.subject}
-Grade: ${lessonContext.grade}
-Topic: ${lessonContext.topic}
-Sub-topic: ${lessonContext.subtopic}
-General Objective: ${lessonContext.generalObjective || ''}
-Specific Objectives: ${(lessonContext.specificObjectives || lessonContext.learningObjectivesBoard?.successCriteria || []).join(', ')}
+export const generateResource = async (type: string, lessonContext: any, options: any = {}) => {
+  const subject = typeof lessonContext?.subject === 'object' 
+    ? (lessonContext.subject?.name || lessonContext.subject?.subject) 
+    : (lessonContext?.subject || lessonContext?.week?.subject || 'General');
+
+  const grade = typeof lessonContext?.grade === 'object'
+    ? (lessonContext.grade?.name || lessonContext.grade?.grade)
+    : (lessonContext?.grade || lessonContext?.class_id || lessonContext?.week?.grade || 'Standard 4');
+
+  const topic = typeof lessonContext?.topic === 'object'
+    ? (lessonContext.topic?.topic || lessonContext.topic?.name)
+    : (lessonContext?.topic || lessonContext?.title || lessonContext?.week?.topic || type);
+
+  const subtopic = lessonContext?.subtopic || lessonContext?.sub_topic || '';
+  const generalObjective = lessonContext?.generalObjective || lessonContext?.learningOutcome || '';
+  
+  const rawObjectives = lessonContext?.specificObjectives 
+    || lessonContext?.learningObjectivesBoard?.successCriteria 
+    || lessonContext?.objectives 
+    || lessonContext?.learning_outcomes
+    || [];
+  const specificObjectives = Array.isArray(rawObjectives) ? rawObjectives.join(', ') : String(rawObjectives || '');
+
+  const isWorksheetType = type === 'Worksheet' || type === 'worksheets' || type.toLowerCase().includes('worksheet') || type.toLowerCase() === 'quiz';
+
+  const prompt = isWorksheetType 
+    ? buildGlobalWorksheetAIPrompt({
+        subject,
+        grade,
+        topic,
+        subtopic,
+        generalObjective,
+        specificObjectives
+      })
+    : `Generate a high-quality ${type} based on the following lesson context:
+Subject: ${subject}
+Grade: ${grade}
+Topic: ${topic}
+Sub-topic: ${subtopic}
+General Objective: ${generalObjective}
+Specific Objectives: ${specificObjectives}
 
 Requirements for ${type}:
-${type === 'Worksheet' ? '- Age-appropriate, visually simple, varied question types (MCQ, Fill-in-blanks, matching, word problems), progressive difficulty, includes instructions and optional answer key.' : ''}
-${type === 'Quiz' || type === 'Test' ? '- Professional assessment, marks included, varied question types, balanced difficulty, curriculum-aligned, includes clear instructions and answer key.' : ''}
+${type === 'demonstration' || type === 'Demonstration' ? '- Clear teacher modeling guide ("I Do" stage). Detail exact teacher actions, think-aloud narrative, physical demonstration steps, what to write on the board, and student observation checks.' : ''}
+${type === 'Quiz' || type === 'Test' || type === 'assessment' ? '- Professional assessment, marks included, varied question types, balanced difficulty, curriculum-aligned, includes clear instructions and answer key.' : ''}
 ${type === 'Notebook Notes' ? '- Clear, simple, short enough to copy, well-organized, includes heading, key definitions, examples, and summary. Board-style formatting.' : ''}
 ${type === 'PowerPoint Outline' ? '- Concise bullet points, slide titles, interactive prompts, student participation moments. Include slides for: Title, Objective, Warm-up, Teaching content, Example/Practice, Activity, Review, Exit Ticket.' : ''}
-${type === 'Homework' || type === 'Exit Ticket' ? '- Short, focused, realistic, relevant, manageable, skill-based.' : ''}
+${type === 'Homework' || type === 'homework' || type === 'Exit Ticket' ? '- Short, focused, realistic, relevant, manageable, skill-based.' : ''}
 ${type === 'Rubric' || type === 'Checklist' ? '- Structured, teacher-friendly format. Rubric: criteria, levels, descriptors. Checklist: skills/behaviors, yes/no/rating, comments.' : ''}
+${type === 'teacher_script' ? '- Word-for-word teacher script for direct instruction, think-alouds, guided questioning, and checking for understanding.' : ''}
+${type === 'board_plan' ? '- Exact board layout with sections for Date, Topic, Objectives, Key Vocabulary, Modeled Examples, and Student Practice space.' : ''}
+${type === 'visual_aids' ? '- Clear descriptions of charts, diagrams, anchor charts, or visual organizers for the teacher to draw or display.' : ''}
+${type === 'materials_prep' ? '- Comprehensive checklist of hands-on materials, printed handouts, technology, and advance preparation needed.' : ''}
+${type === 'differentiation' ? '- Tiered supports for struggling learners, on-level students, and advanced/early finishers.' : ''}
+${type === 'classroom_management' ? '- Proactive behavioral cues, transition protocols, pacing guide, and grouping strategies for this specific lesson.' : ''}
+${type === 'lesson_overview' ? '- Executive summary of the lesson flow, pacing milestones, essential questions, and success criteria.' : ''}
 
 Style: ${options.style || 'Standard Teacher'}
 Include Answer Key: ${options.includeAnswerKey ? 'Yes' : 'No'}
 
 Output the content in Markdown format.`;
 
-  const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION
-    }
-  }));
+  try {
+    const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION
+      }
+    }));
 
-  return response.text;
+    const text = (response as any)?.text || (response as any)?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (text && text.trim()) {
+      if (isWorksheetType) {
+        // Enforce the Global Worksheet Standard on AI output
+        const normalized = parseAndNormalizeWorksheet(text, {
+          schoolName: DEFAULT_SCHOOL_NAME,
+          grade,
+          subject,
+          topic,
+          subtopic,
+          title: type.toLowerCase() === 'quiz' ? `Assessment Quiz: ${topic}` : `Student Practice Worksheet: ${topic}`
+        });
+        return `${formatWorksheetMarkdown(normalized)}\n\n${formatAnswerKeyMarkdown(normalized)}`;
+      }
+      return text;
+    }
+  } catch (error: any) {
+    console.error(`Error generating resource ${type}:`, error?.message);
+  }
+
+  // Graceful fallback markdown so the endpoint never returns undefined or causes an empty 200 response
+  if (isWorksheetType) {
+    const fallbackWs = parseAndNormalizeWorksheet('', {
+      schoolName: DEFAULT_SCHOOL_NAME,
+      grade,
+      subject,
+      topic,
+      subtopic,
+      title: type.toLowerCase() === 'quiz' ? `Assessment Quiz: ${topic}` : `Student Practice Worksheet: ${topic}`
+    });
+    return `${formatWorksheetMarkdown(fallbackWs)}\n\n${formatAnswerKeyMarkdown(fallbackWs)}`;
+  }
+
+  const cleanTypeTitle = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return `# ${cleanTypeTitle}: ${topic}\n\n**Grade:** ${grade} | **Subject:** ${subject}\n\n### Teacher Guidance (${cleanTypeTitle})\n\n1. **Objective Modeling:** Clearly articulate the learning goal and model the step-by-step thinking for students.\n2. **Demonstration & Instruction:** Guide students through the core steps of "${topic}" with concrete visual examples and think-aloud modeling.\n3. **Formative Check:** Verify student understanding before transitioning into guided or independent practice.`;
 };
 
 export const generateReteachLesson = async (originalPlan: LessonPlan, assessmentRecord: AssessmentRecord) => {
@@ -3041,3 +3124,182 @@ export const generateVideoResourcePack = async (
     recapPoster: result.recapPoster || ''
   };
 };
+
+export const generatePowerPointPresentation = async (lesson: any) => {
+  validateGeminiConfig();
+
+  const subject = typeof lesson.subject === 'object' && lesson.subject !== null
+    ? (lesson.subject.name || lesson.subject.subject || 'General')
+    : (lesson.subject || 'General');
+
+  const grade = typeof lesson.grade === 'object' && lesson.grade !== null
+    ? (lesson.grade.name || lesson.grade.grade || 'Standard 4')
+    : (lesson.grade || lesson.class_id || lesson.className || 'Standard 4');
+
+  const topic = typeof lesson.topic === 'object' && lesson.topic !== null
+    ? (lesson.topic.topic || lesson.topic.name || 'Lesson Topic')
+    : (lesson.topic || lesson.title || 'Lesson Topic');
+
+  const subtopic = lesson.subtopic || lesson.sub_topic || '';
+  const title = lesson.lessonTitle || lesson.title || topic;
+
+  // Extract objectives
+  const objectives = lesson.learningObjectivesBoard?.successCriteria 
+    || lesson.specificObjectives 
+    || lesson.objectives 
+    || (lesson.learningOutcome ? [lesson.learningOutcome] : []);
+
+  // Extract vocabulary
+  const vocabulary = lesson.vocabularyFocus?.keyVocabulary 
+    || lesson.keyVocabularyTable 
+    || lesson.keyVocabulary 
+    || [];
+
+  // Extract phases & worked examples
+  const phases = Array.isArray(lesson.executionBoard) ? lesson.executionBoard : [];
+  const workedExamples = lesson.workedExamplesList || [];
+  const exitTicket = lesson.closurePanel?.exitQuestion || lesson.finalAssessmentBoard?.studentTask || '';
+
+  const prompt = `You are an expert instructional designer and curriculum specialist.
+Generate a complete, classroom-ready, 10-13 slide PowerPoint presentation specifically for this lesson:
+
+Subject: ${subject}
+Grade Level: ${grade}
+Topic: ${topic}
+Subtopic: ${subtopic}
+Lesson Title: ${title}
+Learning Objectives / Success Criteria: ${JSON.stringify(objectives)}
+Key Vocabulary: ${JSON.stringify(vocabulary)}
+Execution Phases: ${JSON.stringify(phases.map((p: any) => ({ phase: p.phase, teacherAction: p.teacherAction, studentAction: p.studentAction })))}
+Worked Examples: ${JSON.stringify(workedExamples)}
+Exit Ticket / Assessment: ${exitTicket}
+
+INSTRUCTIONAL SEQUENCE REQUIREMENTS:
+The presentation must follow a clear, pedagogically sound teaching flow appropriate for elementary students:
+1. Title Slide (Lesson Title, Grade, Subject, Focus)
+2. Learning Objectives & Success Criteria (Student-friendly "I can..." statements)
+3. Prior Knowledge / Warm-Up (Engaging question or challenge connecting to prior knowledge)
+4. Introduction to the Topic (Hook, big idea, real-world connection)
+5. Key Concepts & Vocabulary (Definitions with clear, simple terms and examples)
+6. Teacher Explanation ("I Do" - clear, step-by-step teacher demonstration)
+7. Worked Examples (Clear model problem, step-by-step solution)
+8. Visual Representation or Diagram (Concept diagram, flow chart, or visual representation)
+9. Guided Practice ("We Do" - collaborative classroom problem with scaffolded hints)
+10. Student Activity / Collaboration (Paired or group activity with instructions and timing)
+11. Independent Practice ("You Do" - student practice task to demonstrate individual mastery)
+12. Assessment / Exit Ticket (1-3 quick mastery check questions)
+13. Lesson Summary (Key takeaways, review, and look ahead)
+
+SUBJECT ADJUSTMENTS:
+- Mathematics: Include worked numerical/geometric examples, clear step-by-step solutions, and practice problems.
+- Science: Include observable phenomena, process steps, diagrams, and hypothesis/conclusion questions.
+- English / Language Arts: Include reading excerpts, sentence frames, phonics/vocabulary models, and writing tasks.
+- Social Studies: Include historical/geographical context, key facts, timelines/maps references, and discussion prompts.
+
+DESIGN GUIDELINES:
+- Concise bullet points (3-4 per slide, maximum 15 words per bullet). Never copy entire textbook paragraphs.
+- Clear, age-appropriate language for ${grade}.
+- Every slide must include "teacherPromptOrNotes" containing what the teacher should say or check during that slide.
+
+Return strict JSON conforming to the schema.`;
+
+  try {
+    const response = await executeGenAIWithFallback((model) => getGenAI().models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            subtitle: { type: Type.STRING },
+            subject: { type: Type.STRING },
+            grade: { type: Type.STRING },
+            topic: { type: Type.STRING },
+            subtopic: { type: Type.STRING },
+            theme: { 
+              type: Type.STRING, 
+              enum: ['modern_indigo', 'emerald_nature', 'warm_amber', 'deep_ocean', 'chalkboard_slate'] 
+            },
+            slides: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  slideNumber: { type: Type.INTEGER },
+                  slideType: { 
+                    type: Type.STRING,
+                    enum: [
+                      'title', 
+                      'objectives', 
+                      'warmup', 
+                      'introduction', 
+                      'key_concepts', 
+                      'teacher_explanation', 
+                      'worked_examples', 
+                      'visual_diagram', 
+                      'guided_practice', 
+                      'student_activity', 
+                      'independent_practice', 
+                      'assessment_exit', 
+                      'summary'
+                    ]
+                  },
+                  title: { type: Type.STRING },
+                  subtitle: { type: Type.STRING },
+                  bullets: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING } 
+                  },
+                  teacherPromptOrNotes: { type: Type.STRING },
+                  diagramText: { type: Type.STRING }
+                },
+                required: ["slideNumber", "slideType", "title", "bullets", "teacherPromptOrNotes"]
+              }
+            }
+          },
+          required: ["title", "subject", "grade", "topic", "slides"]
+        }
+      }
+    }));
+
+    const cleanJson = (text: string | undefined) => {
+      if (!text) return '{}';
+      return text.replace(/```json\n?|```/g, '').trim();
+    };
+
+    const parsed = JSON.parse(cleanJson(response.text));
+    if (parsed && Array.isArray(parsed.slides) && parsed.slides.length >= 6) {
+      return {
+        id: `pres-${lesson.id || Date.now()}`,
+        lessonId: lesson.id,
+        title: parsed.title || title,
+        subtitle: parsed.subtitle || subtopic,
+        subject: parsed.subject || subject,
+        grade: parsed.grade || grade,
+        topic: parsed.topic || topic,
+        subtopic: parsed.subtopic || subtopic,
+        theme: parsed.theme || getThemeForSubject(subject),
+        slides: parsed.slides.map((s: any, idx: number) => ({
+          id: `slide-${idx + 1}`,
+          slideNumber: s.slideNumber || idx + 1,
+          slideType: s.slideType || 'teacher_explanation',
+          title: s.title || 'Slide Title',
+          subtitle: s.subtitle || '',
+          bullets: Array.isArray(s.bullets) ? s.bullets : [],
+          teacherPromptOrNotes: s.teacherPromptOrNotes || '',
+          diagramText: s.diagramText || undefined
+        })),
+        generatedAt: new Date().toISOString(),
+        version: 1
+      };
+    }
+  } catch (err) {
+    console.warn("AI generatePowerPointPresentation failed, falling back to deterministic generator:", err);
+  }
+
+  return buildDeterministicPowerPoint(lesson);
+};
+

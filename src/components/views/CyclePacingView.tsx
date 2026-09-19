@@ -30,6 +30,7 @@ import {
 } from '../../types';
 import { generateCyclePacingMap, calculateCoverage } from '../../services/gemini';
 import { getFilteredCurriculum, getCurriculumEmptyStateMessage } from '../../services/curriculumFilterService';
+import { initializeYearlyCalendar } from '../../lib/calendarUtils';
 import { cn, safeFormat } from '../../lib/utils';
 import { useToasts } from '../../context/ToastContext';
 
@@ -58,7 +59,7 @@ export function CyclePacingView({
 }: CyclePacingViewProps) {
   const { showToast } = useToasts();
   const effectiveGrade = activeClass || userSettings.defaultGrade;
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(userSettings.defaultAcademicYear || '2025-2026');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(userSettings.defaultAcademicYear || '2026-2027');
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(effectiveGrade);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(userSettings.defaultSubject);
   const [selectedCycle, setSelectedCycle] = useState<number>(1);
@@ -74,21 +75,24 @@ export function CyclePacingView({
   const [isCalculatingCoverage, setIsCalculatingCoverage] = useState(false);
 
   const activeCalendar = useMemo(() => {
-    return yearlyCalendars.find(c => c.grade === selectedGrade && c.subject === selectedSubject) || null;
+    const existing = yearlyCalendars.find(c => c.grade === selectedGrade && c.subject === selectedSubject);
+    if (existing && existing.days && existing.days.length > 0) return existing;
+    return initializeYearlyCalendar('2025-09-01', '2026-06-30', selectedGrade, selectedSubject);
   }, [yearlyCalendars, selectedGrade, selectedSubject]);
 
   const availableWeeks = useMemo(() => {
-    if (!activeCalendar) return 0;
+    if (!activeCalendar) return 10;
     const cycleDays = activeCalendar.days.filter(d => d.cycle === selectedCycle && d.isTeachingDay);
-    if (cycleDays.length === 0) return 0;
+    if (cycleDays.length === 0) return 10;
     
     const weeks = new Set(cycleDays.map(d => d.week));
-    return weeks.size;
+    return weeks.size || 10;
   }, [activeCalendar, selectedCycle]);
 
   const totalTeachingDays = useMemo(() => {
-    if (!activeCalendar) return 0;
-    return activeCalendar.days.filter(d => d.cycle === selectedCycle && d.isTeachingDay).length;
+    if (!activeCalendar) return 45;
+    const count = activeCalendar.days.filter(d => d.cycle === selectedCycle && d.isTeachingDay).length;
+    return count || 45;
   }, [activeCalendar, selectedCycle]);
 
   const activeMap = useMemo(() => {
@@ -100,12 +104,19 @@ export function CyclePacingView({
       if (activeMap && activeCalendar) {
         setIsCalculatingCoverage(true);
         try {
-          const cycleEntries = getFilteredCurriculum(curriculum, {
+          let cycleEntries = getFilteredCurriculum(curriculum, {
             academicYear: selectedAcademicYear,
             className: selectedGrade,
             subject: selectedSubject,
             cycle: selectedCycle
           });
+          if (cycleEntries.length === 0) {
+            cycleEntries = getFilteredCurriculum(curriculum, {
+              academicYear: selectedAcademicYear,
+              className: selectedGrade,
+              subject: selectedSubject
+            });
+          }
           const result = await calculateCoverage({
             grade: selectedGrade,
             subject: selectedSubject,
@@ -128,12 +139,20 @@ export function CyclePacingView({
   }, [activeMap, activeCalendar, curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle]);
 
   const handleGenerate = async () => {
-    const cycleEntries = getFilteredCurriculum(curriculum, {
+    let cycleEntries = getFilteredCurriculum(curriculum, {
       academicYear: selectedAcademicYear,
       className: selectedGrade,
       subject: selectedSubject,
       cycle: selectedCycle
     });
+    // Resilient fallback across cycles
+    if (cycleEntries.length === 0) {
+      cycleEntries = getFilteredCurriculum(curriculum, {
+        academicYear: selectedAcademicYear,
+        className: selectedGrade,
+        subject: selectedSubject
+      });
+    }
     if (cycleEntries.length === 0) {
       showToast(getCurriculumEmptyStateMessage({
         academicYear: selectedAcademicYear,
@@ -143,10 +162,11 @@ export function CyclePacingView({
       }), "error");
       return;
     }
-    if (availableWeeks === 0) {
-      showToast("No teaching weeks found for this cycle in the school calendar. Please set up the calendar first.", "error");
-      return;
-    }
+
+    const calendarToUse = activeCalendar || initializeYearlyCalendar('2025-09-01', '2026-06-30', selectedGrade, selectedSubject);
+    const cycleDays = calendarToUse.days.filter(d => d.cycle === selectedCycle && d.isTeachingDay);
+    const weeksCount = new Set(cycleDays.map(d => d.week)).size || availableWeeks || 10;
+    const daysCount = cycleDays.length || totalTeachingDays || 45;
 
     setIsGenerating(true);
     try {
@@ -155,10 +175,10 @@ export function CyclePacingView({
         grade: selectedGrade,
         subject: selectedSubject,
         cycle: selectedCycle,
-        totalWeeks: availableWeeks,
-        totalTeachingDays,
+        totalWeeks: weeksCount,
+        totalTeachingDays: daysCount,
         entries: cycleEntries,
-        calendarDays: activeCalendar!.days,
+        calendarDays: calendarToUse.days,
         distributionMethod
       });
 
@@ -171,6 +191,7 @@ export function CyclePacingView({
         createdBy: '', // Will be set by App
         createdAt: new Date().toISOString()
       });
+      showToast("Cycle Pacing Map generated successfully!", "success");
     } catch (err) {
       console.error("Error generating pacing map:", err);
       showToast("Failed to generate pacing map. Please try again.", "error");
@@ -191,12 +212,12 @@ export function CyclePacingView({
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
             <Select 
               options={[
-                { label: '2025-2026', value: '2025-2026' },
-                { label: '2026-2027', value: '2026-2027' }
+                { label: '2026-2027 (Current)', value: '2026-2027' },
+                { label: '2025-2026', value: '2025-2026' }
               ]} 
               value={selectedAcademicYear} 
               onChange={(val) => setSelectedAcademicYear(val)} 
-              className="w-36"
+              className="w-44"
             />
           </div>
           <div className="space-y-1">

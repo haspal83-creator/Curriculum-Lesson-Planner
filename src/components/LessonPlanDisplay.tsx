@@ -88,6 +88,8 @@ import { normalizeLearningObjectives } from '../lib/learningObjectivesHelper';
 import { PrintableLessonPlan } from './PrintableLessonPlan';
 import { LessonVideoPlayer } from './LessonVideoPlayer';
 import { ActionPanel } from './ActionPanel';
+import { WorksheetDisplayView } from './WorksheetDisplayView';
+import { parseAndNormalizeWorksheet, printWorksheetToWindow } from '../lib/worksheetSystem';
 import { LessonExecutionBoard } from './LessonExecutionBoard';
 import { TeachMeThisTopicModal } from './TeachMeThisTopicModal';
 import { TeacherQuickReferenceCard } from './TeacherQuickReferenceCard';
@@ -96,6 +98,7 @@ import { TeacherPrepModeView } from './TeacherPrepModeView';
 import { LiveTeachModeView } from './LiveTeachModeView';
 import { InstructionalAlignmentChain } from './InstructionalAlignmentChain';
 import { enrichAndGuaranteeTeachReady } from '../lib/lessonQualityGate';
+import { PowerPointManager } from './PowerPointManager';
 
 // Helper Components for the new Layout
 const LessonSectionCard = ({ id, title, icon: Icon, children, actions, expanded, onToggle, className, isTeachMode }: any) => (
@@ -216,6 +219,7 @@ interface LessonPlanDisplayProps {
   onDuplicate?: (plan: LessonPlan) => Promise<void>;
   isGenerating?: boolean;
   initialTab?: string;
+  resources?: any[];
 }
 
 export function LessonPlanDisplay({ 
@@ -237,7 +241,8 @@ export function LessonPlanDisplay({
   onPrepareForTeaching,
   onDuplicate,
   isGenerating,
-  initialTab = 'plan'
+  initialTab = 'plan',
+  resources
 }: LessonPlanDisplayProps) {
   const { showToast } = useToasts();
   const enrichedPlan = React.useMemo(() => {
@@ -252,6 +257,117 @@ export function LessonPlanDisplay({
       duration: plan.duration
     });
   }, [plan]);
+
+  const [expandedMaterialIndex, setExpandedMaterialIndex] = useState<number | null>(null);
+  const [copiedMaterialIndex, setCopiedMaterialIndex] = useState<number | null>(null);
+  const [showAnswerKeyMap, setShowAnswerKeyMap] = useState<Record<number, boolean>>({});
+
+  const handleCopyMaterialContent = (content: string, idx: number) => {
+    navigator.clipboard.writeText(content);
+    setCopiedMaterialIndex(idx);
+    showToast("Material copied to clipboard", "success");
+    setTimeout(() => setCopiedMaterialIndex(null), 2000);
+  };
+
+  const handlePrintMaterialContent = (title: string, content: string, answerKey?: string) => {
+    if (title.toLowerCase().includes('worksheet') || content.toLowerCase().includes('worksheet') || content.includes('### A.')) {
+      const ws = parseAndNormalizeWorksheet(answerKey ? `${content}\n\n### TEACHER ANSWER KEY & SCORING GUIDE\n${answerKey}` : content, {
+        title,
+        grade: plan.grade,
+        subject: plan.subject,
+        topic: plan.topic
+      });
+      printWorksheetToWindow(ws, 'both');
+      return;
+    }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 32px; color: #111827; line-height: 1.6; }
+            h1 { font-size: 22px; font-weight: 800; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 24px; }
+            pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; }
+            .answer-key { margin-top: 40px; padding: 16px; border: 1px solid #10b981; background: #ecfdf5; border-radius: 8px; font-size: 13px; color: #065f46; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <h1>${title}</h1>
+          <pre>${content}</pre>
+          ${answerKey ? `<div class="answer-key"><strong>TEACHER ANSWER KEY & GRADING CRITERIA:</strong><br/><pre>${answerKey}</pre></div>` : ''}
+          <script>window.onload = function() { window.print(); window.close(); };<\/script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const activeStudentMaterials = React.useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      type: string;
+      content: string;
+      answerKey?: string;
+      badge: string;
+      source: string;
+    }> = [];
+
+    // 1. From enriched plan's studentMaterials
+    if (enrichedPlan.studentMaterials && Array.isArray(enrichedPlan.studentMaterials)) {
+      enrichedPlan.studentMaterials.forEach((sm, idx) => {
+        list.push({
+          id: `sm-${idx}`,
+          title: sm.title,
+          type: sm.type,
+          content: sm.content,
+          answerKey: sm.answerKey,
+          badge: sm.type === 'worksheet' ? 'Worksheet' : sm.type === 'exit_ticket' ? 'Exit Ticket' : sm.type === 'quiz' ? 'Quiz' : 'Student Practice',
+          source: 'lesson_plan'
+        });
+      });
+    }
+
+    // 2. From standalone resources collection matching this lesson
+    if (resources && Array.isArray(resources)) {
+      resources.forEach((r, idx) => {
+        if (r.lesson_id === plan.id || r.lesson_id === (plan as any).lesson_plan_id) {
+          list.push({
+            id: r.id || `res-${idx}`,
+            title: r.title || `${r.type} Resource`,
+            type: (r.type || 'resource').toLowerCase(),
+            content: r.content,
+            answerKey: r.answerKey,
+            badge: r.type || 'Generated Resource',
+            source: 'external_resource'
+          });
+        }
+      });
+    }
+
+    // 3. From teachingResources.studentMaterials
+    if (plan.teachingResources?.studentMaterials?.worksheets) {
+      plan.teachingResources.studentMaterials.worksheets.forEach((ws, idx) => {
+        list.push({
+          id: `tr-ws-${idx}`,
+          title: `Practice Worksheet ${idx + 1}`,
+          type: 'worksheet',
+          content: ws,
+          badge: 'Worksheet',
+          source: 'teaching_resources'
+        });
+      });
+    }
+
+    return list;
+  }, [enrichedPlan, plan, resources]);
 
   const [viewMode, setViewMode] = useState<'teacher' | 'student'>('teacher');
   const [currentMode, setCurrentMode] = useState<'planner' | 'prep' | 'teach'>('planner');
@@ -756,6 +872,10 @@ export function LessonPlanDisplay({
               <TabsTrigger value="plan" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-4 data-[state=active]:border-indigo-600 rounded-none pb-4 text-sm font-black uppercase tracking-widest transition-all">
                 Lesson Plan
               </TabsTrigger>
+              <TabsTrigger value="powerpoint" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-4 data-[state=active]:border-indigo-600 rounded-none pb-4 text-sm font-black uppercase tracking-widest text-indigo-600 transition-all flex items-center">
+                <Presentation className="w-4 h-4 mr-2" />
+                PowerPoint
+              </TabsTrigger>
               <TabsTrigger value="ai-video" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-4 data-[state=active]:border-indigo-600 rounded-none pb-4 text-sm font-black uppercase tracking-widest text-indigo-600 transition-all">
                 <Video className="w-4 h-4 mr-2" />
                 AI Video
@@ -1185,6 +1305,34 @@ export function LessonPlanDisplay({
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="powerpoint" className="mt-0 p-4 sm:p-6 lg:p-8">
+              <PowerPointManager
+                presentation={plan.powerpointPresentation}
+                lesson={plan}
+                onUpdatePresentation={async (updated) => {
+                  if (onUpdatePlan) {
+                    await onUpdatePlan({ ...plan, powerpointPresentation: updated });
+                  }
+                }}
+                onRebuildPresentation={async () => {
+                  try {
+                    const { generatePowerPoint } = await import('../services/gemini');
+                    const res = await generatePowerPoint(plan);
+                    if (onUpdatePlan && res) {
+                      await onUpdatePlan({ ...plan, powerpointPresentation: res });
+                    }
+                  } catch (err) {
+                    const { buildDeterministicPowerPoint } = await import('../lib/powerpointService');
+                    const fallback = buildDeterministicPowerPoint(plan);
+                    if (onUpdatePlan) {
+                      await onUpdatePlan({ ...plan, powerpointPresentation: fallback });
+                    }
+                  }
+                }}
+              />
+            </TabsContent>
+
             <TabsContent value="plan" className="mt-0 relative bg-gray-50/30 min-h-screen w-full min-w-0">
               {/* 1. STICKY TOP ACTION BAR */}
               <div className="sticky top-0 z-40 h-[68px] sm:h-[72px] border-b border-gray-200 bg-white/95 backdrop-blur-md print:hidden px-3 sm:px-6 flex items-center justify-between gap-3">
@@ -1245,6 +1393,17 @@ export function LessonPlanDisplay({
                     >
                       <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Teach Me This</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveTab('powerpoint')}
+                      className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                      title="Open & Present PowerPoint Presentation"
+                    >
+                      <Presentation className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>PowerPoint</span>
                     </Button>
 
                     {!isTeachMode && (
@@ -2527,69 +2686,214 @@ export function LessonPlanDisplay({
                           <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
                             <div className="flex items-center gap-3 text-indigo-600">
                               <Package className="w-6 h-6" />
-                              <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
-                                Lesson Assets & Generated Materials
-                              </h2>
+                              <div>
+                                <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                                  Lesson Assets & Generated Materials
+                                </h2>
+                                <p className="text-xs text-gray-500 font-medium">
+                                  {activeStudentMaterials.length > 0 
+                                    ? `${activeStudentMaterials.length} ready-to-teach materials generated for this lesson` 
+                                    : 'Printable student practice sheets, exit tickets, and classroom resources'}
+                                </p>
+                              </div>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-indigo-600 font-bold hover:bg-indigo-50 rounded-xl px-4 h-9"
-                              onClick={handleGenerateFullPack}
-                            >
-                              <Sparkles className="w-4 h-4 mr-2" /> Generate All Assets
-                            </Button>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-xs font-bold rounded-xl"
+                                onClick={() => onGenerateResource?.(plan, 'Worksheet')}
+                                disabled={isGenerating}
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Worksheet
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-xs font-bold rounded-xl"
+                                onClick={() => onGenerateResource?.(plan, 'Exit Ticket')}
+                                disabled={isGenerating}
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Exit Ticket
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-indigo-600 font-bold hover:bg-indigo-50 rounded-xl px-4 h-9"
+                                onClick={handleGenerateFullPack}
+                                disabled={isGenerating}
+                              >
+                                <Sparkles className="w-4 h-4 mr-2" /> Generate All Assets
+                              </Button>
+                            </div>
                           </div>
                           
-                          <div className="space-y-3">
-                            {plan.resourceMapping ? (
-                              plan.resourceMapping.map((res, i) => (
-                                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 flex items-center justify-between hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
-                                  <div className="flex items-center gap-3.5">
-                                    <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-600">
-                                      <FileText className="w-5 h-5" />
+                          <div className="space-y-4">
+                            {activeStudentMaterials.length > 0 ? (
+                              activeStudentMaterials.map((mat, i) => {
+                                const isExpanded = expandedMaterialIndex === i;
+                                const isCopied = copiedMaterialIndex === i;
+                                const showKey = !!showAnswerKeyMap[i];
+
+                                return (
+                                  <div 
+                                    key={mat.id || i} 
+                                    className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs hover:border-indigo-200 transition-all"
+                                  >
+                                    <div className="p-4 sm:p-5 flex items-center justify-between flex-wrap gap-4 bg-gray-50/50">
+                                      <div className="flex items-center gap-3.5 min-w-0">
+                                        <div className={cn(
+                                          "p-2.5 rounded-xl shrink-0",
+                                          mat.type === 'worksheet' ? "bg-blue-100 text-blue-700" :
+                                          mat.type === 'exit_ticket' ? "bg-rose-100 text-rose-700" :
+                                          mat.type === 'quiz' ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700"
+                                        )}>
+                                          {mat.type === 'worksheet' ? <FileText className="w-5 h-5" /> :
+                                           mat.type === 'exit_ticket' ? <CheckSquare className="w-5 h-5" /> :
+                                           mat.type === 'quiz' ? <Target className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 mb-0.5">
+                                            <span className={cn(
+                                              "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                                              mat.type === 'worksheet' ? "bg-blue-100 text-blue-800" :
+                                              mat.type === 'exit_ticket' ? "bg-rose-100 text-rose-800" :
+                                              mat.type === 'quiz' ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"
+                                            )}>
+                                              {mat.badge}
+                                            </span>
+                                            {mat.answerKey && (
+                                              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                                                Answer Key Included
+                                              </span>
+                                            )}
+                                          </div>
+                                          <h4 className="font-bold text-gray-900 text-base truncate">{mat.title}</h4>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm" 
+                                          className="h-8 px-3 rounded-xl text-xs font-bold"
+                                          onClick={() => setExpandedMaterialIndex(isExpanded ? null : i)}
+                                        >
+                                          {isExpanded ? <EyeOff className="w-3.5 h-3.5 mr-1.5" /> : <Eye className="w-3.5 h-3.5 mr-1.5" />}
+                                          {isExpanded ? 'Hide' : 'View Content'}
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm" 
+                                          className="h-8 px-3 rounded-xl text-xs font-bold"
+                                          onClick={() => handleCopyMaterialContent(mat.content, i)}
+                                        >
+                                          {isCopied ? <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                                          {isCopied ? 'Copied' : 'Copy'}
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm" 
+                                          className="h-8 px-3 rounded-xl text-xs font-bold"
+                                          onClick={() => handlePrintMaterialContent(mat.title, mat.content, mat.answerKey)}
+                                        >
+                                          <Printer className="w-3.5 h-3.5 mr-1.5" />
+                                          Print
+                                        </Button>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <p className="font-bold text-gray-900 text-sm">{res.resourceName}</p>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
-                                        {res.type} • Phase: {res.phaseUsed}
-                                      </p>
-                                    </div>
+
+                                    {isExpanded && (
+                                      <div className="p-6 border-t border-gray-100 space-y-6 bg-white">
+                                        <div className="prose max-w-none prose-sm prose-indigo bg-gray-50/70 p-5 rounded-xl border border-gray-100">
+                                          <Markdown>{mat.content}</Markdown>
+                                        </div>
+
+                                        {mat.answerKey && (
+                                          <div className="pt-2">
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm" 
+                                              onClick={() => setShowAnswerKeyMap(prev => ({ ...prev, [i]: !prev[i] }))}
+                                              className="text-emerald-700 font-bold hover:bg-emerald-50 mb-3"
+                                            >
+                                              {showKey ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                                              {showKey ? 'Hide Teacher Answer Key' : 'Reveal Teacher Answer Key & Rubric'}
+                                            </Button>
+
+                                            {showKey && (
+                                              <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 prose max-w-none prose-sm text-emerald-900">
+                                                <div className="font-bold text-xs uppercase tracking-wider text-emerald-800 mb-2">
+                                                  Teacher Answer Key & Scoring Criteria:
+                                                </div>
+                                                <Markdown>{mat.answerKey}</Markdown>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600">
-                                      Open
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))
+                                );
+                              })
                             ) : (
-                              [
-                                { title: 'Student Worksheet', type: 'Printable Practice Worksheet', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
-                                { title: 'Visual Slides', type: 'Interactive Instruction Deck', icon: Presentation, color: 'text-orange-500', bg: 'bg-orange-50' },
-                                { title: 'Vocabulary Flashcards', type: 'Printable Term Cards', icon: Layers, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                                { title: 'Exit Ticket Slips', type: 'Quick Check Slip', icon: ListChecks, color: 'text-rose-500', bg: 'bg-rose-50' },
-                              ].map((res, i) => (
-                                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 flex items-center justify-between hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
-                                  <div className="flex items-center gap-3.5">
-                                    <div className={cn("p-2.5 rounded-lg", res.bg, res.color)}>
-                                      <res.icon className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                      <p className="font-bold text-gray-900 text-sm">{res.title}</p>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">{res.type}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600">
-                                      Open
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600" onClick={handlePrint}>
-                                      Print
-                                    </Button>
-                                  </div>
+                              <div className="col-span-full py-10 px-6 text-center bg-gray-50/70 rounded-2xl border-2 border-dashed border-gray-200 space-y-3">
+                                <Package className="w-12 h-12 text-gray-400 mx-auto" />
+                                <div className="space-y-1">
+                                  <p className="font-bold text-gray-700">No student materials generated yet for this lesson</p>
+                                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                                    Generate customized student worksheets, practice sets, or exit tickets aligned directly with this lesson's outcomes and standards.
+                                  </p>
                                 </div>
-                              ))
+                                <div className="flex justify-center gap-3 pt-2">
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl"
+                                    onClick={() => onGenerateResource?.(plan, 'Worksheet')}
+                                    disabled={isGenerating}
+                                  >
+                                    <Plus className="w-4 h-4 mr-1.5" /> Generate Student Worksheet
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="font-bold rounded-xl"
+                                    onClick={() => onGenerateResource?.(plan, 'Exit Ticket')}
+                                    disabled={isGenerating}
+                                  >
+                                    <Plus className="w-4 h-4 mr-1.5" /> Generate Exit Ticket
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Materials Board & Supplies Breakdown */}
+                            {((enrichedPlan.materialsBoard && enrichedPlan.materialsBoard.length > 0) || (enrichedPlan.materials && enrichedPlan.materials.length > 0)) && (
+                              <div className="pt-6 border-t border-gray-100">
+                                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                  <Layers className="w-4 h-4 text-indigo-600" /> Required Classroom Supplies & Tools
+                                </h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                  {(enrichedPlan.materialsBoard || []).map((m: any, idx: number) => (
+                                    <div key={idx} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                      <div className="flex justify-between items-start">
+                                        <span className="font-bold text-gray-900 text-sm">{m.resourceName || m.name || m}</span>
+                                        {m.phaseUsed && (
+                                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                            {m.phaseUsed}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {m.purpose && <p className="text-xs text-gray-500 mt-1">{m.purpose}</p>}
+                                    </div>
+                                  ))}
+                                  {(!enrichedPlan.materialsBoard || enrichedPlan.materialsBoard.length === 0) && (enrichedPlan.materials || []).map((m: string, idx: number) => (
+                                    <div key={idx} className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-sm font-medium text-gray-800">
+                                      • {m}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -2770,35 +3074,153 @@ export function LessonPlanDisplay({
             </TabsContent>
 
             <TabsContent value="worksheets" className="mt-0 space-y-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-2xl font-bold text-gray-900">Student Worksheets</h3>
-                <Button size="sm" onClick={() => onGenerateResource?.(plan, 'Worksheet')}>
-                  <Plus className="w-4 h-4" />
+              <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Student Practice & Worksheets</h3>
+                  <p className="text-xs text-gray-500 font-medium">Ready-to-print activity sheets, guided practice, and problem sets</p>
+                </div>
+                <Button size="sm" onClick={() => onGenerateResource?.(plan, 'Worksheet')} disabled={isGenerating} className="rounded-xl">
+                  <Plus className="w-4 h-4 mr-1.5" />
                   Add Worksheet
                 </Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {plan.teachingResources?.studentMaterials.worksheets?.map((ws, i) => (
-                  renderResourceCard(`Worksheet ${i + 1}`, ws, 'Worksheet', `worksheet-${i}`)
-                ))}
-                {(!plan.teachingResources?.studentMaterials.worksheets || plan.teachingResources.studentMaterials.worksheets?.length === 0) && (
-                  <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                    <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500 font-medium">No worksheets generated for this lesson.</p>
-                    <Button variant="ghost" className="mt-4" onClick={() => onGenerateResource?.(plan, 'Worksheet')}>
-                      Generate First Worksheet
-                    </Button>
+
+              {(() => {
+                const wsItems = activeStudentMaterials.filter(m => m.type === 'worksheet' || m.type.includes('worksheet') || m.type === 'problem_set' || m.type === 'reading_passage');
+                if (wsItems.length === 0) {
+                  return (
+                    <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 font-medium">No worksheets generated for this lesson yet.</p>
+                      <Button variant="ghost" className="mt-4 font-bold text-indigo-600" onClick={() => onGenerateResource?.(plan, 'Worksheet')}>
+                        Generate Student Worksheet Now
+                      </Button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-8">
+                    {wsItems.map((ws, i) => (
+                      <WorksheetDisplayView
+                        key={i}
+                        content={ws.content}
+                        answerKey={ws.answerKey}
+                        title={ws.title}
+                        grade={plan.grade}
+                        subject={plan.subject}
+                        topic={plan.topic}
+                        subtopic={plan.subtopic}
+                      />
+                    ))}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="assessments" className="mt-0 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {plan.teachingResources?.assessmentMaterials.formativeAssessment && renderResourceCard("Formative Assessment", plan.teachingResources.assessmentMaterials.formativeAssessment, "Assessment", "assessment-formative")}
-                {plan.teachingResources?.assessmentMaterials.rubric && renderResourceCard("Grading Rubric", plan.teachingResources.assessmentMaterials.rubric, "Rubric", "assessment-rubric")}
-                {plan.teachingResources?.assessmentMaterials.answerKey && renderResourceCard("Answer Key", plan.teachingResources.assessmentMaterials.answerKey, "Answer Key", "assessment-answer-key")}
+              <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Assessments & Exit Tickets</h3>
+                  <p className="text-xs text-gray-500 font-medium">Formative checks, daily exit tickets, and mastery indicators</p>
+                </div>
+                <Button size="sm" onClick={() => onGenerateResource?.(plan, 'Exit Ticket')} disabled={isGenerating} className="rounded-xl">
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add Exit Ticket
+                </Button>
               </div>
+
+              {/* Assessment Board */}
+              {enrichedPlan.finalAssessmentBoard && (
+                <Card className="p-6 border-indigo-100 bg-indigo-50/30 rounded-2xl space-y-4">
+                  <div className="flex items-center gap-2 text-indigo-700 font-bold">
+                    <Target className="w-5 h-5" />
+                    <span>Final Assessment Design & Criteria</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-xl border border-indigo-100">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">Assessment Tool & Type</span>
+                      <p className="font-bold text-gray-900 mt-1">{enrichedPlan.finalAssessmentBoard.assessmentTool || (enrichedPlan.finalAssessmentBoard as any).assessmentType || 'Formative Check'}</p>
+                      {enrichedPlan.finalAssessmentBoard.studentTask && (
+                        <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">Student Task:</span> {enrichedPlan.finalAssessmentBoard.studentTask}</p>
+                      )}
+                    </div>
+                    <div className="p-4 bg-white rounded-xl border border-indigo-100">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">Mastery Indicator & Criteria</span>
+                      <p className="font-bold text-emerald-800 mt-1">{enrichedPlan.finalAssessmentBoard.masteryIndicator || '80% Mastery'}</p>
+                      {enrichedPlan.finalAssessmentBoard.criteriaForSuccess && (
+                        <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">Success Criteria:</span> {enrichedPlan.finalAssessmentBoard.criteriaForSuccess}</p>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {(() => {
+                const assItems = activeStudentMaterials.filter(m => m.type === 'exit_ticket' || m.type === 'quiz' || m.type.includes('assessment'));
+                return (
+                  <div className="space-y-6">
+                    {assItems.map((ass, i) => (
+                      <div key={i} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                              <CheckSquare className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-black uppercase tracking-wider">{ass.badge}</span>
+                                {ass.answerKey && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">Answer Key Available</span>}
+                              </div>
+                              <h4 className="font-bold text-gray-900 text-lg">{ass.title}</h4>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleCopyMaterialContent(ass.content, i + 200)}>
+                              {copiedMaterialIndex === i + 200 ? <CheckCircle2 className="w-4 h-4 mr-1 text-emerald-600" /> : <Copy className="w-4 h-4 mr-1" />}
+                              Copy
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handlePrintMaterialContent(ass.title, ass.content, ass.answerKey)}>
+                              <Printer className="w-4 h-4 mr-1" />
+                              Print
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="p-5 bg-gray-50/70 rounded-xl border border-gray-100 prose max-w-none text-sm text-gray-800">
+                          <Markdown>{ass.content}</Markdown>
+                        </div>
+
+                        {ass.answerKey && (
+                          <div className="pt-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => setShowAnswerKeyMap(prev => ({ ...prev, [i + 200]: !prev[i + 200] }))}
+                              className="text-emerald-700 font-bold hover:bg-emerald-50"
+                            >
+                              {showAnswerKeyMap[i + 200] ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                              {showAnswerKeyMap[i + 200] ? 'Hide Answer Key' : 'Reveal Answer Key & Scoring Guide'}
+                            </Button>
+                            {showAnswerKeyMap[i + 200] && (
+                              <div className="mt-2 p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 prose max-w-none text-sm text-emerald-900">
+                                <div className="font-bold text-xs uppercase text-emerald-800 mb-1">Answer Key & Scoring Guide:</div>
+                                <Markdown>{ass.answerKey}</Markdown>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {plan.teachingResources?.assessmentMaterials.formativeAssessment && renderResourceCard("Formative Assessment", plan.teachingResources.assessmentMaterials.formativeAssessment, "Assessment", "assessment-formative")}
+                      {plan.teachingResources?.assessmentMaterials.rubric && renderResourceCard("Grading Rubric", plan.teachingResources.assessmentMaterials.rubric, "Rubric", "assessment-rubric")}
+                      {plan.teachingResources?.assessmentMaterials.answerKey && renderResourceCard("Answer Key", plan.teachingResources.assessmentMaterials.answerKey, "Answer Key", "assessment-answer-key")}
+                    </div>
+                  </div>
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="visuals" className="mt-0 space-y-6">

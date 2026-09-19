@@ -75,6 +75,14 @@ import {
 } from './types';
 import { backfillUserClassIds } from './lib/classDataService';
 import { BELIZE_NATIONAL_CURRICULUM } from './data/belize_national_curriculum';
+import { stripUndefined } from './lib/utils';
+import { 
+  normalizeGrade, 
+  normalizeSubject, 
+  normalizeCycle, 
+  normalizeAcademicYear, 
+  invalidateCurriculumCache 
+} from './services/curriculumFilterService';
 
 // Components
 import { ClassDashboard } from './components/views/ClassDashboard';
@@ -101,6 +109,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   curriculumStructure: 'Cycles',
   teachingModel: '5E',
   assignedClasses: ['Standard 4', 'Standard 5'],
+  defaultAcademicYear: '2026-2027',
   aiQuality: {
     defaultOutputStyle: 'Standard Teacher',
     includeTeacherScript: true,
@@ -180,7 +189,14 @@ export default function App() {
         getDoc(settingsRef).then((docSnap) => {
           if (docSnap.exists()) {
             const settings = docSnap.data() as UserSettings;
-            setUserSettings(settings);
+            const updatedSettings: UserSettings = {
+              ...settings,
+              defaultAcademicYear: settings.defaultAcademicYear && settings.defaultAcademicYear !== '2025-2026' ? settings.defaultAcademicYear : '2026-2027'
+            };
+            setUserSettings(updatedSettings);
+            if (settings.defaultAcademicYear === '2025-2026') {
+              setDoc(settingsRef, { defaultAcademicYear: '2026-2027' }, { merge: true }).catch(console.warn);
+            }
             if (settings.lastSelectedClass) {
               setActiveClass(settings.lastSelectedClass);
             } else {
@@ -225,32 +241,43 @@ export default function App() {
       console.warn("Class data backfill notice:", err);
     });
 
-    // 1. Curriculum: Load ONLY curriculum matching the active grade, backed by official national curriculum
+    // 1. Curriculum: Load ALL uploaded curriculum and merge with official national curriculum
     const unsubCurriculum = onSnapshot(
-      query(
-        collection(db, 'curriculum'),
-        where('grade', '==', activeClass)
-      ),
+      collection(db, 'curriculum'),
       (snap) => {
-        const dbEntries = snap.docs.map(d => ({ id: d.id, ...d.data() } as CurriculumEntry));
-        const baseForClass = BELIZE_NATIONAL_CURRICULUM.filter(c => c.grade === activeClass);
+        const dbEntries = snap.docs.map(d => {
+          const data = d.data();
+          const rawGrade = data.grade || data.className || data.grade_level || activeClass || 'Standard 4';
+          const normGrade = normalizeGrade(rawGrade);
+          return {
+            id: d.id,
+            ...data,
+            grade: normGrade,
+            className: normGrade,
+            subject: normalizeSubject(data.subject || 'Mathematics'),
+            cycle: normalizeCycle(data.cycle || 1),
+            academicYear: normalizeAcademicYear(data.academicYear || data.schoolYear || '2026-2027')
+          } as CurriculumEntry;
+        });
+
         const combined = [...dbEntries];
-        baseForClass.forEach(baseEntry => {
+        BELIZE_NATIONAL_CURRICULUM.forEach(baseEntry => {
           const exists = combined.some(e => 
-            e.subject === baseEntry.subject && 
-            e.cycle === baseEntry.cycle && 
-            e.topic === baseEntry.topic && 
-            (e.academicYear || '2025-2026') === (baseEntry.academicYear || '2025-2026')
+            normalizeGrade(e.grade) === normalizeGrade(baseEntry.grade) &&
+            normalizeSubject(e.subject) === normalizeSubject(baseEntry.subject) &&
+            normalizeCycle(e.cycle) === normalizeCycle(baseEntry.cycle) &&
+            (e.topic || '').trim().toLowerCase() === (baseEntry.topic || '').trim().toLowerCase()
           );
           if (!exists) {
             combined.push(baseEntry);
           }
         });
+        invalidateCurriculumCache();
         setCurriculum(combined);
       },
       (err) => {
         console.warn("Curriculum snapshot warning, falling back to national curriculum:", err);
-        setCurriculum(BELIZE_NATIONAL_CURRICULUM.filter(c => c.grade === activeClass));
+        setCurriculum([...BELIZE_NATIONAL_CURRICULUM]);
       }
     );
 
@@ -414,20 +441,41 @@ export default function App() {
   }, [user, activeClass, activeClassId]);
 
   const handleSaveCurriculum = async (entries: CurriculumEntry[]) => {
-    if (!user || !activeClassId || !activeClass) return;
+    if (!user) {
+      showToast("Please sign in to save curriculum guides", "error");
+      return;
+    }
+    const targetGrade = activeClass || 'Standard 4';
+    const targetClassId = activeClassId || getClassId(targetGrade);
+    const targetYear = userSettings.defaultAcademicYear || '2026-2027';
+
     try {
       for (const entry of entries) {
         const { id, ...data } = entry;
-        const entryGrade = entry.grade || activeClass;
-        const entryClassId = entry.classId || getClassId(entryGrade);
-        const dataToSave = {
+        const entryGrade = normalizeGrade(entry.grade || targetGrade);
+        const entryClassId = entry.classId || getClassId(entryGrade) || targetClassId;
+        const entrySubject = normalizeSubject(entry.subject || userSettings.defaultSubject || 'Mathematics');
+        const entryCycle = normalizeCycle(entry.cycle || 1);
+        const entryYear = normalizeAcademicYear(entry.academicYear || targetYear);
+
+        const dataToSave = stripUndefined({
           ...data,
           grade: entryGrade,
-          classId: entryClassId,
           className: entryGrade,
+          classId: entryClassId,
+          subject: entrySubject,
+          cycle: entryCycle,
+          academicYear: entryYear,
+          topic: entry.topic || 'General Topic',
+          subtopic: entry.subtopic || '',
+          learning_outcomes: Array.isArray(entry.learning_outcomes) ? entry.learning_outcomes : [],
+          assessment_ideas: Array.isArray(entry.assessment_ideas) 
+            ? entry.assessment_ideas 
+            : ((entry as any).assessment_suggestions || []),
           userId: user.uid,
           createdBy: user.uid
-        };
+        });
+
         if (id && id.length > 10) {
           await updateDoc(doc(db, 'curriculum', id), { ...dataToSave, updatedAt: serverTimestamp() });
         } else {
@@ -437,7 +485,8 @@ export default function App() {
           });
         }
       }
-      showToast(`Curriculum saved for ${activeClass}`, "success");
+      invalidateCurriculumCache();
+      showToast(`Curriculum saved successfully (${entries.length} entries)`, "success");
     } catch (error) {
       console.error("Curriculum save error:", error);
       showToast("Failed to save curriculum", "error");
@@ -456,13 +505,14 @@ export default function App() {
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        const mimeType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
         
         // Convert file to base64 for Gemini
         const reader = new FileReader();
         const fileDataPromise = new Promise<{ data: string, mimeType: string }>((resolve, reject) => {
           reader.onload = () => {
             const base64 = (reader.result as string).split(',')[1];
-            resolve({ data: base64, mimeType: file.type });
+            resolve({ data: base64, mimeType });
           };
           reader.onerror = reject;
           reader.readAsDataURL(file);
@@ -471,16 +521,23 @@ export default function App() {
         const fileData = await fileDataPromise;
         const parsedEntries = await parseCurriculum(fileData);
         
-        if (parsedEntries && Array.isArray(parsedEntries)) {
-          // Map assessment_suggestions to assessment_ideas if needed
-          const mappedEntries = parsedEntries.map((entry: any) => ({
+        const entriesArray = Array.isArray(parsedEntries)
+          ? parsedEntries
+          : (parsedEntries?.entries || parsedEntries?.curriculum || parsedEntries?.units || []);
+
+        if (entriesArray && entriesArray.length > 0) {
+          const mappedEntries = entriesArray.map((entry: any) => ({
             ...entry,
-            assessment_ideas: entry.assessment_suggestions || [],
+            academicYear: entry.academicYear || userSettings.defaultAcademicYear || '2026-2027',
+            grade: entry.grade || activeClass || 'Standard 4',
+            assessment_ideas: entry.assessment_ideas || entry.assessment_suggestions || [],
             createdAt: new Date().toISOString()
           }));
           
           await handleSaveCurriculum(mappedEntries);
-          showToast(`Successfully parsed and saved ${parsedEntries.length} entries from ${file.name}`, "success");
+          showToast(`Successfully parsed and saved ${mappedEntries.length} entries from ${file.name}`, "success");
+        } else {
+          showToast(`No curriculum entries could be extracted from ${file.name}.`, "error");
         }
       }
     } catch (error) {
@@ -538,29 +595,68 @@ export default function App() {
     showToast(`Sample curriculum loaded for ${sampleGrade}`, "success");
   };
 
-  const handleSavePlan = async (plan: any) => {
-    if (!user || !activeClassId || !activeClass) return;
+  const handleSavePlan = async (plan: any): Promise<string | undefined> => {
+    if (!user || !activeClassId || !activeClass) return undefined;
     try {
-      const planGrade = plan.grade || activeClass;
+      const planGrade = typeof plan.grade === 'object' && plan.grade !== null ? (plan.grade.name || activeClass) : (plan.grade || activeClass);
       const planClassId = plan.classId || getClassId(planGrade);
-      const planToSave = {
+      const resolvedWeek = typeof plan.week === 'object' && plan.week !== null
+        ? (plan.week_number || plan.week.week_number || plan.week.week || '1')
+        : (plan.week || plan.week_number || '1');
+      const resolvedTopic = typeof plan.topic === 'object' && plan.topic !== null
+        ? (plan.topic.topic || plan.topic.name || '')
+        : (plan.topic || plan.week?.topic || '');
+      const resolvedSubject = typeof plan.subject === 'object' && plan.subject !== null
+        ? (plan.subject.name || plan.subject.subject || '')
+        : (plan.subject || plan.week?.subject || '');
+      const resolvedTitle = typeof plan.title === 'object' && plan.title !== null
+        ? (plan.title.title || plan.title.name || '')
+        : (plan.title || plan.lessonTitle || plan.week?.topic || resolvedTopic || 'Lesson Plan');
+
+      const planToSave = stripUndefined({
         ...plan,
+        title: resolvedTitle,
+        topic: resolvedTopic,
+        subject: resolvedSubject,
+        week: resolvedWeek,
         grade: planGrade,
         classId: planClassId,
         className: planGrade,
         userId: user.uid,
+        createdBy: user.uid,
         updatedAt: serverTimestamp()
-      };
+      });
       if (plan.id) {
         await updateDoc(doc(db, 'saved_lessons', plan.id), planToSave);
+        showToast(`Lesson plan saved for ${planGrade}`, "success");
+        return plan.id;
       } else {
-        await addDoc(collection(db, 'saved_lessons'), { ...planToSave, createdAt: serverTimestamp() });
+        const docRef = await addDoc(collection(db, 'saved_lessons'), { ...planToSave, createdAt: serverTimestamp() });
+        plan.id = docRef.id;
+        showToast(`Lesson plan saved for ${planGrade}`, "success");
+        return docRef.id;
       }
-      showToast(`Lesson plan saved for ${planGrade}`, "success");
     } catch (error) {
       console.error("Save error:", error);
       showToast("Failed to save lesson plan", "error");
+      return undefined;
     }
+  };
+
+  const ensureLessonPlanId = async (plan: any): Promise<string> => {
+    if (plan.id) return String(plan.id);
+    if (plan.lesson_plan_id) {
+      plan.id = String(plan.lesson_plan_id);
+      return plan.id;
+    }
+    const savedId = await handleSavePlan(plan);
+    if (savedId) {
+      plan.id = savedId;
+      return savedId;
+    }
+    const fallbackId = `lesson_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    plan.id = fallbackId;
+    return fallbackId;
   };
 
   const handleDeletePlan = async (id: string) => {
@@ -585,22 +681,31 @@ export default function App() {
     if (!user || !activeClassId || !activeClass) return;
     setIsGenerating(true);
     try {
+      const lessonId = await ensureLessonPlanId(plan);
       const { generateResource } = await import('./services/gemini');
       const content = await generateResource(type, plan, { style: userSettings.aiQuality.defaultOutputStyle });
-      const planGrade = plan.grade || activeClass;
+      const planGrade = typeof plan.grade === 'object' && plan.grade !== null ? ((plan.grade as any).name || activeClass) : (plan.grade || activeClass);
       const planClassId = plan.classId || getClassId(planGrade);
       
-      await addDoc(collection(db, 'lesson_resources_new'), {
-        lesson_id: plan.id,
+      const resourceData = stripUndefined({
+        lesson_id: lessonId,
         classId: planClassId,
         className: planGrade,
         grade: planGrade,
         type,
+        resource_type: type.toLowerCase().replace(/\s+/g, '_'),
+        title: `${type} - ${plan.lessonTitle || (plan as any).title || 'Lesson Plan'}`,
         content,
+        generated_by_ai: true,
+        editable: true,
+        version: 1,
         userId: user.uid,
         createdBy: user.uid,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        updated_at: new Date().toISOString()
       });
+
+      await addDoc(collection(db, 'lesson_resources_new'), resourceData);
       
       showToast(`${type} generated successfully for ${planGrade}`, "success");
     } catch (error) {
@@ -615,24 +720,32 @@ export default function App() {
     if (!user || !activeClassId || !activeClass) return;
     setIsGenerating(true);
     try {
+      const lessonId = await ensureLessonPlanId(plan);
       const types = ['Worksheet', 'Quiz', 'Notebook Notes', 'PowerPoint Outline'];
       const { generateResource } = await import('./services/gemini');
-      const planGrade = plan.grade || activeClass;
+      const planGrade = typeof plan.grade === 'object' && plan.grade !== null ? ((plan.grade as any).name || activeClass) : (plan.grade || activeClass);
       const planClassId = plan.classId || getClassId(planGrade);
       
       for (const type of types) {
         const content = await generateResource(type, plan, { style: userSettings.aiQuality.defaultOutputStyle });
-        await addDoc(collection(db, 'lesson_resources_new'), {
-          lesson_id: plan.id,
+        const resourceData = stripUndefined({
+          lesson_id: lessonId,
           classId: planClassId,
           className: planGrade,
           grade: planGrade,
           type,
+          resource_type: type.toLowerCase().replace(/\s+/g, '_'),
+          title: `${type} - ${plan.lessonTitle || (plan as any).title || 'Lesson Plan'}`,
           content,
+          generated_by_ai: true,
+          editable: true,
+          version: 1,
           userId: user.uid,
           createdBy: user.uid,
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          updated_at: new Date().toISOString()
         });
+        await addDoc(collection(db, 'lesson_resources_new'), resourceData);
       }
       
       showToast(`Full resource pack generated for ${planGrade}`, "success");
@@ -647,16 +760,16 @@ export default function App() {
   const handleUpdatePlan = async (plan: LessonPlan) => {
     if (!user || !plan.id || !activeClassId || !activeClass) return;
     try {
-      const planGrade = plan.grade || activeClass;
+      const planGrade = typeof plan.grade === 'object' && plan.grade !== null ? ((plan.grade as any).name || activeClass) : (plan.grade || activeClass);
       const planClassId = plan.classId || getClassId(planGrade);
-      await updateDoc(doc(db, 'saved_lessons', plan.id), { 
+      await updateDoc(doc(db, 'saved_lessons', plan.id), stripUndefined({ 
         ...plan, 
         grade: planGrade,
         classId: planClassId,
         className: planGrade,
         userId: user.uid,
         updatedAt: serverTimestamp() 
-      });
+      }));
       showToast(`Lesson plan updated for ${planGrade}`, "success");
     } catch (error) {
       showToast("Failed to update plan", "error");
@@ -667,17 +780,17 @@ export default function App() {
     if (!user || !activeClassId || !activeClass) return;
     try {
       const { id, createdAt, updatedAt, ...data } = plan;
-      const planGrade = plan.grade || activeClass;
+      const planGrade = typeof plan.grade === 'object' && plan.grade !== null ? ((plan.grade as any).name || activeClass) : (plan.grade || activeClass);
       const planClassId = plan.classId || getClassId(planGrade);
-      await addDoc(collection(db, 'saved_lessons'), { 
+      await addDoc(collection(db, 'saved_lessons'), stripUndefined({ 
         ...data, 
-        lessonTitle: `${plan.lessonTitle} (Copy)`,
+        lessonTitle: `${plan.lessonTitle || (plan as any).title || 'Lesson'} (Copy)`,
         grade: planGrade,
         classId: planClassId,
         className: planGrade,
         userId: user.uid, 
         createdAt: serverTimestamp() 
-      });
+      }));
       showToast(`Lesson plan duplicated for ${planGrade}`, "success");
     } catch (error) {
       showToast("Failed to duplicate plan", "error");
@@ -729,6 +842,19 @@ export default function App() {
     }
   };
 
+  const handleUpdateSettings = async (newSettings: Partial<UserSettings>) => {
+    if (!user) return;
+    try {
+      const merged = { ...userSettings, ...newSettings };
+      setUserSettings(merged);
+      const settingsRef = doc(db, 'user_settings', user.uid);
+      await setDoc(settingsRef, merged, { merge: true });
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+      throw error;
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -774,6 +900,7 @@ export default function App() {
       return (
         <SavedPlanDetailView 
           plan={selectedPlan}
+          resources={resources}
           onBack={() => {
             setSelectedPlan(null);
             setActiveTab('saved');
@@ -877,8 +1004,9 @@ export default function App() {
             cyclePacingMaps={cyclePacingMaps}
             userSettings={userSettings}
             prefillData={prefillData}
-            onSave={handleSavePlan}
+            onSave={async (plan) => { await handleSavePlan(plan); }}
             onGenerateResource={handleGenerateResource}
+            onGenerateFullPack={handleGenerateFullPack}
           />
         );
       case 'mapping':
@@ -1038,7 +1166,13 @@ export default function App() {
       case 'resources':
         return <ResourceGenView lessonPlans={lessonPlans} />;
       case 'settings':
-        return <SettingsView user={user} />;
+        return (
+          <SettingsView 
+            user={user} 
+            userSettings={userSettings} 
+            onUpdateSettings={handleUpdateSettings} 
+          />
+        );
       default:
         return <div className="p-12 text-center text-gray-400">View coming soon...</div>;
     }

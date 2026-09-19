@@ -63,15 +63,17 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
                 {plan.structure} Structure
               </Badge>
             </div>
-            <h2 className="text-3xl font-black text-gray-900 tracking-tight">{plan.theme}</h2>
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight">
+              {typeof plan.theme === 'object' && plan.theme !== null ? (plan.theme as any).theme || (plan.theme as any).topic || '' : String(plan.theme || '')}
+            </h2>
             <div className="flex items-center gap-4 text-sm text-gray-500 font-medium">
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-amber-500" />
-                Cycle {plan.cycle}, Week {plan.week}
+                Cycle {typeof plan.cycle === 'object' && plan.cycle !== null ? (plan.cycle as any).cycle || '' : String(plan.cycle || '')}, Week {typeof plan.week === 'object' && plan.week !== null ? (plan.week as any).week_number || (plan.week as any).week || '' : String(plan.week || '')}
               </span>
               <span className="flex items-center gap-1.5">
                 <Target className="w-4 h-4 text-amber-500" />
-                {plan.grade}
+                {typeof plan.grade === 'object' && plan.grade !== null ? (plan.grade as any).name || '' : String(plan.grade || '')}
               </span>
             </div>
           </div>

@@ -50,8 +50,10 @@ import {
   generateLanguageArtsDailyPlan,
   improveContent, 
   generateLanguageArtsWeeklyPlan, 
-  generateWeeklyLessonPlan 
+  generateWeeklyLessonPlan,
+  generatePowerPoint
 } from '../../services/gemini';
+import { buildDeterministicPowerPoint } from '../../lib/powerpointService';
 import { 
   getFilteredTopics, 
   getFilteredSubtopics, 
@@ -76,6 +78,7 @@ interface PlannerViewProps {
   prefillData?: any;
   onSave: (plan: any) => Promise<void>;
   onGenerateResource: (plan: LessonPlan, type: string) => Promise<void>;
+  onGenerateFullPack?: (plan: LessonPlan) => Promise<void>;
 }
 
 export function PlannerView({ 
@@ -88,11 +91,12 @@ export function PlannerView({
   userSettings, 
   prefillData, 
   onSave,
-  onGenerateResource 
+  onGenerateResource,
+  onGenerateFullPack
 }: PlannerViewProps) {
   const { showToast } = useToasts();
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(
-    prefillData?.academicYear || userSettings.defaultAcademicYear || '2025-2026'
+    prefillData?.academicYear || userSettings.defaultAcademicYear || '2026-2027'
   );
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(prefillData?.grade || activeClass || userSettings.defaultGrade);
 
@@ -371,7 +375,7 @@ export function PlannerView({
           return;
         }
 
-        setGeneratedPlan({
+        const laPlanWithContext = {
           ...plan,
           structured_json: plan,
           academicYear: selectedAcademicYear,
@@ -390,8 +394,24 @@ export function PlannerView({
           createdAt: new Date().toISOString(),
           createdBy: '', 
           status: 'Planned',
-          isReadyToTeach: true
-        });
+          isReadyToTeach: true,
+          powerpointPresentation: buildDeterministicPowerPoint({
+            ...plan,
+            subject: 'Language Arts',
+            grade: selectedGrade,
+            topic: selectedTopic,
+            subtopic: selectedSubtopic,
+            learningOutcome: selectedOutcome
+          })
+        };
+
+        setGeneratedPlan(laPlanWithContext);
+
+        generatePowerPoint(laPlanWithContext).then((aiPres) => {
+          if (aiPres && Array.isArray(aiPres.slides) && aiPres.slides.length >= 6) {
+            setGeneratedPlan(prev => prev ? { ...prev, powerpointPresentation: aiPres } : null);
+          }
+        }).catch(err => console.warn('Background AI PowerPoint generation notice:', err));
       } else {
         const plan = await generateLessonPlan({
           academicYear: selectedAcademicYear,
@@ -429,7 +449,7 @@ export function PlannerView({
           return;
         }
 
-        setGeneratedPlan({
+        const standardPlanWithContext = {
           ...plan,
           structured_json: plan,
           academicYear: selectedAcademicYear,
@@ -448,8 +468,24 @@ export function PlannerView({
           createdAt: new Date().toISOString(),
           createdBy: '', 
           status: 'Planned',
-          isReadyToTeach: !!(plan.videoAssistant && plan.inDepthVisuals && plan.boardVisualPlan && plan.exactMaterials)
-        });
+          isReadyToTeach: !!(plan.videoAssistant && plan.inDepthVisuals && plan.boardVisualPlan && plan.exactMaterials),
+          powerpointPresentation: buildDeterministicPowerPoint({
+            ...plan,
+            subject: selectedSubject,
+            grade: selectedGrade,
+            topic: selectedTopic,
+            subtopic: selectedSubtopic,
+            learningOutcome: selectedOutcome
+          })
+        };
+
+        setGeneratedPlan(standardPlanWithContext);
+
+        generatePowerPoint(standardPlanWithContext).then((aiPres) => {
+          if (aiPres && Array.isArray(aiPres.slides) && aiPres.slides.length >= 6) {
+            setGeneratedPlan(prev => prev ? { ...prev, powerpointPresentation: aiPres } : null);
+          }
+        }).catch(err => console.warn('Background AI PowerPoint generation notice:', err));
       }
     } catch (err: any) {
       console.error("Error generating lesson plan:", err);
@@ -464,7 +500,13 @@ export function PlannerView({
     setIsImproving(true);
     try {
       const improved = await improveContent(generatedPlan.content, instruction, generatedPlan);
-      setGeneratedPlan(prev => prev ? { ...prev, content: improved } : null);
+      setGeneratedPlan(prev => {
+        if (!prev) return null;
+        const updated = { ...prev, content: improved };
+        // Automatically rebuild PowerPoint when lesson is updated
+        updated.powerpointPresentation = buildDeterministicPowerPoint(updated);
+        return updated;
+      });
     } catch (err) {
       console.error("Error improving lesson plan:", err);
     } finally {
@@ -505,8 +547,8 @@ export function PlannerView({
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Academic Year</label>
                 <Select 
                   options={[
-                    { label: '2025-2026', value: '2025-2026' },
-                    { label: '2026-2027', value: '2026-2027' }
+                    { label: '2026-2027 (Current)', value: '2026-2027' },
+                    { label: '2025-2026', value: '2025-2026' }
                   ]} 
                   value={selectedAcademicYear} 
                   onChange={(val) => setSelectedAcademicYear(val)} 
@@ -922,6 +964,7 @@ export function PlannerView({
             <LessonPlanDisplay 
               plan={generatedPlan} 
               onGenerateResource={onGenerateResource}
+              onGenerateFullPack={onGenerateFullPack}
               onUpdatePlan={async (updated) => setGeneratedPlan(updated)}
               onDuplicate={async (p) => {
                 const { id, ...rest } = p;

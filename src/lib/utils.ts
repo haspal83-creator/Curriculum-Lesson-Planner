@@ -20,7 +20,11 @@ export function stripUndefined<T>(obj: T): T {
   if (Array.isArray(obj)) {
     return obj.map(v => stripUndefined(v)) as any;
   }
-  if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+  if (obj !== null && typeof obj === 'object' && !(obj instanceof Date) && !(obj instanceof RegExp)) {
+    // Preserve Firestore FieldValue instances (e.g. serverTimestamp, deleteField)
+    if ('_methodName' in (obj as any) || (obj as any)?.constructor?.name === 'FieldValue') {
+      return obj;
+    }
     return Object.entries(obj).reduce((acc, [key, value]) => {
       if (value !== undefined) {
         acc[key] = stripUndefined(value);

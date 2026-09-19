@@ -45,18 +45,20 @@ export default function DailyPlanDetailView({ plan, onBack }: DailyPlanDetailVie
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="bg-indigo-100 text-indigo-700">Daily Lesson Plan</Badge>
-            <Badge variant="outline">{plan.grade}</Badge>
-            <Badge variant="outline">{plan.subject}</Badge>
+            <Badge variant="outline">{typeof plan.grade === 'object' && plan.grade !== null ? (plan.grade as any).name || '' : String(plan.grade || '')}</Badge>
+            <Badge variant="outline">{typeof plan.subject === 'object' && plan.subject !== null ? (plan.subject as any).name || '' : String(plan.subject || '')}</Badge>
           </div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">{plan.lesson_title}</h1>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+            {typeof plan.lesson_title === 'object' && plan.lesson_title !== null ? (plan.lesson_title as any).title || '' : String(plan.lesson_title || '')}
+          </h1>
           <div className="flex items-center gap-6 text-sm text-gray-500 font-medium">
             <span className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-500" />
-              Cycle {plan.cycle}, Week {plan.week}, Day {plan.day}
+              Cycle {typeof plan.cycle === 'object' && plan.cycle !== null ? (plan.cycle as any).cycle || '' : String(plan.cycle || '')}, Week {typeof plan.week === 'object' && plan.week !== null ? (plan.week as any).week_number || (plan.week as any).week || '' : String(plan.week || '')}, Day {typeof plan.day === 'object' && plan.day !== null ? (plan.day as any).day || '' : String(plan.day || '')}
             </span>
             <span className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-500" />
-              {plan.topic}
+              {typeof plan.topic === 'object' && plan.topic !== null ? (plan.topic as any).topic || (plan.topic as any).name || '' : String(plan.topic || '')}
             </span>
           </div>
         </div>

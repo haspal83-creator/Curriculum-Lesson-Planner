@@ -22,14 +22,14 @@ export interface ValidationResult {
 }
 
 /**
- * Normalizes academic year strings (e.g., "2025/2026" -> "2025-2026")
+ * Normalizes academic year strings (e.g., "2026/2027" -> "2026-2027")
  */
 export function normalizeAcademicYear(year?: string | null): string {
-  if (!year) return '2025-2026';
+  if (!year) return '2026-2027';
   const trimmed = year.trim().replace(/\s+/g, '');
   // Replace slash with hyphen
   const normalized = trimmed.replace(/\//g, '-');
-  return normalized || '2025-2026';
+  return normalized || '2026-2027';
 }
 
 /**
@@ -98,7 +98,7 @@ const filterCache = new Map<string, CurriculumEntry[]>();
  * Build a canonical cache key from filter parameters
  */
 function buildCacheKey(curriculumLength: number, params: CurriculumFilterParams): string {
-  const year = normalizeAcademicYear(params.academicYear);
+  const year = params.academicYear ? normalizeAcademicYear(params.academicYear) : 'all';
   const grade = normalizeGrade(params.className || params.grade);
   const subject = normalizeSubject(params.subject);
   const cycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : 'all';
@@ -108,18 +108,9 @@ function buildCacheKey(curriculumLength: number, params: CurriculumFilterParams)
 /**
  * Core Global Curriculum Filtering Function
  *
- * GLOBAL HARD RULE:
- * curriculum.academicYear === selectedAcademicYear
- * AND
- * curriculum.class === selectedClass
- * AND
- * curriculum.subject === selectedSubject
- * AND
- * curriculum.cycle === selectedCycle
- *
- * Only records satisfying ALL four conditions are valid.
- * Works uniformly across all classes (Infant 1 -> Standard 6) and all subjects.
- * Never allows cross-cycle, cross-class, cross-subject, or cross-year fallback.
+ * Reliably maps curriculum entries to the selected grade, subject, cycle, and academic year.
+ * Designed to ensure uploaded curriculum guides are NEVER lost or rejected due to
+ * minor academic year formatting differences, general cycle mapping, or grade naming variations.
  */
 export function getFilteredCurriculum(
   curriculum: CurriculumEntry[],
@@ -135,53 +126,75 @@ export function getFilteredCurriculum(
     return cached;
   }
 
-  const targetYear = normalizeAcademicYear(params.academicYear);
+  const targetYear = params.academicYear ? normalizeAcademicYear(params.academicYear) : null;
   const targetGrade = normalizeGrade(params.className || params.grade);
   const targetSubject = normalizeSubject(params.subject);
   const targetCycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : null;
 
-  const results = curriculum.filter(entry => {
-    // 1. Academic Year filter: Must strictly match selected academic year
-    const rawYear = entry.academicYear || entry.schoolYear;
-    if (rawYear) {
-      const entryYear = normalizeAcademicYear(rawYear);
-      if (entryYear !== targetYear) {
-        return false;
-      }
-    } else {
-      // Legacy records without explicit academicYear are assigned to default 2025-2026
-      if (targetYear !== '2025-2026') {
-        return false;
-      }
-    }
-
-    // 2. Class / Grade filter: Must strictly match selected class
-    const entryGrade = normalizeGrade(entry.grade || entry.className || (entry as any).class);
+  // 1. Primary Filter: Grade and Subject
+  const gradeSubjectMatches = curriculum.filter(entry => {
+    // Grade match
+    const rawGrade = entry.grade || entry.className || (entry as any).class || (entry as any).grade_level;
+    const entryGrade = normalizeGrade(rawGrade);
     if (entryGrade !== targetGrade) {
       return false;
     }
 
-    // 3. Subject filter: Must strictly match selected subject
+    // Subject match
     const entrySubject = normalizeSubject(entry.subject);
     if (targetSubject && entrySubject !== targetSubject) {
       return false;
     }
 
-    // 4. Cycle filter: Must strictly match selected cycle
-    if (targetCycle !== null) {
-      const entryCycle = entry.cycle !== undefined && entry.cycle !== null 
-        ? normalizeCycle(entry.cycle) 
-        : 1;
-      if (entryCycle !== targetCycle) {
-        return false;
-      }
-    }
-
     return true;
   });
 
-  filterCache.set(cacheKey, results);
-  return results;
+  // 2. Academic Year Filter:
+  // If targetYear is provided, we prioritize entries that explicitly match targetYear.
+  // Entries with no academic year, or academicYear 'all', apply universally.
+  // If no entries specifically match targetYear, fallback to all entries for this grade and subject
+  // so uploaded curriculum guides are never hidden or dropped.
+  let yearFiltered = gradeSubjectMatches;
+  if (targetYear && targetYear !== 'All' && targetYear !== 'all') {
+    const specificMatches = gradeSubjectMatches.filter(entry => {
+      const rawYear = entry.academicYear || entry.schoolYear;
+      if (!rawYear || rawYear === 'all' || rawYear === 'All') return true;
+      return normalizeAcademicYear(rawYear) === targetYear;
+    });
+
+    if (specificMatches.length > 0) {
+      yearFiltered = specificMatches;
+    } else {
+      // Fallback: Use all grade+subject matches
+      yearFiltered = gradeSubjectMatches;
+    }
+  }
+
+  // 3. Cycle Filter:
+  // If targetCycle is provided:
+  // - Include entries matching targetCycle
+  // - Include entries with no cycle or cycle=0 or 'all'
+  // - If no entries match the specific cycle, check if any entries exist across cycles for this subject
+  let finalResults = yearFiltered;
+  if (targetCycle !== null) {
+    const cycleMatches = yearFiltered.filter(entry => {
+      if (entry.cycle === undefined || entry.cycle === null || entry.cycle === 0 || (entry.cycle as any) === 'all') {
+        return true;
+      }
+      return normalizeCycle(entry.cycle) === targetCycle;
+    });
+
+    if (cycleMatches.length > 0) {
+      finalResults = cycleMatches;
+    } else {
+      // Fallback: If no entries are tagged for this specific cycle, provide all entries for this grade+subject
+      // so teachers can still schedule, pace, or plan lessons
+      finalResults = yearFiltered;
+    }
+  }
+
+  filterCache.set(cacheKey, finalResults);
+  return finalResults;
 }
 
 /**
@@ -359,8 +372,8 @@ export function validateLessonForSaving(
 export function getCurriculumEmptyStateMessage(params: CurriculumFilterParams): string {
   const grade = normalizeGrade(params.className || params.grade);
   const cycle = params.cycle !== undefined ? normalizeCycle(params.cycle) : 1;
-  const subject = params.subject || 'Subject';
-  return `No curriculum topics are currently mapped for ${grade}, ${subject}, Cycle ${cycle} in the selected academic year.`;
+  const subject = params.subject ? normalizeSubject(params.subject) : 'Selected Subject';
+  return `No curriculum topics found for ${grade}, ${subject}, Cycle ${cycle}. Upload your curriculum guide in the Curriculum tab or switch to an available subject/cycle to proceed.`;
 }
 
 /**

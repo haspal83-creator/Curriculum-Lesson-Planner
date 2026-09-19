@@ -30,6 +30,7 @@ interface SavedPlanDetailViewProps {
   onDuplicate?: (plan: LessonPlan) => Promise<void>;
   isGenerating?: boolean;
   initialTab?: string;
+  resources?: any[];
 }
 
 export function SavedPlanDetailView({ 
@@ -51,7 +52,8 @@ export function SavedPlanDetailView({
   onPrepareForTeaching,
   onDuplicate,
   isGenerating,
-  initialTab
+  initialTab,
+  resources
 }: SavedPlanDetailViewProps) {
   return (
     <div className="space-y-6 w-full min-w-0">
@@ -63,6 +65,7 @@ export function SavedPlanDetailView({
       </div>
       <LessonPlanDisplay 
         plan={plan} 
+        resources={resources}
         onStatusChange={async (status) => {
           await onUpdateStatus(plan.id!, status);
         }}
