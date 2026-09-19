@@ -368,7 +368,13 @@ export function CurriculumView({
                   )}
                 </div>
                 <h4 className="font-bold text-gray-900">{item.topic}</h4>
-                <p className="text-xs text-gray-500">{item.strand}</p>
+                {item.subtopic && (
+                  <p className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Subtopic:</span>
+                    <span>{item.subtopic}</span>
+                  </p>
+                )}
+                {item.strand && <p className="text-xs text-gray-500">{item.strand}</p>}
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>

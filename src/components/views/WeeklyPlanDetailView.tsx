@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, DropdownMenu } from '../ui';
 import { WeeklyCurriculumPlan, LessonPlan } from '../../types';
-import { exportWeeklyCurriculumToWord } from '../../lib/exportUtils';
+import { exportWeeklyCurriculumToWord, exportWeeklyCurriculumToPDF } from '../../lib/exportUtils';
 
 interface WeeklyPlanDetailViewProps {
   plan: WeeklyCurriculumPlan;
@@ -33,7 +33,7 @@ export default function WeeklyPlanDetailView({ plan, onBack, onGenerateResource 
   };
 
   const handleExportPDF = () => {
-    window.print();
+    exportWeeklyCurriculumToPDF(plan);
   };
 
   return (

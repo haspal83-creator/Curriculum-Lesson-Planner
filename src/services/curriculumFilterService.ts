@@ -1,4 +1,5 @@
 import { CurriculumEntry, GradeLevel, Subject, LessonPlan, ALL_GRADE_LEVELS, CyclePacingMap } from '../types';
+import { BELIZE_NATIONAL_CURRICULUM } from '../data/belize_national_curriculum';
 
 export interface CurriculumFilterParams {
   academicYear?: string;
@@ -260,29 +261,44 @@ export function getFilteredCurriculum(
         }
       });
 
-      let currentStartWeek = 1;
-      let matchedTopic: string | null = null;
+      if (uniqueTopics.length > 0) {
+        if (uniqueTopics.length === 1) {
+          // If there is only 1 topic in the cycle, it spans all instructional weeks of the cycle
+          finalResults = cycleFiltered.filter(e => (e.topic || '').trim() === uniqueTopics[0]);
+        } else {
+          // Calculate durations for each topic
+          const topicDurations = uniqueTopics.map(topic => {
+            const topicEntries = cycleFiltered.filter(e => (e.topic || '').trim() === topic);
+            const maxWeeks = Math.max(...topicEntries.map(e => e.suggestedWeeks || 0), 0);
+            const maxLessons = Math.max(...topicEntries.map(e => e.suggestedLessons || 0), 0);
+            return maxWeeks > 0 
+              ? maxWeeks 
+              : (maxLessons > 0 ? Math.max(1, Math.ceil(maxLessons / 5)) : 1);
+          });
 
-      for (const topic of uniqueTopics) {
-        const topicEntries = cycleFiltered.filter(e => (e.topic || '').trim() === topic);
-        const maxWeeks = Math.max(...topicEntries.map(e => e.suggestedWeeks || 0), 0);
-        const maxLessons = Math.max(...topicEntries.map(e => e.suggestedLessons || 0), 0);
-        const duration = maxWeeks > 0 
-          ? maxWeeks 
-          : (maxLessons > 0 ? Math.max(1, Math.ceil(maxLessons / 5)) : 1);
+          let currentStartWeek = 1;
+          let matchedTopic: string | null = null;
 
-        const endWeek = currentStartWeek + duration - 1;
-        if (targetWeek >= currentStartWeek && targetWeek <= endWeek) {
-          matchedTopic = topic;
-          break;
+          for (let i = 0; i < uniqueTopics.length; i++) {
+            const isLast = i === uniqueTopics.length - 1;
+            const duration = topicDurations[i];
+            // The last topic covers the remaining weeks of the cycle
+            const endWeek = isLast ? Math.max(currentStartWeek + duration - 1, 25) : currentStartWeek + duration - 1;
+            if (targetWeek >= currentStartWeek && targetWeek <= endWeek) {
+              matchedTopic = uniqueTopics[i];
+              break;
+            }
+            currentStartWeek = endWeek + 1;
+          }
+
+          if (matchedTopic) {
+            finalResults = cycleFiltered.filter(e => (e.topic || '').trim() === matchedTopic);
+          } else {
+            // Fallback: return all cycle topics so teacher always has approved curriculum options
+            finalResults = cycleFiltered;
+          }
         }
-        currentStartWeek = endWeek + 1;
-      }
-
-      if (matchedTopic) {
-        finalResults = cycleFiltered.filter(e => (e.topic || '').trim() === matchedTopic);
       } else {
-        // No topics scheduled for this instructional week
         finalResults = [];
       }
     }
@@ -309,21 +325,86 @@ export function getFilteredTopics(
 
 /**
  * Returns subtopics mapped to the selected Academic Year + Class + Subject + Cycle + Topic.
- * Inherits the complete curriculum context.
+ * Robustly inspects singular and plural subtopic properties across filtered curriculum,
+ * broader cycle context, national curriculum, and pacing maps.
  */
 export function getFilteredSubtopics(
   curriculum: CurriculumEntry[],
   params: CurriculumTopicFilterParams
 ): string[] {
   if (!params.topic || !params.topic.trim()) return [];
-  const filtered = getFilteredCurriculum(curriculum, params);
   const targetTopic = params.topic.trim().toLowerCase();
+  const subtopics: string[] = [];
 
-  const subtopics = filtered
-    .filter(e => (e.topic || '').trim().toLowerCase() === targetTopic)
-    .map(e => (e.subtopic || '').trim())
-    .filter(Boolean);
-  return Array.from(new Set(subtopics));
+  const extractSubtopics = (entries: CurriculumEntry[]) => {
+    for (const e of entries) {
+      if ((e.topic || '').trim().toLowerCase() === targetTopic) {
+        if (e.subtopic && typeof e.subtopic === 'string' && e.subtopic.trim()) {
+          subtopics.push(e.subtopic.trim());
+        }
+        if (Array.isArray((e as any).subtopics)) {
+          for (const st of (e as any).subtopics) {
+            if (typeof st === 'string' && st.trim()) {
+              subtopics.push(st.trim());
+            }
+          }
+        }
+        if ((e as any).sub_topic && typeof (e as any).sub_topic === 'string' && (e as any).sub_topic.trim()) {
+          subtopics.push((e as any).sub_topic.trim());
+        }
+      }
+    }
+  };
+
+  // 1. Primary: search within filtered curriculum
+  const filtered = getFilteredCurriculum(curriculum, params);
+  extractSubtopics(filtered);
+
+  // 2. Secondary: search across the entire cycle (without week constraint)
+  if (subtopics.length === 0) {
+    const broader = getFilteredCurriculum(curriculum, { ...params, week: null });
+    extractSubtopics(broader);
+  }
+
+  // 3. Tertiary: search base national curriculum and raw entries
+  if (subtopics.length === 0) {
+    extractSubtopics(curriculum);
+    extractSubtopics(BELIZE_NATIONAL_CURRICULUM);
+  }
+
+  // 4. Quaternary: inspect pacingMaps for scheduled subtopics
+  if (params.pacingMaps && Array.isArray(params.pacingMaps)) {
+    const targetGrade = normalizeGrade(params.className || params.grade);
+    const targetSubject = normalizeSubject(params.subject);
+    const targetCycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : null;
+    for (const map of params.pacingMaps) {
+      if (normalizeGrade(map.grade) === targetGrade && normalizeSubject(map.subject) === targetSubject) {
+        if (targetCycle === null || normalizeCycle(map.cycle) === targetCycle) {
+          if (Array.isArray(map.weeks)) {
+            for (const w of map.weeks) {
+              if ((w.topic || '').trim().toLowerCase() === targetTopic) {
+                if (Array.isArray(w.subtopics)) {
+                  for (const st of w.subtopics) {
+                    if (typeof st === 'string' && st.trim()) {
+                      subtopics.push(st.trim());
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const unique = Array.from(new Set(subtopics.filter(Boolean)));
+  // If still empty for a valid topic name, provide the topic title as the default subtopic
+  if (unique.length === 0 && params.topic.trim()) {
+    return [params.topic.trim()];
+  }
+
+  return unique;
 }
 
 /**
@@ -334,27 +415,80 @@ export function getFilteredOutcomes(
   params: CurriculumTopicFilterParams & { subtopic?: string }
 ): string[] {
   if (!params.topic || !params.topic.trim()) return [];
-  const filtered = getFilteredCurriculum(curriculum, params);
   const targetTopic = params.topic.trim().toLowerCase();
   const targetSubtopic = params.subtopic ? params.subtopic.trim().toLowerCase() : null;
 
   const outcomes: string[] = [];
-  filtered
-    .filter(e => {
-      const matchTopic = (e.topic || '').trim().toLowerCase() === targetTopic;
-      if (!matchTopic) return false;
-      if (targetSubtopic) {
-        return (e.subtopic || '').trim().toLowerCase() === targetSubtopic;
-      }
-      return true;
-    })
-    .forEach(e => {
-      if (Array.isArray(e.learning_outcomes)) {
-        outcomes.push(...e.learning_outcomes);
-      }
-    });
 
-  return Array.from(new Set(outcomes.map(o => o.trim()).filter(Boolean)));
+  const extractOutcomes = (entries: CurriculumEntry[]) => {
+    for (const e of entries) {
+      const matchTopic = (e.topic || '').trim().toLowerCase() === targetTopic;
+      if (!matchTopic) continue;
+
+      if (targetSubtopic) {
+        const subtopicMatches = 
+          (e.subtopic || '').trim().toLowerCase() === targetSubtopic ||
+          (Array.isArray((e as any).subtopics) && (e as any).subtopics.some((s: string) => s.trim().toLowerCase() === targetSubtopic)) ||
+          ((e as any).sub_topic || '').trim().toLowerCase() === targetSubtopic;
+        
+        if (!subtopicMatches) continue;
+      }
+
+      if (Array.isArray(e.learning_outcomes)) {
+        for (const lo of e.learning_outcomes) {
+          if (typeof lo === 'string' && lo.trim()) {
+            outcomes.push(lo.trim());
+          }
+        }
+      }
+    }
+  };
+
+  // 1. Primary: filtered curriculum
+  const filtered = getFilteredCurriculum(curriculum, params);
+  extractOutcomes(filtered);
+
+  // 2. Secondary: broader cycle without week constraint
+  if (outcomes.length === 0) {
+    const broader = getFilteredCurriculum(curriculum, { ...params, week: null });
+    extractOutcomes(broader);
+  }
+
+  // 3. Tertiary: raw and national curriculum
+  if (outcomes.length === 0) {
+    extractOutcomes(curriculum);
+    extractOutcomes(BELIZE_NATIONAL_CURRICULUM);
+  }
+
+  // 4. Quaternary: inspect pacingMaps
+  if (params.pacingMaps && Array.isArray(params.pacingMaps)) {
+    const targetGrade = normalizeGrade(params.className || params.grade);
+    const targetSubject = normalizeSubject(params.subject);
+    for (const map of params.pacingMaps) {
+      if (normalizeGrade(map.grade) === targetGrade && normalizeSubject(map.subject) === targetSubject) {
+        if (Array.isArray(map.weeks)) {
+          for (const w of map.weeks) {
+            if ((w.topic || '').trim().toLowerCase() === targetTopic) {
+              if (Array.isArray(w.learningOutcomes)) {
+                for (const lo of w.learningOutcomes) {
+                  if (typeof lo === 'string' && lo.trim()) {
+                    outcomes.push(lo.trim());
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const unique = Array.from(new Set(outcomes.filter(Boolean)));
+  if (unique.length === 0 && params.topic.trim()) {
+    return [`Demonstrate understanding and application of ${params.topic.trim()}`];
+  }
+
+  return unique;
 }
 
 /**

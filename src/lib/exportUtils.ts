@@ -33,6 +33,13 @@ import {
   toCleanBullets as toCleanBulletsResolved,
   ResolvedLessonResources
 } from './lessonExportResolver';
+import { 
+  exportWeeklyPlanToDocxDocument, 
+  normalizeWeeklyPlanForExport 
+} from './weeklyPlanWordExport';
+import { 
+  exportWeeklyPlanToPdfDocument 
+} from './weeklyPlanPdfExport';
 
 // ==========================================
 // COLOR PALETTE & DESIGN CONSTANTS
@@ -1215,64 +1222,24 @@ export async function exportSavedLessonToWord(
 }
 
 // ==========================================
-// 3. WEEKLY LESSON PLAN EXPORT (.DOCX)
+// 3. WEEKLY LESSON PLAN EXPORT (.DOCX & .PDF)
 // ==========================================
-export async function exportWeeklyLessonPlanToWord(plan: any, teacherName?: string): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 40, after: 40 },
-      children: [
-        new TextRun({
-          text: OFFICIAL_SCHOOL_NAME,
-          bold: true,
-          size: 26,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 40 },
-      children: [
-        new TextRun({
-          text: `WEEKLY LESSON PLAN: ${cleanText(plan.week?.topic || plan.topic)}`,
-          bold: true,
-          size: 34,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
-      children: [
-        new TextRun({
-          text: `Teacher: ${cleanText(teacherName || 'Not provided')} | ${plan.week?.grade || plan.grade} - ${plan.week?.subject || plan.subject}`,
-          size: 22,
-          color: TEXT_MUTED
-        })
-      ]
-    })
-  ];
+export async function exportWeeklyLessonPlanToWord(
+  plan: any, 
+  teacherName?: string, 
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToDocxDocument(normalized, 'Weekly_Lesson_Plan');
+}
 
-  const days: any[] = plan.week?.days || plan.days || [];
-  days.forEach((day: any) => {
-    children.push(createSectionHeading(`Day: ${day.day || day.day_number || ''}`, 260));
-    const bullets = toCleanBullets(formatLessonForExport(day.lesson || day, teacherName));
-    bullets.forEach(b => children.push(createBullet(b)));
-  });
-
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
-      },
-      children
-    }]
-  });
-
-  await downloadDocx(doc, `Weekly_Plan_${cleanText(plan.week?.topic || plan.topic || 'Export')}`);
+export async function exportWeeklyLessonPlanToPDF(
+  plan: any, 
+  teacherName?: string, 
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToPdfDocument(normalized, 'Weekly_Lesson_Plan');
 }
 
 export async function exportDailyPlanToWord(plan: any): Promise<void> {
@@ -1397,62 +1364,22 @@ export async function exportLAWeeklyToWord(plan: any): Promise<void> {
   await downloadDocx(doc, `LA_Weekly_${cleanText(plan.weeklyTheme || plan.theme || 'Export')}`);
 }
 
-export async function exportWeeklyCurriculumToWord(plan: any): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 40, after: 40 },
-      children: [
-        new TextRun({
-          text: OFFICIAL_SCHOOL_NAME,
-          bold: true,
-          size: 26,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 40 },
-      children: [
-        new TextRun({
-          text: `WEEKLY CURRICULUM PLAN: ${cleanText(plan.theme || plan.topic)}`,
-          bold: true,
-          size: 34,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
-      children: [
-        new TextRun({
-          text: `Grade: ${plan.grade} | Subject: ${plan.subject}`,
-          size: 22,
-          color: TEXT_MUTED
-        })
-      ]
-    })
-  ];
+export async function exportWeeklyCurriculumToWord(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToDocxDocument(normalized, 'Weekly_Curriculum_Plan');
+}
 
-  const days: any[] = plan.days || [];
-  days.forEach((day: any) => {
-    children.push(createSectionHeading(`Day ${day.day} - ${day.title}`, 260));
-    children.push(createParagraph(`Objective: ${day.objective}`, { bold: true }));
-    day.activities?.forEach((act: any) => children.push(createBullet(act)));
-  });
-
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
-      },
-      children
-    }]
-  });
-
-  await downloadDocx(doc, `Curriculum_${cleanText(plan.theme || plan.topic || 'Export')}`);
+export async function exportWeeklyCurriculumToPDF(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToPdfDocument(normalized, 'Weekly_Curriculum_Plan');
 }
 
 // ==========================================
@@ -1638,6 +1565,10 @@ Next Lesson Connection: ${res.reflection.nextSteps}
   return output;
 }
 
-export const exportToPDF = (plan: LessonPlan) => {
-  window.print();
+export const exportToPDF = async (plan: any, teacherName?: string) => {
+  if (plan && (plan.week || plan.daily_plans || (Array.isArray(plan.days) && plan.days.length > 0))) {
+    await exportWeeklyLessonPlanToPDF(plan, teacherName);
+  } else {
+    window.print();
+  }
 };

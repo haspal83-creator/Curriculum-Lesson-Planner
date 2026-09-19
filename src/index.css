@@ -40,6 +40,18 @@
     .print-border {
       border: 1px solid #e5e7eb !important;
     }
+    .page-break {
+      page-break-before: always;
+      break-before: page;
+    }
+    table {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    h1, h2, h3 {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
   }
 }
 

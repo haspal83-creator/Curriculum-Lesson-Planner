@@ -246,9 +246,11 @@ export function PlannerView({
       className: selectedGrade,
       subject: selectedSubject,
       cycle: selectedCycle,
-      topic: selectedTopic
+      topic: selectedTopic,
+      week: detectedWeek,
+      pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic]);
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, detectedWeek, cyclePacingMaps]);
 
   const filteredOutcomes = useMemo(() => {
     return getFilteredOutcomes(curriculum, {
@@ -257,25 +259,56 @@ export function PlannerView({
       subject: selectedSubject,
       cycle: selectedCycle,
       topic: selectedTopic,
-      subtopic: selectedSubtopic
+      subtopic: selectedSubtopic,
+      week: detectedWeek,
+      pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, selectedSubtopic]);
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, selectedSubtopic, detectedWeek, cyclePacingMaps]);
 
-  // Auto-fill from pacing map only if mapped topic belongs to the filtered curriculum
+  // Synchronize topic selection with filteredTopics
   useEffect(() => {
-    if (activeWeekData && filteredTopics.includes(activeWeekData.topic)) {
-      setSelectedTopic(activeWeekData.topic);
-      if (activeWeekData.subtopics.length > 0) {
-        setSelectedSubtopic(activeWeekData.subtopics[0]);
+    if (filteredTopics.length > 0) {
+      if (!selectedTopic || !filteredTopics.includes(selectedTopic)) {
+        const preferredTopic = (activeWeekData && filteredTopics.includes(activeWeekData.topic))
+          ? activeWeekData.topic
+          : filteredTopics[0];
+        setSelectedTopic(preferredTopic);
       }
-      if (activeWeekData.learningOutcomes.length > 0) {
-        setSelectedOutcome(activeWeekData.learningOutcomes[0]);
-      }
+    } else {
+      setSelectedTopic('');
+      setSelectedSubtopic('');
+      setSelectedOutcome('');
     }
-  }, [activeWeekData, filteredTopics]);
+  }, [filteredTopics, activeWeekData, selectedTopic]);
+
+  // Synchronize subtopic selection with filteredSubtopics
+  useEffect(() => {
+    if (filteredSubtopics.length > 0) {
+      if (!selectedSubtopic || !filteredSubtopics.includes(selectedSubtopic)) {
+        const preferredSubtopic = (activeWeekData?.subtopics && activeWeekData.subtopics.find(st => filteredSubtopics.includes(st)))
+          || filteredSubtopics[0];
+        setSelectedSubtopic(preferredSubtopic);
+      }
+    } else {
+      setSelectedSubtopic('');
+    }
+  }, [filteredSubtopics, activeWeekData, selectedSubtopic]);
+
+  // Synchronize outcome selection with filteredOutcomes
+  useEffect(() => {
+    if (filteredOutcomes.length > 0) {
+      if (!selectedOutcome || !filteredOutcomes.includes(selectedOutcome)) {
+        const preferredOutcome = (activeWeekData?.learningOutcomes && activeWeekData.learningOutcomes.find(lo => filteredOutcomes.includes(lo)))
+          || filteredOutcomes[0];
+        setSelectedOutcome(preferredOutcome);
+      }
+    } else {
+      setSelectedOutcome('');
+    }
+  }, [filteredOutcomes, activeWeekData, selectedOutcome]);
 
   // RESET / CLEAR INVALID DOWNSTREAM SELECTIONS:
-  // When any selector (academicYear, class, subject, cycle) changes, reset downstream topics if no longer valid
+  // When any selector (academicYear, class, subject, cycle) changes, reset downstream selections if no longer valid
   useEffect(() => {
     if (selectedTopic && !filteredTopics.includes(selectedTopic)) {
       setSelectedTopic('');

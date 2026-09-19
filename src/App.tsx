@@ -249,6 +249,10 @@ export default function App() {
           const data = d.data();
           const rawGrade = data.grade || data.className || data.grade_level || activeClass || 'Standard 4';
           const normGrade = normalizeGrade(rawGrade);
+          const rawSubtopic = (data.subtopic && typeof data.subtopic === 'string' && data.subtopic.trim())
+            || (Array.isArray(data.subtopics) && data.subtopics[0])
+            || (data.sub_topic && typeof data.sub_topic === 'string' && data.sub_topic.trim())
+            || '';
           return {
             id: d.id,
             ...data,
@@ -256,19 +260,28 @@ export default function App() {
             className: normGrade,
             subject: normalizeSubject(data.subject || 'Mathematics'),
             cycle: normalizeCycle(data.cycle || 1),
+            subtopic: rawSubtopic,
             academicYear: normalizeAcademicYear(data.academicYear || data.schoolYear || '2026-2027')
           } as CurriculumEntry;
         });
 
         const combined = [...dbEntries];
         BELIZE_NATIONAL_CURRICULUM.forEach(baseEntry => {
-          const exists = combined.some(e => 
+          const existing = combined.find(e => 
             normalizeGrade(e.grade) === normalizeGrade(baseEntry.grade) &&
             normalizeSubject(e.subject) === normalizeSubject(baseEntry.subject) &&
             normalizeCycle(e.cycle) === normalizeCycle(baseEntry.cycle) &&
             (e.topic || '').trim().toLowerCase() === (baseEntry.topic || '').trim().toLowerCase()
           );
-          if (!exists) {
+          if (existing) {
+            // Enrich subtopic and learning outcomes from national curriculum if missing in DB entry
+            if (!existing.subtopic && baseEntry.subtopic) {
+              existing.subtopic = baseEntry.subtopic;
+            }
+            if ((!existing.learning_outcomes || existing.learning_outcomes.length === 0) && baseEntry.learning_outcomes) {
+              existing.learning_outcomes = baseEntry.learning_outcomes;
+            }
+          } else {
             combined.push(baseEntry);
           }
         });

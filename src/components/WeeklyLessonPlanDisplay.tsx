@@ -6,7 +6,7 @@ import { Calendar, ChevronRight, ChevronLeft, Download, CheckCircle2, Copy } fro
 import { cn } from '../lib/utils';
 import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { exportWeeklyLessonPlanToWord } from '../lib/exportUtils';
+import { exportWeeklyLessonPlanToWord, exportWeeklyLessonPlanToPDF } from '../lib/exportUtils';
 
 interface WeeklyLessonPlanDisplayProps {
   plan: WeeklyLessonPlan;
@@ -71,6 +71,15 @@ export function WeeklyLessonPlanDisplay({
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export Week (MS Word)
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => exportWeeklyLessonPlanToPDF(plan, auth.currentUser?.displayName || undefined)}
+                className="h-9 px-4 rounded-full font-bold text-gray-600"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export Week (PDF)
               </Button>
               <Button 
                 variant="outline" 
