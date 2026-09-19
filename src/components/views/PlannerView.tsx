@@ -62,6 +62,7 @@ import {
   validateGeneratedLesson, 
   getCurriculumEmptyStateMessage 
 } from '../../services/curriculumFilterService';
+import { getInstructionalWeekForDate, getMasterCalendar } from '../../services/calendarService';
 import { useToasts } from '../../context/ToastContext';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
@@ -113,7 +114,7 @@ export function PlannerView({
       if (prefillData.grade) setSelectedGrade(prefillData.grade);
       if (prefillData.subject) setSelectedSubject(prefillData.subject);
       if (prefillData.cycle) setSelectedCycle(prefillData.cycle);
-      if (prefillData.week) setSelectedWeek(prefillData.week);
+      if (prefillData.date) setSelectedDate(prefillData.date);
       if (prefillData.topic) setSelectedTopic(prefillData.topic);
       if (prefillData.subtopic) setSelectedSubtopic(prefillData.subtopic);
       if (prefillData.outcomes?.[0]) setSelectedOutcome(prefillData.outcomes[0]);
@@ -121,7 +122,6 @@ export function PlannerView({
   }, [prefillData]);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(prefillData?.subject || userSettings.defaultSubject);
   const [selectedCycle, setSelectedCycle] = useState<number>(prefillData?.cycle || 1);
-  const [selectedWeek, setSelectedWeek] = useState<number>(prefillData?.week || 1);
   const [selectedDate, setSelectedDate] = useState<string>(prefillData?.date || format(new Date(), 'yyyy-MM-dd'));
   const [selectedTopic, setSelectedTopic] = useState<string>(prefillData?.topic || '');
   const [selectedSubtopic, setSelectedSubtopic] = useState<string>(prefillData?.subtopic || '');
@@ -129,6 +129,7 @@ export function PlannerView({
   const [teachingModel, setTeachingModel] = useState<TeachingModel>(userSettings.teachingModel || '5E');
   const [outputStyle, setOutputStyle] = useState<OutputStyle>(userSettings.aiQuality.defaultOutputStyle);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isFilteringTopics, setIsFilteringTopics] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<LessonPlan | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [isLAWeeklyMode, setIsLAWeeklyMode] = useState(false);
@@ -151,33 +152,93 @@ export function PlannerView({
     return activeCalendar.days.find(d => d.date === selectedDate) || null;
   }, [activeCalendar, selectedDate]);
 
-  // Update cycle/week based on selected date
-  useEffect(() => {
-    if (selectedDayInfo) {
-      if (selectedDayInfo.cycle) setSelectedCycle(selectedDayInfo.cycle);
-      if (selectedDayInfo.week) setSelectedWeek(selectedDayInfo.week);
+  // AUTOMATIC INSTRUCTIONAL WEEK & CYCLE CALCULATION:
+  // Evaluates the selected lesson date against the school's academic calendar.
+  // Never requires the teacher to manually select or enter a week.
+  const detectedWeekInfo = useMemo(() => {
+    if (!selectedDate) return null;
+    try {
+      const parsed = parseISO(selectedDate);
+      if (isNaN(parsed.getTime())) return null;
+
+      // 1. If active calendar plan has a custom day assignment, verify and use it
+      if (activeCalendar?.days && activeCalendar.days.length > 0) {
+        const dayEntry = activeCalendar.days.find(d => d.date === selectedDate);
+        if (dayEntry) {
+          if (!dayEntry.isTeachingDay && dayEntry.type === 'School Holiday / Break') {
+            return null;
+          }
+          if (dayEntry.cycle && dayEntry.week) {
+            return { cycle: dayEntry.cycle, week: dayEntry.week };
+          }
+        }
+      }
+
+      // 2. Official master academic calendar calculation
+      return getInstructionalWeekForDate(parsed, selectedAcademicYear);
+    } catch {
+      return null;
     }
-  }, [selectedDayInfo]);
+  }, [selectedDate, selectedAcademicYear, activeCalendar]);
+
+  const detectedWeek = detectedWeekInfo?.week ?? null;
+
+  // Synchronize cycle automatically when detected from the date
+  useEffect(() => {
+    if (detectedWeekInfo?.cycle && detectedWeekInfo.cycle !== selectedCycle) {
+      setSelectedCycle(detectedWeekInfo.cycle);
+    }
+  }, [detectedWeekInfo, selectedCycle]);
+
+  // Cycle selector remains available for navigation: changing cycle jumps date to cycle start
+  const handleCycleChange = (newCycle: number) => {
+    setSelectedCycle(newCycle);
+    try {
+      const cal = getMasterCalendar(selectedAcademicYear);
+      const cycleObj = cal.cycles.find(c => c.cycle === newCycle);
+      if (cycleObj) {
+        setSelectedDate(cycleObj.start);
+      }
+    } catch (err) {
+      console.warn('Could not auto-adjust date for cycle switch:', err);
+    }
+  };
 
   const activeMap = useMemo(() => {
     return cyclePacingMaps.find(m => m.grade === selectedGrade && m.subject === selectedSubject && m.cycle === selectedCycle) || null;
   }, [cyclePacingMaps, selectedGrade, selectedSubject, selectedCycle]);
 
   const activeWeekData = useMemo(() => {
-    if (!activeMap) return null;
-    return activeMap.weeks.find(w => w.weekNumber === selectedWeek) || null;
-  }, [activeMap, selectedWeek]);
+    if (!activeMap || detectedWeek === null) return null;
+    return activeMap.weeks.find(w => w.weekNumber === detectedWeek) || null;
+  }, [activeMap, detectedWeek]);
 
   // SYSTEM-WIDE CURRICULUM FILTERING RULE:
-  // Strictly filter by Academic Year + Class + Subject + Cycle
+  // Strictly filter by Academic Year + Class + Subject + Cycle + Automatically Detected Instructional Week
   const filteredTopics = useMemo(() => {
+    if (detectedWeek === null) {
+      return [];
+    }
+
     return getFilteredTopics(curriculum, {
       academicYear: selectedAcademicYear,
       className: selectedGrade,
       subject: selectedSubject,
-      cycle: selectedCycle
+      cycle: selectedCycle,
+      week: detectedWeek,
+      pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle]);
+  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, detectedWeek, cyclePacingMaps]);
+
+  // When changing lesson date, class, or subject:
+  // Clear any previously selected topic that is no longer valid for the newly detected week
+  useEffect(() => {
+    if (selectedTopic && !filteredTopics.includes(selectedTopic)) {
+      setSelectedTopic('');
+      setSelectedSubtopic('');
+      setSelectedOutcome('');
+    }
+  }, [filteredTopics, selectedTopic]);
 
   const filteredSubtopics = useMemo(() => {
     return getFilteredSubtopics(curriculum, {
@@ -237,23 +298,32 @@ export function PlannerView({
   }, [filteredOutcomes, selectedOutcome]);
 
   const handleGenerate = async () => {
+    if (detectedWeek === null) {
+      showToast("The instructional week could not be determined for this date.", "error");
+      return;
+    }
+
     if (!selectedTopic || !selectedOutcome) {
       showToast("Please select a topic and learning outcome first.", "error");
       return;
     }
 
+    const targetWeek = detectedWeek;
+
     // MANDATORY PRE-GENERATION VALIDATION:
-    // Verify that the selected topic belongs to the selected curriculum context
+    // Verify that the selected topic belongs to the approved curriculum for the detected week
     const validation = validateTopicInContext(curriculum, {
       academicYear: selectedAcademicYear,
       className: selectedGrade,
       subject: selectedSubject,
       cycle: selectedCycle,
+      week: targetWeek,
+      pacingMaps: cyclePacingMaps,
       topic: selectedTopic
     });
 
     if (!validation.valid) {
-      showToast(validation.reason || "This topic is not mapped to the selected class, subject, cycle, or academic year.", "error");
+      showToast(validation.reason || "This topic is not scheduled for the detected instructional week.", "error");
       return;
     }
 
@@ -266,7 +336,7 @@ export function PlannerView({
           subject: selectedSubject,
           topic: selectedTopic,
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           teachingModel,
           style: outputStyle,
           includeTeacherScript: userSettings.aiQuality.includeTeacherScript,
@@ -280,6 +350,8 @@ export function PlannerView({
           className: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
+          week: targetWeek,
+          pacingMaps: cyclePacingMaps,
           topic: selectedTopic
         });
 
@@ -295,14 +367,14 @@ export function PlannerView({
           grade: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
-          week_number: selectedWeek
+          week_number: targetWeek
         } as any);
       } else if (isLAWeeklyMode && selectedSubject === 'Language Arts') {
         const plan = await generateLanguageArtsWeeklyPlan({
           academicYear: selectedAcademicYear,
           grade: selectedGrade,
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           topic: selectedTopic,
           learningOutcomes: [selectedOutcome],
           structure: laWeeklyStructure,
@@ -314,6 +386,8 @@ export function PlannerView({
           className: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
+          week: targetWeek,
+          pacingMaps: cyclePacingMaps,
           topic: selectedTopic
         });
 
@@ -329,7 +403,7 @@ export function PlannerView({
           grade: selectedGrade,
           subject: 'Language Arts',
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           structure: laWeeklyStructure,
           createdAt: new Date().toISOString(),
           createdBy: ''
@@ -343,7 +417,7 @@ export function PlannerView({
           academicYear: selectedAcademicYear,
           grade: selectedGrade,
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           day: selectedDayInfo?.dayNumber || 1, 
           date: selectedDate,
           topic: selectedTopic,
@@ -366,6 +440,8 @@ export function PlannerView({
           className: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
+          week: targetWeek,
+          pacingMaps: cyclePacingMaps,
           topic: selectedTopic,
           subtopic: selectedSubtopic
         });
@@ -383,7 +459,7 @@ export function PlannerView({
           grade: selectedGrade,
           subject: 'Language Arts',
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           date: selectedDate,
           topic: selectedTopic,
           subtopic: selectedSubtopic,
@@ -418,7 +494,7 @@ export function PlannerView({
           grade: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           day: selectedDayInfo?.dayNumber || 1, 
           date: selectedDate,
           topic: selectedTopic,
@@ -440,6 +516,8 @@ export function PlannerView({
           className: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
+          week: targetWeek,
+          pacingMaps: cyclePacingMaps,
           topic: selectedTopic,
           subtopic: selectedSubtopic
         });
@@ -457,7 +535,7 @@ export function PlannerView({
           grade: selectedGrade,
           subject: selectedSubject,
           cycle: selectedCycle,
-          week: selectedWeek,
+          week: targetWeek,
           date: selectedDate,
           topic: selectedTopic,
           subtopic: selectedSubtopic,
@@ -625,9 +703,16 @@ export function PlannerView({
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Cycle & Week</label>
-                <div className="flex gap-4">
-                  <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Instructional Cycle & Week</label>
+                  <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Auto-Detected from Date
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1 block">Curriculum Cycle</label>
                     <Select 
                       options={[
                         { label: 'Cycle 1', value: 1 },
@@ -636,15 +721,32 @@ export function PlannerView({
                         { label: 'Cycle 4', value: 4 }
                       ]} 
                       value={selectedCycle} 
-                      onChange={(val) => setSelectedCycle(Number(val))} 
+                      onChange={(val) => handleCycleChange(Number(val))} 
                     />
                   </div>
-                  <div className="flex-1">
-                    <Select 
-                      options={Array.from({ length: 12 }, (_, i) => ({ label: `Week ${i + 1}`, value: i + 1 }))} 
-                      value={selectedWeek} 
-                      onChange={(val) => setSelectedWeek(Number(val))} 
-                    />
+                  <div>
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1 block">Instructional Week</label>
+                    <div className={cn(
+                      "flex items-center justify-between px-3.5 py-2 rounded-lg border text-sm font-semibold transition-colors min-h-[42px]",
+                      detectedWeek !== null
+                        ? "bg-slate-50 border-slate-200 text-slate-900"
+                        : "bg-rose-50 border-rose-200 text-rose-700"
+                    )}>
+                      <div className="flex items-center gap-2">
+                        <Clock className={cn("w-4 h-4", detectedWeek !== null ? "text-indigo-600" : "text-rose-500")} />
+                        <span className="font-bold">
+                          {detectedWeek !== null ? `Cycle ${selectedCycle} • Week ${detectedWeek}` : 'Undetermined Week'}
+                        </span>
+                      </div>
+                      <span className={cn(
+                        "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                        detectedWeek !== null
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                          : "bg-rose-100 text-rose-800 border-rose-200"
+                      )}>
+                        {detectedWeek !== null ? 'Read-Only' : 'Non-Instructional'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -659,7 +761,7 @@ export function PlannerView({
                       Pacing Map Context
                     </h4>
                     <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">
-                      Cycle {selectedCycle} • Week {selectedWeek}
+                      Cycle {selectedCycle} • Week {detectedWeek ?? 1}
                     </span>
                   </div>
                   <div className="space-y-1">
@@ -681,31 +783,50 @@ export function PlannerView({
                 </div>
               )}
 
-              {filteredTopics.length === 0 ? (
+              {detectedWeek === null ? (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Curriculum Not Mapped</h4>
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Instructional Week Undetermined</h4>
                     <p className="text-xs text-amber-800 leading-relaxed">
-                      {getCurriculumEmptyStateMessage({
-                        academicYear: selectedAcademicYear,
-                        className: selectedGrade,
-                        subject: selectedSubject,
-                        cycle: selectedCycle
-                      })}
+                      The instructional week could not be determined for this date.
+                    </p>
+                  </div>
+                </div>
+              ) : filteredTopics.length === 0 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">No Scheduled Topics</h4>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      No approved topics are scheduled for this week.
                     </p>
                   </div>
                 </div>
               ) : null}
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Topic</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Topic</label>
+                  {isFilteringTopics && (
+                    <span className="text-[10px] text-indigo-600 flex items-center gap-1 font-semibold">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Retrieving approved topics...
+                    </span>
+                  )}
+                </div>
                 <Select 
-                  disabled={filteredTopics.length === 0}
+                  disabled={filteredTopics.length === 0 || detectedWeek === null}
                   options={filteredTopics.map(t => ({ label: t, value: t }))} 
                   value={selectedTopic} 
                   onChange={(val) => setSelectedTopic(val)} 
-                  placeholder={filteredTopics.length > 0 ? "Select an approved topic..." : "No curriculum data available"}
+                  placeholder={
+                    detectedWeek === null
+                      ? "The instructional week could not be determined for this date."
+                      : filteredTopics.length > 0 
+                        ? `Select an approved Cycle ${selectedCycle} • Week ${detectedWeek} topic...` 
+                        : "No approved topics are scheduled for this week."
+                  }
                 />
               </div>
 

@@ -92,16 +92,79 @@ export const getCycleForDate = (date: Date, academicYear?: string): number | nul
   return cycle ? cycle.cycle : null;
 };
 
-export const getWeekNumberInCycle = (date: Date, academicYear?: string): number | null => {
-  const cal = resolveCalendarForDate(date, academicYear);
-  const cycle = cal.cycles.find(c => 
-    isWithinInterval(date, { start: parseISO(c.start), end: parseISO(c.end) })
+/**
+ * Accurately determines the instructional cycle and week for a given date.
+ * Strictly respects the official academic calendar:
+ * - Checks teaching period boundaries and multi-week school vacations (e.g. Christmas, Easter, Summer).
+ * - Identifies the official cycle.
+ * - Counts instructional teaching weeks (skipping non-instructional vacation weeks).
+ * - Returns null if the date is non-instructional (vacation, outside school year).
+ */
+export const getInstructionalWeekForDate = (
+  date: Date | string, 
+  academicYear?: string
+): { cycle: number; week: number } | null => {
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  if (!d || isNaN(d.getTime())) return null;
+
+  const cal = resolveCalendarForDate(d, academicYear);
+
+  // If date is outside the official teaching period:
+  const teachingStart = parseISO(cal.teachingPeriod.start);
+  const teachingEnd = parseISO(cal.teachingPeriod.end);
+  if (isBefore(d, teachingStart) || isAfter(d, teachingEnd)) {
+    return null;
+  }
+
+  // If date falls within a full school vacation (e.g. Christmas, Easter, Summer), it has no instructional week
+  if (isVacation(d, academicYear)) {
+    return null;
+  }
+
+  // Find the containing cycle
+  const cycle = cal.cycles.find(c =>
+    isWithinInterval(d, { start: parseISO(c.start), end: parseISO(c.end) })
   );
   if (!cycle) return null;
 
+  // Determine instructional week within the cycle
+  // Align to calendar weeks starting on Monday (weekStartsOn: 1)
   const cycleStart = parseISO(cycle.start);
-  const diffDays = differenceInDays(date, cycleStart);
-  return Math.floor(diffDays / 7) + 1;
+  const cycleStartMonday = startOfWeek(cycleStart, { weekStartsOn: 1 });
+  const targetMonday = startOfWeek(d, { weekStartsOn: 1 });
+
+  let currentMonday = cycleStartMonday;
+  let instructionalWeekCounter = 0;
+
+  let safety = 0;
+  while ((isBefore(currentMonday, targetMonday) || isSameDay(currentMonday, targetMonday)) && safety < 30) {
+    safety++;
+    // Check if the midweek (Wednesday) of this calendar week is in vacation
+    const midWeek = addDays(currentMonday, 2);
+    const inVacation = isVacation(midWeek, academicYear);
+    if (!inVacation) {
+      instructionalWeekCounter++;
+    }
+
+    if (isSameDay(currentMonday, targetMonday)) {
+      if (inVacation) {
+        return null;
+      }
+      return {
+        cycle: cycle.cycle,
+        week: Math.min(Math.max(instructionalWeekCounter, 1), cycle.weeks)
+      };
+    }
+
+    currentMonday = addDays(currentMonday, 7);
+  }
+
+  return null;
+};
+
+export const getWeekNumberInCycle = (date: Date, academicYear?: string): number | null => {
+  const result = getInstructionalWeekForDate(date, academicYear);
+  return result ? result.week : null;
 };
 
 export const getTeachingDaysInWeek = (weekStart: Date, academicYear?: string): Date[] => {

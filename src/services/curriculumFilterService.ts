@@ -1,4 +1,4 @@
-import { CurriculumEntry, GradeLevel, Subject, LessonPlan, ALL_GRADE_LEVELS } from '../types';
+import { CurriculumEntry, GradeLevel, Subject, LessonPlan, ALL_GRADE_LEVELS, CyclePacingMap } from '../types';
 
 export interface CurriculumFilterParams {
   academicYear?: string;
@@ -6,6 +6,8 @@ export interface CurriculumFilterParams {
   grade?: GradeLevel | string;
   subject?: Subject | string;
   cycle?: number | string;
+  week?: number | string | null;
+  pacingMaps?: CyclePacingMap[];
 }
 
 export interface CurriculumTopicFilterParams extends CurriculumFilterParams {
@@ -102,15 +104,16 @@ function buildCacheKey(curriculumLength: number, params: CurriculumFilterParams)
   const grade = normalizeGrade(params.className || params.grade);
   const subject = normalizeSubject(params.subject);
   const cycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : 'all';
-  return `${curriculumLength}:${year}:${grade}:${subject}:${cycle}`;
+  const week = params.week !== undefined && params.week !== null ? params.week : 'all';
+  const pacingCount = params.pacingMaps?.length || 0;
+  return `${curriculumLength}:${year}:${grade}:${subject}:${cycle}:${week}:${pacingCount}`;
 }
 
 /**
  * Core Global Curriculum Filtering Function
  *
- * Reliably maps curriculum entries to the selected grade, subject, cycle, and academic year.
- * Designed to ensure uploaded curriculum guides are NEVER lost or rejected due to
- * minor academic year formatting differences, general cycle mapping, or grade naming variations.
+ * Reliably maps curriculum entries to the selected grade, subject, cycle, academic year, and instructional week.
+ * Enforces strict filtering: topics from other weeks, cycles, classes, or subjects are never returned.
  */
 export function getFilteredCurriculum(
   curriculum: CurriculumEntry[],
@@ -150,10 +153,6 @@ export function getFilteredCurriculum(
   });
 
   // 2. Academic Year Filter:
-  // If targetYear is provided, we prioritize entries that explicitly match targetYear.
-  // Entries with no academic year, or academicYear 'all', apply universally.
-  // If no entries specifically match targetYear, fallback to all entries for this grade and subject
-  // so uploaded curriculum guides are never hidden or dropped.
   let yearFiltered = gradeSubjectMatches;
   if (targetYear && targetYear !== 'All' && targetYear !== 'all') {
     const specificMatches = gradeSubjectMatches.filter(entry => {
@@ -165,17 +164,12 @@ export function getFilteredCurriculum(
     if (specificMatches.length > 0) {
       yearFiltered = specificMatches;
     } else {
-      // Fallback: Use all grade+subject matches
       yearFiltered = gradeSubjectMatches;
     }
   }
 
   // 3. Cycle Filter:
-  // If targetCycle is provided:
-  // - Include entries matching targetCycle
-  // - Include entries with no cycle or cycle=0 or 'all'
-  // - If no entries match the specific cycle, check if any entries exist across cycles for this subject
-  let finalResults = yearFiltered;
+  let cycleFiltered = yearFiltered;
   if (targetCycle !== null) {
     const cycleMatches = yearFiltered.filter(entry => {
       if (entry.cycle === undefined || entry.cycle === null || entry.cycle === 0 || (entry.cycle as any) === 'all') {
@@ -185,11 +179,112 @@ export function getFilteredCurriculum(
     });
 
     if (cycleMatches.length > 0) {
-      finalResults = cycleMatches;
+      cycleFiltered = cycleMatches;
     } else {
-      // Fallback: If no entries are tagged for this specific cycle, provide all entries for this grade+subject
-      // so teachers can still schedule, pace, or plan lessons
-      finalResults = yearFiltered;
+      // If a week is specified, we must NOT fall back to other cycles
+      if (params.week !== undefined && params.week !== null && params.week !== 'all') {
+        cycleFiltered = [];
+      } else {
+        cycleFiltered = yearFiltered;
+      }
+    }
+  }
+
+  let finalResults = cycleFiltered;
+
+  // 4. Week Filter:
+  // If a specific instructional week is requested, resolve the approved topics for that week.
+  if (params.week !== undefined && params.week !== null && params.week !== 'all') {
+    const targetWeek = typeof params.week === 'number' ? params.week : parseInt(String(params.week), 10);
+    if (!isNaN(targetWeek)) {
+      // A. Check Cycle Pacing Maps if available
+      if (params.pacingMaps && params.pacingMaps.length > 0) {
+        const pacingMap = params.pacingMaps.find(m =>
+          normalizeGrade(m.grade) === targetGrade &&
+          normalizeSubject(m.subject) === targetSubject &&
+          normalizeCycle(m.cycle) === (targetCycle || 1)
+        );
+        if (pacingMap && Array.isArray(pacingMap.weeks)) {
+          const weekEntry = pacingMap.weeks.find(w => w.weekNumber === targetWeek);
+          if (weekEntry && weekEntry.topic && weekEntry.topic.trim()) {
+            const topicNorm = weekEntry.topic.trim().toLowerCase();
+            const matches = cycleFiltered.filter(e => (e.topic || '').trim().toLowerCase() === topicNorm);
+            if (matches.length > 0) {
+              finalResults = matches;
+              filterCache.set(cacheKey, finalResults);
+              return finalResults;
+            } else {
+              // Custom topic scheduled in pacing map
+              finalResults = [{
+                id: `pacing-${targetGrade}-${targetSubject}-c${targetCycle || 1}-w${targetWeek}`,
+                grade: targetGrade,
+                subject: targetSubject as Subject,
+                cycle: targetCycle || 1,
+                week: targetWeek,
+                topic: weekEntry.topic.trim(),
+                subtopic: weekEntry.subtopics?.[0] || '',
+                learning_outcomes: weekEntry.learningOutcomes || [],
+                academicYear: targetYear || '2026-2027',
+                createdAt: new Date().toISOString()
+              }];
+              filterCache.set(cacheKey, finalResults);
+              return finalResults;
+            }
+          } else if (weekEntry) {
+            // Week is explicitly scheduled with no topic (e.g. review or break)
+            finalResults = [];
+            filterCache.set(cacheKey, finalResults);
+            return finalResults;
+          }
+        }
+      }
+
+      // B. Check for explicit week assignment on curriculum entries
+      const hasExplicitWeeks = cycleFiltered.some(e => e.week !== undefined && e.week !== null && Number(e.week) > 0);
+      if (hasExplicitWeeks) {
+        finalResults = cycleFiltered.filter(e => {
+          const entryWeek = Number(e.week);
+          const duration = e.suggestedWeeks || 1;
+          return targetWeek >= entryWeek && targetWeek < entryWeek + duration;
+        });
+        filterCache.set(cacheKey, finalResults);
+        return finalResults;
+      }
+
+      // C. Sequential topic allocation by suggestedWeeks in curriculum order
+      const uniqueTopics: string[] = [];
+      cycleFiltered.forEach(e => {
+        const t = (e.topic || '').trim();
+        if (t && !uniqueTopics.includes(t)) {
+          uniqueTopics.push(t);
+        }
+      });
+
+      let currentStartWeek = 1;
+      let matchedTopic: string | null = null;
+
+      for (const topic of uniqueTopics) {
+        const topicEntries = cycleFiltered.filter(e => (e.topic || '').trim() === topic);
+        const maxWeeks = Math.max(...topicEntries.map(e => e.suggestedWeeks || 0), 0);
+        const maxLessons = Math.max(...topicEntries.map(e => e.suggestedLessons || 0), 0);
+        const duration = maxWeeks > 0 
+          ? maxWeeks 
+          : (maxLessons > 0 ? Math.max(1, Math.ceil(maxLessons / 5)) : 1);
+
+        const endWeek = currentStartWeek + duration - 1;
+        if (targetWeek >= currentStartWeek && targetWeek <= endWeek) {
+          matchedTopic = topic;
+          break;
+        }
+        currentStartWeek = endWeek + 1;
+      }
+
+      if (matchedTopic) {
+        finalResults = cycleFiltered.filter(e => (e.topic || '').trim() === matchedTopic);
+      } else {
+        // No topics scheduled for this instructional week
+        finalResults = [];
+      }
     }
   }
 
@@ -285,7 +380,7 @@ export function validateTopicInContext(
   if (!isValid) {
     return {
       valid: false,
-      reason: 'This topic is not mapped to the selected class, subject, cycle, or academic year.'
+      reason: 'This topic is not mapped to the selected class, subject, cycle, instructional week, or academic year.'
     };
   }
 
@@ -295,24 +390,26 @@ export function validateTopicInContext(
 /**
  * VALIDATE GENERATED LESSONS
  * Verifies that the AI-generated lesson respects the authoritative curriculum context.
- * The generated lesson must retain Academic Year, Class, Subject, Cycle, Topic.
- * If topic does not belong to the selected cycle, the lesson is rejected.
+ * The generated lesson must retain Academic Year, Class, Subject, Cycle, Instructional Week, and Topic.
+ * If topic does not belong to the selected cycle or instructional week, the lesson is rejected.
  */
 export function validateGeneratedLesson(
   lesson: any,
   curriculum: CurriculumEntry[],
-  expectedContext: CurriculumFilterParams & { topic: string; subtopic?: string }
+  expectedContext: CurriculumFilterParams & { topic: string; subtopic?: string; week?: number }
 ): ValidationResult {
   if (!lesson) {
     return { valid: false, reason: 'Generated lesson payload is empty.' };
   }
 
-  // 1. Verify that topic belongs to the expected cycle and context in curriculum
+  // 1. Verify that topic belongs to the expected cycle, week, and context in curriculum
   const topicValidation = validateTopicInContext(curriculum, {
     academicYear: expectedContext.academicYear,
     className: expectedContext.className || expectedContext.grade,
     subject: expectedContext.subject,
     cycle: expectedContext.cycle,
+    week: expectedContext.week,
+    pacingMaps: expectedContext.pacingMaps,
     topic: expectedContext.topic
   });
 
@@ -362,6 +459,7 @@ export function validateLessonForSaving(
     className: lesson.grade,
     subject: lesson.subject,
     cycle: lesson.cycle,
+    week: lesson.week,
     topic: lesson.topic
   });
 }
@@ -370,6 +468,9 @@ export function validateLessonForSaving(
  * Standard empty state message when a cycle/class/subject has no mapped topics
  */
 export function getCurriculumEmptyStateMessage(params: CurriculumFilterParams): string {
+  if (params.week !== undefined && params.week !== null && params.week !== 'all') {
+    return 'No approved topics are scheduled for this week.';
+  }
   const grade = normalizeGrade(params.className || params.grade);
   const cycle = params.cycle !== undefined ? normalizeCycle(params.cycle) : 1;
   const subject = params.subject ? normalizeSubject(params.subject) : 'Selected Subject';
