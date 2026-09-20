@@ -33,7 +33,7 @@ import {
   LanguageArtsComponent
 } from "../types";
 
-import { callWithRetry } from "../lib/utils";
+import { callWithRetry } from "../lib/utils.js";
 import { buildDeterministicPowerPoint, getThemeForSubject } from "../lib/powerpointService";
 import { 
   parseAndNormalizeWorksheet, 
