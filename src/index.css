@@ -121,23 +121,101 @@
 
   /* Responsive Lesson Workspace Grid */
   .lesson-workspace-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 24px;
     width: 100%;
     max-width: 100%;
-    align-items: start;
   }
 
-  @media (min-width: 1200px) {
+  @media (min-width: 1280px) {
     .lesson-workspace-grid {
-      grid-template-columns: var(--nav-width, 250px) minmax(0, 1fr);
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 24px;
     }
   }
+}
 
-  @media (min-width: 1440px) {
-    .lesson-workspace-grid {
-      grid-template-columns: var(--nav-width, 250px) minmax(0, 1fr) var(--asst-width, 300px);
-    }
+/* ========================================================================= */
+/* PRINT STYLESHEET — PROFESSIONAL CURRICULUM PRINTING                      */
+/* ========================================================================= */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide interactive UI elements from print */
+  header,
+  nav,
+  aside,
+  button,
+  .no-print,
+  [data-no-print="true"],
+  .sticky,
+  .lesson-toolbar,
+  .toast,
+  .quick-actions,
+  #navigation-sidebar,
+  #assistant-panel {
+    display: none !important;
+  }
+
+  /* Reset layout containers for full paper width */
+  .app-container,
+  .main-wrapper,
+  .main-content,
+  .lesson-workspace-grid,
+  main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevent awkward page breaks */
+  section,
+  .lesson-section,
+  .stage-card,
+  table,
+  tr,
+  .avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  h1, h2, h3, h4 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Ensure high-contrast text on paper */
+  p, span, td, th, li {
+    color: #0f172a !important;
+  }
+
+  /* Borders should be clean thin lines on paper */
+  .border, [class*="border-"] {
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Background tints for headers and callouts */
+  .bg-slate-50, .bg-slate-100 {
+    background-color: #f8fafc !important;
+  }
+  .bg-slate-900 {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
   }
 }

@@ -24,7 +24,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Button, Card, Badge } from './ui';
 import { LanguageArtsWeeklyPlan, LanguageArtsDailyPlan, LanguageArtsDailyStrand } from '../types';
 import ReactMarkdown from 'react-markdown';
-import { exportLAWeeklyToWord } from '../lib/exportUtils';
+import { exportLAWeeklyToWord, exportLAWeeklyToPDF } from '../lib/exportUtils';
+import { auth } from '../firebase';
 import { useToasts } from '../context/ToastContext';
 
 interface Props {
@@ -40,13 +41,26 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
     setExpandedDay(expandedDay === day ? null : day);
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    try {
+      showToast("Generating official PDF document...", "info");
+      await exportLAWeeklyToPDF(plan, auth.currentUser?.displayName || undefined);
+      showToast("PDF generated successfully!", "success");
+    } catch (e) {
+      console.error(e);
+      window.print();
+    }
   };
 
-  const handleExportWord = () => {
-    exportLAWeeklyToWord(plan);
-    showToast("Generating Word document...", "success");
+  const handleExportWord = async () => {
+    try {
+      showToast("Generating Word (.docx) document...", "info");
+      await exportLAWeeklyToWord(plan, auth.currentUser?.displayName || undefined);
+      showToast("Word document generated successfully!", "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to generate Word document", "error");
+    }
   };
 
   return (

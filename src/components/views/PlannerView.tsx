@@ -503,7 +503,7 @@ export function PlannerView({
           createdAt: new Date().toISOString(),
           createdBy: '', 
           status: 'Planned',
-          isReadyToTeach: true,
+          isReadyToTeach: plan.languageArtsAlignmentAudit ? plan.languageArtsAlignmentAudit.isReadyToTeach : (plan.isReadyToTeach ?? true),
           powerpointPresentation: buildDeterministicPowerPoint({
             ...plan,
             subject: 'Language Arts',

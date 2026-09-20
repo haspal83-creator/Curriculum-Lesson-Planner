@@ -1068,11 +1068,14 @@ export interface LessonPlan {
 
   // Language Arts Master 2-Component Architecture & Complete Resources
   languageArtsComponents?: [LanguageArtsComponent, LanguageArtsComponent] | LanguageArtsComponent[];
+  primaryComponent?: LanguageArtsComponent;
+  supportingComponent?: LanguageArtsComponent;
   component1Details?: LanguageArtsComponentDetails;
   component2Details?: LanguageArtsComponentDetails;
   readingPassageFull?: ReadingPassageResource;
   anchorChartBlueprint?: AnchorChartBlueprint;
   exitTicketPackage?: ExitTicketPackage;
+  languageArtsAlignmentAudit?: LanguageArtsAlignmentAudit;
 
   // PowerPoint Presentation
   powerpointPresentation?: PowerPointPresentation;
@@ -1134,6 +1137,29 @@ export interface ExitTicketPackage {
   scoringGuidance: string;
   masteryThreshold: string;
   groupingRuleTomorrow: string;
+}
+
+export interface LanguageArtsAlignmentAudit {
+  curriculumAlignment: 'PASS' | 'FAIL';
+  cycleAlignment: 'PASS' | 'FAIL';
+  topicAlignment: 'PASS' | 'FAIL';
+  componentAlignment: 'PASS' | 'FAIL';
+  objectiveAlignment: 'PASS' | 'FAIL';
+  activityAlignment: 'PASS' | 'FAIL';
+  resourceAlignment: 'PASS' | 'FAIL';
+  assessmentAlignment: 'PASS' | 'FAIL';
+  timingAlignment: 'PASS' | 'FAIL';
+  vocabularyAlignment: 'PASS' | 'FAIL';
+  differentiationAlignment: 'PASS' | 'FAIL';
+  successCriteriaAlignment: 'PASS' | 'FAIL';
+  teacherReadiness: 'PASS' | 'FAIL';
+  scoringAlignment: 'PASS' | 'FAIL';
+  scorePercentage: number;
+  isReadyToTeach: boolean;
+  criticalFailures: string[];
+  auditDetails: Record<string, { status: 'PASS' | 'FAIL'; message: string }>;
+  primaryComponent?: LanguageArtsComponent;
+  supportingComponent?: LanguageArtsComponent;
 }
 
 export interface LanguageArtsDailyStrand {

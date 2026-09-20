@@ -2,7 +2,8 @@ import React from 'react';
 import { ArrowLeft, Printer, Download, Calendar, Target, BookOpen, CheckCircle2, FileText } from 'lucide-react';
 import { Button, Card, Badge } from '../ui';
 import { DailyLessonPlan } from '../../types';
-import { exportDailyPlanToWord } from '../../lib/exportUtils';
+import { exportDailyPlanToWord, exportDailyPlanToPDF } from '../../lib/exportUtils';
+import { auth } from '../../firebase';
 
 interface DailyPlanDetailViewProps {
   plan: DailyLessonPlan;
@@ -10,12 +11,17 @@ interface DailyPlanDetailViewProps {
 }
 
 export default function DailyPlanDetailView({ plan, onBack }: DailyPlanDetailViewProps) {
-  const handleExportWord = () => {
-    exportDailyPlanToWord(plan);
+  const handleExportWord = async () => {
+    await exportDailyPlanToWord(plan, auth.currentUser?.displayName || undefined);
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    try {
+      await exportDailyPlanToPDF(plan, auth.currentUser?.displayName || undefined);
+    } catch (e) {
+      console.error(e);
+      window.print();
+    }
   };
 
   return (

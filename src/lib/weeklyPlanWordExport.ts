@@ -563,7 +563,7 @@ export function normalizeWeeklyPlanForExport(
   const days: { dayLabel: string; resolvedLesson: ResolvedLessonResources }[] = [];
 
   // Case 1: WeeklyLessonPlan with week.days
-  if (weekObj.days && Array.isArray(weekObj.days)) {
+  if (weekObj.days && Array.isArray(weekObj.days) && !weekObj.days[0]?.strands) {
     weekObj.days.forEach((d: any, idx: number) => {
       const dayLabel = d.day || d.day_name || `Day ${idx + 1}`;
       const lessonPlanInput = d.lesson || d;
@@ -571,7 +571,52 @@ export function normalizeWeeklyPlanForExport(
       days.push({ dayLabel, resolvedLesson: resolved });
     });
   } 
-  // Case 2: WeeklyCurriculumPlan with daily_plans
+  // Case 2: Language Arts Weekly Plan with dailyPlans or days containing strands
+  else if (rawPlan.dailyPlans || (Array.isArray(rawPlan.days) && rawPlan.days[0]?.strands)) {
+    const laDailyList: any[] = rawPlan.dailyPlans || rawPlan.days || [];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    laDailyList.forEach((dp: any, idx: number) => {
+      const dayLabel = dp.day_name || (typeof dp.day === 'number' ? (dayNames[dp.day - 1] || `Day ${dp.day}`) : (dp.day || `Day ${idx + 1}`));
+      const strands: any[] = dp.strands || [];
+      const strandTitles = strands.map(s => s.strand).filter(Boolean);
+      const objectives = strands.map(s => s.objective).filter(Boolean);
+      const activities = strands.flatMap(s => s.activities || []);
+      const assessments = strands.map(s => s.assessment).filter(Boolean);
+      const resources = strands.flatMap(s => s.resources || []);
+      const diff = dp.differentiation || {};
+
+      const syntheticLesson: any = {
+        lessonTitle: `${dayLabel}: ${strandTitles.join(' + ') || topic}`,
+        grade: grade as any,
+        subject: 'Language Arts',
+        cycle: Number(cycle) || 1,
+        topic: rawPlan.theme || rawPlan.weeklyTheme || rawPlan.topic || topic,
+        subtopic: strandTitles.join(' & ') || topic,
+        learningOutcome: objectives.join(' | ') || (rawPlan.learningOutcomes && rawPlan.learningOutcomes[0]) || 'Demonstrate mastery of selected language arts strands.',
+        objectives: objectives.length > 0 ? objectives : [`Develop proficiency in ${strandTitles.join(' and ')}`],
+        introductoryActivity: activities[0] || 'Hook and active prior knowledge activation.',
+        developmentalActivities: activities.length > 2 ? activities.slice(1, -1) : activities,
+        culminatingActivity: activities[activities.length - 1] || 'Synthesize learning and share responses.',
+        closure: ['Consolidate core understandings and conduct formative self-assessment.'],
+        materials: [
+          ...resources,
+          ...(rawPlan.resourcePack?.readingPassage ? ['Mentor Reading Passage'] : []),
+          ...(rawPlan.resourcePack?.vocabularyList || []),
+          ...(rawPlan.resourcePack?.worksheetIdeas || [])
+        ],
+        differentiation: {
+          support: diff.support || 'Guided reading frames, sentence stems, and teacher-led small group modeling.',
+          onLevel: diff.onLevel || 'Collaborative paired application and structured text-dependent responses.',
+          advanced: diff.advanced || 'Higher-order extension prompts, synthesis tasks, and peer mentorship.'
+        },
+        duration: '60 mins'
+      };
+
+      const resolved = resolveCompleteLessonResources(syntheticLesson as LessonPlan, { schoolName, teacherName });
+      days.push({ dayLabel, resolvedLesson: resolved });
+    });
+  }
+  // Case 3: WeeklyCurriculumPlan with daily_plans
   else if (rawPlan.daily_plans && Array.isArray(rawPlan.daily_plans)) {
     rawPlan.daily_plans.forEach((dp: any, idx: number) => {
       const dayLabel = dp.day_name || `Day ${dp.day || idx + 1}`;
@@ -597,7 +642,7 @@ export function normalizeWeeklyPlanForExport(
       days.push({ dayLabel, resolvedLesson: resolved });
     });
   } 
-  // Case 3: Days array directly on plan
+  // Case 4: Days array directly on plan
   else if (rawPlan.days && Array.isArray(rawPlan.days)) {
     rawPlan.days.forEach((d: any, idx: number) => {
       const dayLabel = d.day || `Day ${idx + 1}`;

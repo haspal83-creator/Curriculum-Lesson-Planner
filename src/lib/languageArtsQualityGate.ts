@@ -1,5 +1,18 @@
 import { LessonPlan } from '../types';
 import { validateAndBalanceLessonTiming } from './timingValidation';
+import { 
+  enforceAndAuditLanguageArtsLesson, 
+  runLanguageArtsAlignmentAudit, 
+  deduceTwoComponents,
+  normalizeLAComponent 
+} from './languageArtsAlignmentAudit';
+
+export { 
+  enforceAndAuditLanguageArtsLesson, 
+  runLanguageArtsAlignmentAudit, 
+  deduceTwoComponents,
+  normalizeLAComponent 
+};
 
 /**
  * Checks if the subject is Language Arts or related literacy subjects.
@@ -205,176 +218,15 @@ export function deepTransformStrings(obj: any, transformer: (val: string) => str
 
 /**
  * Master Language Arts Purity and Quality Gate:
- * Enforces all 26 rules from the Strict Language Arts Lesson-Planning Standard.
+ * Enforces all 30 rules from the Strict Language Arts Lesson-Planning Standard,
+ * running the Mandatory Alignment Audit and certifying Ready-to-Teach status.
  */
 export function enforceLanguageArtsPurityAndQuality(plan: LessonPlan): LessonPlan {
   if (!plan || !isLanguageArtsSubject(plan.subject)) {
     return plan;
   }
 
-  const topic = plan.topic || plan.lessonTitle || 'Language Arts';
-  const grade = plan.grade || 'Standard 2';
-
-  // 1. Purge all math bleed and fabricated student names from all text fields
-  const purified = deepTransformStrings(plan, (str: string) => {
-    let clean = cleanLanguageArtsMathematicsBleed(str);
-    clean = stripFabricatedStudentNames(clean);
-    return clean;
-  }) as LessonPlan;
-
-  // 1. Enforce Non-Negotiable 90-Minute Duration Rule for Language Arts
-  purified.duration = '90 minutes';
-
-  // Balance timing to exactly 90 minutes
-  const balanced = validateAndBalanceLessonTiming(purified, '90 minutes');
-  if (balanced?.plan) {
-    if (balanced.plan.duration) purified.duration = balanced.plan.duration;
-    if (balanced.plan.lessonAtAGlance) purified.lessonAtAGlance = balanced.plan.lessonAtAGlance;
-    if (balanced.plan.executionBoard) purified.executionBoard = balanced.plan.executionBoard;
-  }
-
-  // 2. Learning Objectives Normalization for Language Arts (Condition + Performance + Criterion)
-  if (purified.learningObjectives) {
-    if (!purified.learningObjectives.condition || !/^[Gg]iven\b/.test(purified.learningObjectives.condition)) {
-      purified.learningObjectives.condition = `Given a Belizean informational passage and a prefix analysis organizer:`;
-    }
-    purified.learningObjectives.cognitive = cleanLanguageArtsMathematicsBleed(purified.learningObjectives.cognitive);
-    purified.learningObjectives.psychomotor = cleanLanguageArtsMathematicsBleed(purified.learningObjectives.psychomotor);
-    purified.learningObjectives.affective = cleanLanguageArtsMathematicsBleed(purified.learningObjectives.affective);
-
-    // Guarantee quality objectives with condition, performance, and criterion
-    if (/solve problems/i.test(purified.learningObjectives.cognitive) || !purified.learningObjectives.cognitive.includes('accuracy')) {
-      purified.learningObjectives.cognitive = `Students will analyze and define at least four unfamiliar prefixed words with at least 80% accuracy.`;
-    }
-    if (/problem/i.test(purified.learningObjectives.psychomotor) || !purified.learningObjectives.psychomotor.includes('sentences')) {
-      purified.learningObjectives.psychomotor = `Students will independently construct three grammatically complete sentences using targeted prefixed words, with correct capitalization, punctuation, and context clues in 3 out of 3 sentences.`;
-    }
-    if (/mathematical/i.test(purified.learningObjectives.affective) || !purified.learningObjectives.affective.includes('participate')) {
-      purified.learningObjectives.affective = `Students will participate in paired word-analysis discussions by taking turns, listening to a partner's explanation, and contributing at least one relevant idea.`;
-    }
-  }
-
-  if (purified.learningObjectivesBoard) {
-    purified.learningObjectivesBoard.condition = purified.learningObjectives?.condition || purified.learningObjectivesBoard.condition;
-    purified.learningObjectivesBoard.knowledge = purified.learningObjectives?.cognitive || purified.learningObjectivesBoard.knowledge;
-    purified.learningObjectivesBoard.skill = purified.learningObjectives?.psychomotor || purified.learningObjectivesBoard.skill;
-    purified.learningObjectivesBoard.attitude = purified.learningObjectives?.affective || purified.learningObjectivesBoard.attitude;
-  }
-
-  // 3. Teacher Script Detailed Language Arts Polish (Authentic Think-Aloud, No Generic Placeholders)
-  if (purified.teacherScriptDetailed) {
-    purified.teacherScriptDetailed.modeling = `"Watch me closely as I analyze our first mentor word from the text: 'submerge'. Notice how I apply our 4-step strategy: First, I identify the base word: 'merge', which means to plunge or sink into liquid. Second, I isolate the prefix: 'sub-', which means under or below. Third, I check the whole word in our sentence: 'The research vessel prepares to submerge beneath the surface of the reef.' Fourth, I synthesize the whole-word meaning: to plunge completely under water. The sentence context confirms our definition! Notice: the prefix gave us a directional clue, and checking the base word and sentence verified the exact meaning."`;
-    if (/problems 1 through 5/i.test(purified.teacherScriptDetailed.directions || '')) {
-      purified.teacherScriptDetailed.directions = `"Open your exercise books to today's date. Complete Questions 1 through 5 on your worksheet using our 4-step strategy: PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING. Support each answer with evidence from our mentor text. If you finish early, craft an additional sentence using our target words."`;
-    }
-    purified.teacherScriptDetailed.feedbackLanguage = `"Excellent precision with identifying the base word and prefix! Notice how analyzing each part helped you determine the exact meaning."`;
-  }
-
-  // 4. Instructional Sequence Polish
-  if (purified.instructionalSequence) {
-    if (purified.instructionalSequence.iDo) {
-      purified.instructionalSequence.iDo.teacherAction = cleanLanguageArtsMathematicsBleed(purified.instructionalSequence.iDo.teacherAction);
-      purified.instructionalSequence.iDo.teacherExplanation = cleanLanguageArtsMathematicsBleed(purified.instructionalSequence.iDo.teacherExplanation);
-      purified.instructionalSequence.iDo.thinkAloud = `"Let me think aloud as I examine 'transport': trans- means across, and port means to carry. In our Belizean reef passage, boats transport supplies to South Water Caye. That confirms the definition!"`;
-    }
-    if (purified.instructionalSequence.weDo) {
-      purified.instructionalSequence.weDo.tasks = (purified.instructionalSequence.weDo.tasks || []).map(t => cleanLanguageArtsMathematicsBleed(t));
-      purified.instructionalSequence.weDo.teacherPrompts = (purified.instructionalSequence.weDo.teacherPrompts || []).map(p => cleanLanguageArtsMathematicsBleed(p));
-      purified.instructionalSequence.weDo.expectedResponses = (purified.instructionalSequence.weDo.expectedResponses || []).map(r => cleanLanguageArtsMathematicsBleed(r));
-    }
-    if (purified.instructionalSequence.youDo) {
-      purified.instructionalSequence.youDo.studentTasks = [
-        `Complete Questions 1–5 on the independent practice worksheet in exercise books using the 4-step strategy.`,
-        `Write a 1-sentence explanation citing text evidence and morphological reasoning for Question #5.`
-      ];
-      purified.instructionalSequence.youDo.problemsOrPassages = [
-        `Question 1 (Identify and analyze target prefix in context using 4-step strategy)`,
-        `Question 2 (Affix recognition across Belizean vocabulary: transport, interact, preview, international)`,
-        `Question 3 (Infer meaning of unfamiliar word using context clues)`,
-        `Question 4 (Original sentence generation with target language structure and Belizean context)`,
-        `Question 5 (Evaluative comprehension question with justification)`
-      ];
-      purified.instructionalSequence.youDo.successCriteria = `Student independently completes at least 4 out of 5 questions accurately with evidence shown.`;
-    }
-  }
-
-  // 5. Student Materials (Replace Placeholders with Real Language Arts Worksheets)
-  if (!purified.studentMaterials || purified.studentMaterials.length === 0 || isMaterialPlaceholder(purified.studentMaterials[0]?.content || '')) {
-    const realWs = generateRealLanguageArtsWorksheet(topic, grade);
-    purified.studentMaterials = [
-      {
-        title: `${topic} - Guided Practice Worksheet`,
-        type: 'worksheet',
-        content: realWs.content,
-        answerKey: realWs.answerKey
-      },
-      {
-        title: `${topic} - Daily Exit Ticket`,
-        type: 'exit_ticket',
-        content: `EXIT TICKET: ${topic}\nName: ____________________ Date: _____________\n\n1. In the word "international", identify the prefix and explain what it means:\n   Prefix: ___________ | Meaning: _____________________________________\n\n2. Write one complete sentence using "submerge" or "transport" with context clues showing its meaning in the context of Belize:\n   ___________________________________________________________________________\n   ___________________________________________________________________________\n\n3. Explain how using the 4-step strategy (PREFIX → BASE/ROOT → CONTEXT → WHOLE-WORD MEANING) helps you figure out the meaning of unfamiliar words:\n   ___________________________________________________________________________\n\nRate your confidence:  😃 Mastered! (3/3)   😐 Almost there (2/3)   🙁 Need more practice (0-1/3)`,
-        answerKey: `1. Prefix: "inter-", meaning between or among (1 pt).\n2. Student writes a grammatically complete sentence using the target word with clear Belizean context clues (1 pt).\n3. Explains that prefixes provide meaning clues, while base words and context confirm whole-word meaning (1 pt).\nMastery Benchmark: Score of 3/3 (100%) or 2/3 (67% approaching mastery).`
-      }
-    ];
-  } else {
-    // Sanitize any existing worksheets
-    purified.studentMaterials = purified.studentMaterials.map(m => ({
-      ...m,
-      content: cleanLanguageArtsMathematicsBleed(m.content),
-      answerKey: m.answerKey ? cleanLanguageArtsMathematicsBleed(m.answerKey) : undefined
-    }));
-  }
-
-  // 6. Complete Assessment Package (Real Answers, No Placeholders)
-  if (purified.completeAssessment) {
-    purified.completeAssessment.task = cleanLanguageArtsMathematicsBleed(purified.completeAssessment.task);
-    if (/Verified correct step-by-step working/i.test(purified.completeAssessment.answerKey || '')) {
-      purified.completeAssessment.answerKey = `Question 1: Target prefix or language feature correctly identified with textual evidence.\nQuestion 2: Correct explanation of affix meaning and contribution to the base word.\nQuestion 3: Accurate contextual definition using sentence clues.\nQuestion 4: Grammatically complete student sentence applying the target vocabulary in a Belizean context.\nQuestion 5 (Evaluative/Applied): Thoughtful explanation defending choice with text evidence and grammatical reasoning.`;
-    }
-    if (purified.completeAssessment.rubric) {
-      purified.completeAssessment.rubric = purified.completeAssessment.rubric.map(r => ({
-        ...r,
-        criteria: cleanLanguageArtsMathematicsBleed(r.criteria),
-        exemplary: cleanLanguageArtsMathematicsBleed(r.exemplary),
-        proficient: cleanLanguageArtsMathematicsBleed(r.proficient),
-        developing: cleanLanguageArtsMathematicsBleed(r.developing)
-      }));
-    }
-    purified.completeAssessment.masteryCriteria = `Mastery Standard: Student achieves at least 80% accuracy (4 out of 5 questions correct) with textual evidence and reasoning visible.`;
-  }
-
-  // 7. Exit Ticket Package Scoring Consistency (Strict Match: /3 -> Mastery 3/3 or 2/3; /10 -> Mastery 8/10)
-  if (purified.exitTicketPackage) {
-    if (purified.exitTicketPackage.questions && purified.exitTicketPackage.questions.length > 0) {
-      const totalPts = purified.exitTicketPackage.questions.reduce((sum, q) => sum + (q.points || 1), 0);
-      purified.exitTicketPackage.scoringGuidance = `Total Points: ${totalPts}. Each question is scored according to the rubric criteria.`;
-      if (totalPts <= 3) {
-        purified.exitTicketPackage.masteryThreshold = `80% Mastery Benchmark: Score of 3/3 (100%) or 2/3 (67% approaching mastery).`;
-        purified.exitTicketPackage.groupingRuleTomorrow = `Students scoring 3/3 proceed to independent writing extension. Students scoring 2/3 or below receive targeted small-group intervention with tactile affix tiles.`;
-      } else {
-        const masteryThresholdVal = Math.ceil(totalPts * 0.8);
-        purified.exitTicketPackage.masteryThreshold = `80% Mastery: Score of ${masteryThresholdVal}/${totalPts} or higher.`;
-        purified.exitTicketPackage.groupingRuleTomorrow = `Students scoring ${masteryThresholdVal}/${totalPts} or higher advance to independent enrichment. Students scoring below ${masteryThresholdVal} receive targeted small-group intervention with tactile word cards.`;
-      }
-    }
-  }
-
-  // 8. Pre-Lesson Reflection Dashboard Guarantee
-  // Pre-lesson reflection must NOT claim the lesson has already been taught
-  purified.reflectionDashboard = normalizeLanguageArtsReflection(purified.reflectionDashboard, topic);
-
-  // 9. Inclusion Support Polish (Strip Math from LA Differentiation)
-  if (purified.differentiationFramework?.inclusionSupport) {
-    const inc = purified.differentiationFramework.inclusionSupport;
-    inc.dyscalculia = `Not applicable to Language Arts; support with multi-sensory affix cards, visual word frames, and structured graphic organizers.`;
-    inc.dyslexia = cleanLanguageArtsMathematicsBleed(inc.dyslexia);
-    inc.ell = cleanLanguageArtsMathematicsBleed(inc.ell);
-  }
-
-  if (purified.differentiationFramework?.strugglingLearners) {
-    const st = purified.differentiationFramework.strugglingLearners;
-    st.manipulatives = (st.manipulatives || []).map(m => cleanLanguageArtsMathematicsBleed(m));
-    st.scaffolds = (st.scaffolds || []).map(s => cleanLanguageArtsMathematicsBleed(s));
-  }
-
-  return purified;
+  // Delegate directly to the comprehensive Alignment Audit & Self-Correction Engine
+  const { plan: certifiedPlan } = enforceAndAuditLanguageArtsLesson(plan);
+  return certifiedPlan;
 }

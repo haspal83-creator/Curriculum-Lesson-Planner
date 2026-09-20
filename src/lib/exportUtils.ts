@@ -1242,126 +1242,76 @@ export async function exportWeeklyLessonPlanToPDF(
   await exportWeeklyPlanToPdfDocument(normalized, 'Weekly_Lesson_Plan');
 }
 
-export async function exportDailyPlanToWord(plan: any): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 40, after: 40 },
-      children: [
-        new TextRun({
-          text: OFFICIAL_SCHOOL_NAME,
-          bold: true,
-          size: 26,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 40 },
-      children: [
-        new TextRun({
-          text: `DAILY LESSON PLAN: DAY ${plan.day || plan.day_number || 1}`,
-          bold: true,
-          size: 34,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
-      children: [
-        new TextRun({
-          text: `Date: ${cleanText(plan.date || plan.createdAt || 'Not provided')}`,
-          size: 22,
-          color: TEXT_MUTED
-        })
-      ]
-    })
-  ];
+export async function exportDailyPlanToWord(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  // If structured_json exists, directly export the complete rich lesson plan
+  if (plan.structured_json && typeof plan.structured_json === 'object') {
+    await exportToWord(plan.structured_json, teacherName, schoolName);
+    return;
+  }
 
-  const strands: any[] = plan.strands || [];
-  strands.forEach((strand: any) => {
-    children.push(createSectionHeading(strand.strand, 260));
-    children.push(createParagraph(`Objective: ${strand.objective}`, { bold: true }));
-    children.push(createParagraph(`Time: ${strand.timeAllocation}`));
-    children.push(createSubheading("Activities", 140));
-    strand.activities.forEach((act: any) => children.push(createBullet(act)));
-  });
+  // Otherwise synthesize a complete teach-ready LessonPlan
+  const gradeStr = typeof plan.grade === 'object' && plan.grade !== null ? (plan.grade as any).name || 'Standard 4' : String(plan.grade || 'Standard 4');
+  const subjectStr = typeof plan.subject === 'object' && plan.subject !== null ? (plan.subject as any).name || 'Mathematics' : String(plan.subject || 'Mathematics');
+  const titleStr = typeof plan.lesson_title === 'object' && plan.lesson_title !== null ? (plan.lesson_title as any).title || 'Daily Lesson' : String(plan.lesson_title || 'Daily Lesson');
 
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
-      },
-      children
-    }]
-  });
+  const syntheticLesson: any = {
+    lessonTitle: titleStr,
+    grade: gradeStr as any,
+    subject: subjectStr as any,
+    cycle: Number(plan.cycle) || 1,
+    topic: plan.topic || titleStr,
+    subtopic: plan.subtopic || plan.topic || titleStr,
+    learningOutcome: plan.learning_outcome || plan.learningOutcome || (plan.objectives && plan.objectives[0]) || 'Demonstrate mastery of lesson concepts.',
+    learningObjectives: {
+      cognitive: Array.isArray(plan.objectives) && plan.objectives.length > 0 ? plan.objectives[0] : titleStr,
+      affective: 'Demonstrate active collaboration and perseverance.',
+      psychomotor: 'Accurately demonstrate procedures in student notes.'
+    },
+    duration: plan.duration || '45 mins'
+  };
 
-  await downloadDocx(doc, `Daily_Plan_Day_${plan.day || plan.day_number || 1}`);
+  await exportToWord(syntheticLesson as LessonPlan, teacherName, schoolName);
 }
 
-export async function exportLAWeeklyToWord(plan: any): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 40, after: 40 },
-      children: [
-        new TextRun({
-          text: OFFICIAL_SCHOOL_NAME,
-          bold: true,
-          size: 26,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 40 },
-      children: [
-        new TextRun({
-          text: `LANGUAGE ARTS WEEKLY PLAN: ${cleanText(plan.weeklyTheme || plan.theme || plan.topic)}`,
-          bold: true,
-          size: 34,
-          color: PRIMARY_NAVY
-        })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
-      children: [
-        new TextRun({
-          text: `${plan.grade} | Cycle ${plan.cycle}`,
-          size: 22,
-          color: TEXT_MUTED
-        })
-      ]
-    })
-  ];
-
-  const dailyPlans: any[] = plan.dailyPlans || [];
-  dailyPlans.forEach((dp: any) => {
-    children.push(createSectionHeading(`Day ${dp.day} - ${dp.date}`, 260));
-    dp.strands?.forEach((st: any) => {
-      children.push(createSubheading(st.strand, 140));
-      children.push(createParagraph(`Objective: ${st.objective}`, { bold: true }));
-      children.push(createParagraph(`Time Allocation: ${st.timeAllocation}`));
-      st.activities?.forEach((act: any) => children.push(createBullet(act)));
-    });
-  });
-
-  const doc = new Document({
-    sections: [{
-      properties: {
-        page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }
-      },
-      children
+export async function exportDailyPlanToPDF(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport({
+    topic: plan.topic || plan.lesson_title || 'Daily Lesson',
+    grade: plan.grade,
+    subject: plan.subject,
+    cycle: plan.cycle || 1,
+    weekNumber: plan.week || 1,
+    days: [{
+      day: plan.day || plan.day_number || 1,
+      lesson: plan.structured_json || plan
     }]
-  });
+  }, teacherName, schoolName);
+  await exportWeeklyPlanToPdfDocument(normalized, 'Daily_Lesson_Plan');
+}
 
-  await downloadDocx(doc, `LA_Weekly_${cleanText(plan.weeklyTheme || plan.theme || 'Export')}`);
+export async function exportLAWeeklyToWord(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToDocxDocument(normalized, 'LA_Weekly_Lesson_Plan');
+}
+
+export async function exportLAWeeklyToPDF(
+  plan: any,
+  teacherName?: string,
+  schoolName?: string
+): Promise<void> {
+  const normalized = normalizeWeeklyPlanForExport(plan, teacherName, schoolName);
+  await exportWeeklyPlanToPdfDocument(normalized, 'LA_Weekly_Lesson_Plan');
 }
 
 export async function exportWeeklyCurriculumToWord(

@@ -308,16 +308,16 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   // 1. Normalize Learning Objectives with One Shared Condition
   const normObj = normalizeLearningObjectives(plan, { topic, materials: plan.materials });
   const condition = normObj.condition || (isLA 
-    ? `Given a Belizean informational passage, an affix anchor chart, and guided word study activities:`
+    ? `Given an authentic Belizean mentor text, an instructional anchor chart on ${topic}, and structured guided practice:`
     : `Given concrete models, guided practice exercises, and primary workbook activities,`);
   const cognitiveObj = normObj.cognitive || (isLA
-    ? `Students will identify, define, and interpret target words and sentences related to ${topic} with at least 80% accuracy.`
+    ? `Students will identify, analyze, and explain key elements of ${topic} with at least 80% accuracy in text-dependent questions.`
     : `Students will identify, explain, and solve problems involving ${topic} with at least 80% accuracy.`);
   const psychomotorObj = normObj.psychomotor || (isLA
-    ? `Students will underline word parts, write original sentences, and record morphological notes accurately in their exercise books.`
+    ? `Students will identify textual evidence, organize ideas, and compose grammatically complete written responses demonstrating ${topic} in their exercise books.`
     : `Students will write step-by-step solutions, manipulate models, and record observations accurately in their exercise books.`);
   const affectiveObj = normObj.affective || (isLA
-    ? `Students will actively participate in partner reading discussions, ask clarifying questions, and express confidence in their language reasoning.`
+    ? `Students will actively participate in partner discussions, cite textual evidence, and express confidence in their language analysis.`
     : `Students will actively participate in partner discussions, ask clarifying questions, and show confidence in their mathematical reasoning.`);
 
   plan.learningObjectivesBoard = {
@@ -332,9 +332,9 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
     successCriteria: plan.learningObjectivesBoard?.successCriteria?.length 
       ? plan.learningObjectivesBoard.successCriteria 
       : (isLA ? [
-          `I can define and explain ${topic} in my own words using academic vocabulary.`,
-          `I can identify and analyze target word parts in mentor sentences from the text.`,
-          `I can explain the meaning of new words to a partner and write complete, accurate sentences.`
+          `I can identify and analyze key evidence and patterns of ${topic} in our mentor text.`,
+          `I can apply ${topic} to organize and write clear, complete responses.`,
+          `I can explain my textual analysis to a partner and write complete, accurate sentences.`
         ] : [
           `I can define and explain ${topic} in my own words using academic vocabulary.`,
           `I can correctly follow the step-by-step method to solve representative problems.`,
