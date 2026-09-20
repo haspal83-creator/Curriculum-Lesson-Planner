@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as staticGeminiService from '../../src/services/gemini.implementation';
+import * as staticGeminiService from '../../src/services/gemini.implementation.js';
 import { generateLessonResources } from '../../src/lib/gemini';
 
 // Safe module resolution & diagnostic handling (Task 13 & 14)
