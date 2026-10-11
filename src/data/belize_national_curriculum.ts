@@ -1034,6 +1034,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 1,
+    curriculumCode: 'MA.ST6.C1.01',
     strand: 'Real Number System',
     topic: 'Real Number System and Advanced Place Value',
     subtopic: 'Powers of Ten, Exponents, and Scientific Notation',
@@ -1053,6 +1054,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 1,
+    curriculumCode: 'MA.ST6.C1.02',
     strand: 'Algebra',
     topic: 'Algebraic Expressions and Variables',
     subtopic: 'Writing and Evaluating Expressions from Word Scenarios',
@@ -1072,6 +1074,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 2,
+    curriculumCode: 'MA.ST6.C2.01',
     strand: 'Algebraic Equations',
     topic: 'Solving Linear Equations and Inequalities',
     subtopic: 'One-Step and Two-Step Equations with Balancing Method',
@@ -1091,6 +1094,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 3,
+    curriculumCode: 'MA.ST6.C3.01',
     strand: 'Consumer Mathematics',
     topic: 'Belizean Consumer Math and Financial Literacy',
     subtopic: 'Currency Exchange (BZD to USD), Simple Interest, and Commission',
@@ -1110,6 +1114,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 4,
+    curriculumCode: 'MA.ST6.C4.01',
     strand: 'Coordinate Geometry & Statistics',
     topic: 'Coordinate Plane (All 4 Quadrants) and Probability',
     subtopic: 'Graphing Linear Relationships and Theoretical Probability',
@@ -1131,6 +1136,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 1,
+    curriculumCode: 'LA.ST6.C1.01',
     strand: 'Writing and Composition',
     topic: 'Expository Essay Writing and Thesis Statements',
     subtopic: '5-Paragraph Essay Architecture and Transitions',
@@ -1150,6 +1156,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 2,
+    curriculumCode: 'LA.ST6.C2.01',
     strand: 'Reading Comprehension',
     topic: 'Literary Analysis of Caribbean Poetry and Prose',
     subtopic: 'Figurative Language: Metaphor, Simile, Personification, and Alliteration',
@@ -1169,6 +1176,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 3,
+    curriculumCode: 'LA.ST6.C3.01',
     strand: 'Critical Literacy',
     topic: 'Evaluating Author Bias, Tone, and Point of View',
     subtopic: 'Fact vs. Opinion and Rhetorical Devices in Editorials',
@@ -1188,6 +1196,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 4,
+    curriculumCode: 'LA.ST6.C4.01',
     strand: 'Standardized Exam Readiness',
     topic: 'BJAT Examination Mastery: Editing and Extended Writing',
     subtopic: 'Proofreading for Grammar, Mechanics, and Timed Essay Writing',
@@ -1209,6 +1218,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 1,
+    curriculumCode: 'BS.ST6.C1.01',
     strand: 'Belizean History',
     topic: 'Ancient Maya Civilization and Settlement Patterns',
     subtopic: 'Social Hierarchy, Agriculture (Milpa), and Major Sites (Altun Ha, Xunantunich, Lamanai)',
@@ -1228,6 +1238,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 2,
+    curriculumCode: 'BS.ST6.C2.01',
     strand: 'Colonial Era and Migration',
     topic: 'The Baymen, Slavery, and the Battle of St. George\'s Caye',
     subtopic: 'Mahogany Extraction, Resistance, and September 10th Heritage',
@@ -1247,6 +1258,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 3,
+    curriculumCode: 'BS.ST6.C3.01',
     strand: 'Civics and Governance',
     topic: 'The Road to Independence and Belize\'s Constitution',
     subtopic: 'Right Hon. George Price, Constitutional Monarchy, and Parliamentary Democracy',
@@ -1266,6 +1278,7 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
     academicYear: '2026-2027',
     schoolYear: '2026-2027',
     cycle: 4,
+    curriculumCode: 'BS.ST6.C4.01',
     strand: 'Geography & Economy',
     topic: 'Belize\'s Economy, Natural Resources, and Conservation',
     subtopic: 'Belize Barrier Reef UNESCO Heritage, Ecotourism, and Agriculture',
@@ -1273,6 +1286,194 @@ export const BELIZE_NATIONAL_CURRICULUM: CurriculumEntry[] = [
       'Evaluate the economic significance of tourism, agriculture (sugar, citrus, bananas), and fisheries.',
       'Assess conservation policies protecting the Belize Barrier Reef Reserve System.',
       'Propose community solutions for balancing economic development with environmental sustainability.'
+    ],
+    suggestedLessons: 8,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+
+  // ==========================================
+  // STANDARD 6 - SCIENCE AND TECHNOLOGY
+  // ==========================================
+  {
+    id: 'bzc-std6-sc-c1-0',
+    grade: 'Standard 6',
+    subject: 'Science and Technology',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 1,
+    curriculumCode: 'SC.ST6.C1.00',
+    strand: 'Nature of Science & Scientific Inquiry',
+    topic: 'Working Like a Scientist',
+    subtopic: 'Scientific Inquiry, Hypotheses, Variables, and Fair Testing',
+    learning_outcomes: [
+      'Formulate testable scientific questions and hypotheses based on observable phenomena.',
+      'Identify independent, dependent, and controlled variables to design and conduct a fair test.',
+      'Collect, record, and interpret empirical data in observation tables to draw evidence-based conclusions.'
+    ],
+    suggestedLessons: 6,
+    suggestedWeeks: 2,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-sc-c1-1',
+    grade: 'Standard 6',
+    subject: 'Science and Technology',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 1,
+    curriculumCode: 'SC.ST6.C1.01',
+    strand: 'Physical Science & Technology',
+    topic: 'Energy Conversion',
+    subtopic: 'Forms of Energy and Energy Transformations',
+    learning_outcomes: [
+      'Identify and describe different forms of energy including kinetic, potential, thermal, chemical, electrical, and radiant energy.',
+      'Investigate and explain how electrical energy is converted into light, sound, and thermal energy in everyday devices and simple circuits.',
+      'Apply the law of conservation of energy to trace energy inputs, useful outputs, and dissipated thermal energy in domestic Belizean appliances.'
+    ],
+    suggestedLessons: 9,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-sc-c2-1',
+    grade: 'Standard 6',
+    subject: 'Science and Technology',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 2,
+    curriculumCode: 'SC.ST6.C2.01',
+    strand: 'Life Science',
+    topic: 'Human Body Systems and Circulation',
+    subtopic: 'Circulatory, Respiratory, and Excretory Functions',
+    learning_outcomes: [
+      'Trace the path of blood through the human heart, lungs, arteries, veins, and capillaries.',
+      'Explain the exchange of oxygen and carbon dioxide between the alveoli and bloodstream.',
+      'Analyze how regular physical exercise and healthy nutrition maintain cardiovascular efficiency.'
+    ],
+    suggestedLessons: 9,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-sc-c3-1',
+    grade: 'Standard 6',
+    subject: 'Science and Technology',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 3,
+    curriculumCode: 'SC.ST6.C3.01',
+    strand: 'Living Things & Environment',
+    topic: 'Ecosystems and Biodiversity Conservation',
+    subtopic: 'Food Webs, Coral Reefs, and Tropical Forest Interdependence',
+    learning_outcomes: [
+      'Construct and analyze complex food webs illustrating producers, primary consumers, apex predators, and decomposers in Belize.',
+      'Evaluate human impacts on the Belize Barrier Reef ecosystem including rising sea temperatures and agricultural runoff.',
+      'Design sustainable community conservation strategies protecting endangered mangrove habitats.'
+    ],
+    suggestedLessons: 9,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-sc-c4-1',
+    grade: 'Standard 6',
+    subject: 'Science and Technology',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 4,
+    curriculumCode: 'SC.ST6.C4.01',
+    strand: 'Earth & Space Science',
+    topic: 'Earth Systems, Weather Patterns, and Climate Change',
+    subtopic: 'Atmospheric Cycles, Tropical Cyclones, and Coastal Protection',
+    learning_outcomes: [
+      'Analyze atmospheric conditions that produce tropical waves, depressions, and hurricanes in the Caribbean basin.',
+      'Interpret meteorological maps, barometric pressure readings, and satellite imagery to track weather systems.',
+      'Propose coastal climate resilience measures to protect Belizean barrier islands and low-lying coastal towns.'
+    ],
+    suggestedLessons: 9,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+
+  // ==========================================
+  // STANDARD 6 - HFLE (HEALTH & FAMILY LIFE EDUCATION)
+  // ==========================================
+  {
+    id: 'bzc-std6-hfle-c1-1',
+    grade: 'Standard 6',
+    subject: 'HFLE',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 1,
+    curriculumCode: 'HFLE.ST6.C1.01',
+    strand: 'Eating and Fitness / Personal Health',
+    topic: 'Diet and Disease',
+    subtopic: 'Nutrient-Dense Foods and Prevention of Non-Communicable Diseases',
+    learning_outcomes: [
+      'Distinguish between nutrient-dense whole foods and ultra-processed foods high in added sugars, sodium, and trans fats.',
+      'Explain how dietary choices influence the development and prevention of non-communicable diseases including diabetes and hypertension.',
+      'Evaluate personal daily food intake and design a realistic, balanced meal plan incorporating healthy local Belizean staples.'
+    ],
+    suggestedLessons: 8,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-hfle-c2-1',
+    grade: 'Standard 6',
+    subject: 'HFLE',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 2,
+    curriculumCode: 'HFLE.ST6.C2.01',
+    strand: 'Self and Interpersonal Relationships',
+    topic: 'Personal Safety, Decision-Making, and Peer Influences',
+    subtopic: 'Resisting Negative Peer Pressure and Risk Assessment',
+    learning_outcomes: [
+      'Analyze internal and external factors that influence personal decisions and peer relationships.',
+      'Demonstrate assertive communication and refusal skills in resisting unsafe or unhealthy peer pressures.',
+      'Create an action plan for seeking guidance from trusted adults when encountering risky situations.'
+    ],
+    suggestedLessons: 8,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-hfle-c3-1',
+    grade: 'Standard 6',
+    subject: 'HFLE',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 3,
+    curriculumCode: 'HFLE.ST6.C3.01',
+    strand: 'Managing the Environment / Interpersonal Relationships',
+    topic: 'Emotional Well-being, Conflict Resolution, and Communication',
+    subtopic: 'Stress Management and Peaceful Dispute Resolution',
+    learning_outcomes: [
+      'Identify personal stress triggers and practice healthy coping mechanisms for emotional balance.',
+      'Apply win-win conflict resolution steps to mediate misunderstandings among peers.',
+      'Evaluate the impact of positive, respectful communication on family and school community well-being.'
+    ],
+    suggestedLessons: 8,
+    suggestedWeeks: 3,
+    createdAt: '2025-08-15T00:00:00.000Z'
+  },
+  {
+    id: 'bzc-std6-hfle-c4-1',
+    grade: 'Standard 6',
+    subject: 'HFLE',
+    academicYear: '2026-2027',
+    schoolYear: '2026-2027',
+    cycle: 4,
+    curriculumCode: 'HFLE.ST6.C4.01',
+    strand: 'Growth and Development / Sexuality',
+    topic: 'Human Growth, Development, and Adolescent Health',
+    subtopic: 'Pubertal Changes, Personal Hygiene, and Positive Self-Image',
+    learning_outcomes: [
+      'Describe physical, emotional, and social changes that occur during adolescence and puberty.',
+      'Formulate personal hygiene and self-care routines appropriate for growing adolescents.',
+      'Demonstrate respect for individual developmental differences and foster positive self-worth.'
     ],
     suggestedLessons: 8,
     suggestedWeeks: 3,

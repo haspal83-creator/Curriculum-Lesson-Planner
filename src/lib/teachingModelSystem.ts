@@ -757,10 +757,18 @@ export interface ModelRecommendationResult {
 }
 
 export function recommendTeachingModel(params: ModelRecommendationParams): ModelRecommendationResult {
-  const { subject, grade, topic, subtopic = '', duration = '45 min', learningOutcome = '', objectives = [], manualPrimary, manualSupporting = [] } = params;
+  const isLAOrMath = Boolean(params.subject && (
+    params.subject.toLowerCase().includes('language') ||
+    params.subject.toLowerCase().includes('reading') ||
+    params.subject.toLowerCase().includes('writing') ||
+    params.subject.toLowerCase().includes('english') ||
+    params.subject.toLowerCase().includes('math')
+  ));
+  const defaultDuration = isLAOrMath ? '90 min' : '45 min';
+  const { subject, grade, topic, subtopic = '', duration = defaultDuration, learningOutcome = '', objectives = [], manualPrimary, manualSupporting = [] } = params;
   
   // Total duration parse
-  const durNum = parseInt(duration.replace(/\D/g, ''), 10) || 45;
+  const durNum = parseInt(duration.replace(/\D/g, ''), 10) || (isLAOrMath ? 90 : 45);
 
   // If manual primary was selected and valid, use it
   if (manualPrimary && params.preferredMode !== 'auto') {

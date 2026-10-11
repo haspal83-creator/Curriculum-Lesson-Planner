@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft, 
   ChevronDown, 
@@ -11,19 +11,33 @@ import {
   Target, 
   List, 
   Sparkles,
-  FileText
+  FileText,
+  FileCheck
 } from 'lucide-react';
 import { Button, Card, DropdownMenu } from '../ui';
-import { WeeklyCurriculumPlan, LessonPlan } from '../../types';
+import { WeeklyCurriculumPlan, LessonPlan, GradeLevel, Subject, CurriculumEntry } from '../../types';
 import { exportWeeklyCurriculumToWord, exportWeeklyCurriculumToPDF } from '../../lib/exportUtils';
+import { WeeklyTestGeneratorModal } from '../WeeklyTestGeneratorModal';
 
 interface WeeklyPlanDetailViewProps {
   plan: WeeklyCurriculumPlan;
+  plans?: LessonPlan[];
+  weeklyPlans?: WeeklyCurriculumPlan[];
+  curriculum?: CurriculumEntry[];
   onBack: () => void;
-  onGenerateResource: (plan: LessonPlan, type: string) => Promise<void>;
+  onGenerateResource?: (plan: LessonPlan, type: string) => Promise<void>;
 }
 
-export default function WeeklyPlanDetailView({ plan, onBack, onGenerateResource }: WeeklyPlanDetailViewProps) {
+export default function WeeklyPlanDetailView({ 
+  plan, 
+  plans = [], 
+  weeklyPlans = [], 
+  curriculum = [], 
+  onBack, 
+  onGenerateResource 
+}: WeeklyPlanDetailViewProps) {
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+
   const handlePrint = () => {
     window.print();
   };
@@ -44,6 +58,15 @@ export default function WeeklyPlanDetailView({ plan, onBack, onGenerateResource 
           Back to Saved Plans
         </Button>
         <div className="flex gap-3">
+          <Button 
+            variant="primary" 
+            size="sm" 
+            onClick={() => setIsTestModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 shadow-xs"
+          >
+            <FileCheck className="w-4 h-4" />
+            Generate Weekly Test
+          </Button>
           <Button variant="secondary" size="sm" onClick={handlePrint}>
             <Printer className="w-4 h-4" />
             Print
@@ -150,6 +173,22 @@ export default function WeeklyPlanDetailView({ plan, onBack, onGenerateResource 
           </div>
         </section>
       </Card>
+
+      <WeeklyTestGeneratorModal
+        isOpen={isTestModalOpen}
+        onClose={() => setIsTestModalOpen(false)}
+        initialContext={{
+          grade: (plan.grade_level || plan.grade) as GradeLevel,
+          subject: plan.subject as Subject,
+          academicYear: plan.academicYear || (plan as any).schoolYear || '2026-2027',
+          cycle: plan.cycle,
+          week: plan.week_number,
+          activeWeeklyPlan: plan as any
+        }}
+        plans={plans}
+        weeklyPlans={weeklyPlans}
+        curriculum={curriculum}
+      />
     </div>
   );
 }

@@ -9,11 +9,16 @@ import {
   Layers, 
   Zap, 
   BookOpen,
-  Presentation
+  Presentation,
+  FileCheck,
+  Printer,
+  Download
 } from 'lucide-react';
 import { Button, Card, Input, Select } from '../ui';
-import { LessonPlan, WeeklyCurriculumPlan, DailyLessonPlan, LanguageArtsWeeklyPlan, GradeLevel } from '../../types';
+import { LessonPlan, WeeklyCurriculumPlan, DailyLessonPlan, LanguageArtsWeeklyPlan, GradeLevel, Subject, WeeklyTest } from '../../types';
 import { cn } from '../../lib/utils';
+import { WeeklyTestGeneratorModal } from '../WeeklyTestGeneratorModal';
+import { loadWeeklyTestsFromStorage, printWeeklyTest, exportWeeklyTestToWord } from '../../lib/weeklyTestExport';
 
 interface SavedPlansViewProps {
   activeClass?: GradeLevel | null;
@@ -55,7 +60,7 @@ export function SavedPlansView({
   activeClass,
   plans, 
   weeklyPlans, 
-  laWeeklyPlans,
+  laWeeklyPlans, 
   dailyLessonPlans, 
   resources, 
   onDelete, 
@@ -70,7 +75,10 @@ export function SavedPlansView({
   onDeleteResource,
   onOpenResource
 }: SavedPlansViewProps) {
-  const [filter, setFilter] = useState<'all' | 'daily' | 'weekly' | 'resource'>('all');
+  const [filter, setFilter] = useState<'all' | 'daily' | 'weekly' | 'resource' | 'tests'>('all');
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [selectedTestContext, setSelectedTestContext] = useState<any>(null);
+  const [savedTests, setSavedTests] = useState<WeeklyTest[]>(() => loadWeeklyTestsFromStorage());
 
   const allDisplayResources = React.useMemo(() => {
     const list: any[] = [];
@@ -131,11 +139,12 @@ export function SavedPlansView({
               : "Access and manage all your generated educational content."}
           </p>
         </div>
-        <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
+        <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl">
           <Button variant={filter === 'all' ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
           <Button variant={filter === 'daily' ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter('daily')}>Daily</Button>
           <Button variant={filter === 'weekly' ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter('weekly')}>Weekly</Button>
           <Button variant={filter === 'resource' ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter('resource')}>Resources</Button>
+          <Button variant={filter === 'tests' ? 'primary' : 'ghost'} size="sm" onClick={() => { setSavedTests(loadWeeklyTestsFromStorage()); setFilter('tests'); }}>Weekly Tests</Button>
         </div>
       </div>
 
@@ -248,14 +257,39 @@ export function SavedPlansView({
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => {
-                      e.stopPropagation();
-                      'days' in plan ? onDeleteLAWeekly(plan.id!) : onDeleteWeekly(plan.id!);
-                    }}>
-                      <Trash2 className="w-4 h-4" />
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-indigo-600 hover:bg-indigo-50 border-indigo-200 text-xs font-bold flex items-center gap-1" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const targetGrade = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).grade : (plan as WeeklyCurriculumPlan).grade_level;
+                        const targetSubject = plan.subject || ('days' in plan ? 'Language Arts' : 'Mathematics');
+                        const targetCycle = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).cycle : (plan as WeeklyCurriculumPlan).cycle;
+                        const targetWeek = 'days' in plan ? (plan as LanguageArtsWeeklyPlan).week : (plan as WeeklyCurriculumPlan).week_number;
+                        setSelectedTestContext({
+                          grade: String(targetGrade || 'Standard 4') as GradeLevel,
+                          subject: String(targetSubject || 'Mathematics') as Subject,
+                          cycle: Number(targetCycle || 1),
+                          week: Number(targetWeek || 1),
+                          activeWeeklyPlan: plan as any
+                        });
+                        setIsTestModalOpen(true);
+                      }}
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      Weekly Test
                     </Button>
-                    <ChevronRight className="w-5 h-5 text-gray-300 mt-2" />
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => {
+                        e.stopPropagation();
+                        'days' in plan ? onDeleteLAWeekly(plan.id!) : onDeleteWeekly(plan.id!);
+                      }}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <ChevronRight className="w-5 h-5 text-gray-300 mt-2" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -323,7 +357,71 @@ export function SavedPlansView({
               </div>
             ))}
 
-            {(plans || []).length === 0 && (weeklyPlans || []).length === 0 && (laWeeklyPlans || []).length === 0 && (dailyLessonPlans || []).length === 0 && allDisplayResources.length === 0 && (
+            {(filter === 'all' || filter === 'tests') && savedTests.map((t) => (
+              <div 
+                key={t.id} 
+                className="p-6 hover:bg-gray-50 transition-colors group cursor-pointer"
+                onClick={() => {
+                  setSelectedTestContext({
+                    grade: t.classLevel,
+                    subject: t.subject,
+                    academicYear: t.academicYear,
+                    cycle: t.cycle,
+                    week: t.week
+                  });
+                  setIsTestModalOpen(true);
+                }}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-600">
+                      <FileCheck className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">{t.classLevel}</span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">{t.subject}</span>
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-black uppercase tracking-widest">Weekly Test</span>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold">{t.questions?.length || 0} Questions ({t.totalMarks} Marks)</span>
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-900">{t.testTitle}</h3>
+                      <p className="text-sm text-gray-500">
+                        Cycle {t.cycle} • Week {t.week} • Academic Year {t.academicYear} • Saved {new Date(t.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        printWeeklyTest(t, 'student');
+                      }}
+                      className="text-xs"
+                    >
+                      <Printer className="w-3.5 h-3.5 mr-1" />
+                      Print
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportWeeklyTestToWord(t, true);
+                      }}
+                      className="text-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1" />
+                      Word
+                    </Button>
+                    <ChevronRight className="w-5 h-5 text-gray-300" />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {(plans || []).length === 0 && (weeklyPlans || []).length === 0 && (laWeeklyPlans || []).length === 0 && (dailyLessonPlans || []).length === 0 && allDisplayResources.length === 0 && savedTests.length === 0 && (
               <div className="p-12 text-center space-y-4">
                 <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto text-gray-300">
                   <BookOpen className="w-8 h-8" />
@@ -343,16 +441,29 @@ export function SavedPlansView({
             <div className="space-y-4">
               <div className="flex gap-3">
                 <Zap className="w-5 h-5 text-indigo-300 shrink-0" />
-                <p className="text-sm text-indigo-100">Use the filters to quickly switch between daily plans, weekly overviews, and teaching resources.</p>
+                <p className="text-sm text-indigo-100">Use the filters to quickly switch between daily plans, weekly overviews, weekly tests, and teaching resources.</p>
               </div>
               <div className="flex gap-3">
                 <Zap className="w-5 h-5 text-indigo-300 shrink-0" />
-                <p className="text-sm text-indigo-100">Saved plans can be printed or exported as PDF for your teaching portfolio.</p>
+                <p className="text-sm text-indigo-100">Saved weekly tests can be printed directly as student test papers or exported with teacher answer keys.</p>
               </div>
             </div>
           </Card>
         </div>
       </div>
+
+      <WeeklyTestGeneratorModal
+        isOpen={isTestModalOpen}
+        onClose={() => {
+          setIsTestModalOpen(false);
+          setSavedTests(loadWeeklyTestsFromStorage());
+        }}
+        initialContext={selectedTestContext}
+        plans={plans}
+        weeklyPlans={weeklyPlans}
+        laWeeklyPlans={laWeeklyPlans}
+        dailyLessonPlans={dailyLessonPlans}
+      />
     </div>
   );
 }

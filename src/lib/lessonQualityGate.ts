@@ -22,6 +22,14 @@ import {
 import { normalizeLearningObjectives } from './learningObjectivesHelper';
 import { validateAndBalanceLessonTiming, parseMinutes } from './timingValidation';
 import { enforceLanguageArtsPurityAndQuality, isLanguageArtsSubject } from './languageArtsQualityGate';
+import { 
+  enforceMathematicsPurityAndQuality, 
+  isMathematicsSubject, 
+  buildAuthoritativeMathWorksheet, 
+  buildAuthoritativeMathExitTicket 
+} from './mathQualityGate';
+import { getAuthoritativeCurriculumCode, getTopicFocalInquiry } from '../services/curriculumHierarchyService';
+import { enrichScienceLessonPlan, resolveSciencePhenomenonPack } from './scienceInquiryEngine';
 
 export interface QualityGateCheckItem {
   id: string;
@@ -299,26 +307,93 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   const grade = plan.grade || context?.grade || 'Standard 2';
   const subject = plan.subject || context?.subject || 'Mathematics';
   const topic = plan.topic || plan.lessonTitle || context?.topic || 'Curriculum Concept';
-  const subtopic = plan.subtopic || context?.subtopic || topic;
-  const cycle = plan.cycle || context?.cycle || 2;
+  const subtopic = plan.subtopic || context?.subtopic || getTopicFocalInquiry(subject, topic);
+  const cycle = plan.cycle || context?.cycle || 1;
   const learningOutcome = plan.learningOutcome || context?.learningOutcome || `Demonstrate understanding and practical application of ${topic}.`;
 
+  // Authoritative curriculum code
+  plan.curriculumCode = plan.curriculumCode || context?.curriculumCode || getAuthoritativeCurriculumCode({ subject, grade, cycle, topic });
+  plan.subtopic = subtopic;
+
   const isLA = isLanguageArtsSubject(subject);
+  const isHFLE = subject === 'HFLE' || subject.toLowerCase().includes('health');
+  const isScience = subject === 'Science and Technology' || subject.toLowerCase().includes('science');
+  const isBS = subject === 'Belizean Studies';
+
+  // Dedicated Science & Technology Inquiry Engine delegation
+  if (isScience) {
+    const sciencePlan = enrichScienceLessonPlan(plan, context);
+    const targetDuration = sciencePlan.duration || '45 minutes';
+    const { plan: timedPlan } = validateAndBalanceLessonTiming(sciencePlan, targetDuration);
+    Object.assign(sciencePlan, timedPlan);
+    sciencePlan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'Science and Technology', grade, cycle, topic });
+    delete (sciencePlan as any).readingPassageFull;
+    delete (sciencePlan as any).languageArtsComponents;
+    delete (sciencePlan as any).component1Details;
+    delete (sciencePlan as any).component2Details;
+    return sciencePlan;
+  }
 
   // 1. Normalize Learning Objectives with One Shared Condition
   const normObj = normalizeLearningObjectives(plan, { topic, materials: plan.materials });
-  const condition = normObj.condition || (isLA 
-    ? `Given an authentic Belizean mentor text, an instructional anchor chart on ${topic}, and structured guided practice:`
-    : `Given concrete models, guided practice exercises, and primary workbook activities,`);
-  const cognitiveObj = normObj.cognitive || (isLA
-    ? `Students will identify, analyze, and explain key elements of ${topic} with at least 80% accuracy in text-dependent questions.`
-    : `Students will identify, explain, and solve problems involving ${topic} with at least 80% accuracy.`);
-  const psychomotorObj = normObj.psychomotor || (isLA
-    ? `Students will identify textual evidence, organize ideas, and compose grammatically complete written responses demonstrating ${topic} in their exercise books.`
-    : `Students will write step-by-step solutions, manipulate models, and record observations accurately in their exercise books.`);
-  const affectiveObj = normObj.affective || (isLA
-    ? `Students will actively participate in partner discussions, cite textual evidence, and express confidence in their language analysis.`
-    : `Students will actively participate in partner discussions, ask clarifying questions, and show confidence in their mathematical reasoning.`);
+  let condition = normObj.condition;
+  let cognitiveObj = normObj.cognitive;
+  let psychomotorObj = normObj.psychomotor;
+  let affectiveObj = normObj.affective;
+  let defaultSuccessCriteria: string[] = [];
+
+  if (isLA) {
+    condition = condition || `Given an authentic Belizean mentor text, an instructional anchor chart on ${topic}, and structured guided practice:`;
+    cognitiveObj = cognitiveObj || `Students will identify, analyze, and explain key elements of ${topic} with at least 80% accuracy in text-dependent questions.`;
+    psychomotorObj = psychomotorObj || `Students will identify textual evidence, organize ideas, and compose grammatically complete written responses demonstrating ${topic} in their exercise books.`;
+    affectiveObj = affectiveObj || `Students will actively participate in partner discussions, cite textual evidence, and express confidence in their language analysis.`;
+    defaultSuccessCriteria = [
+      `I can identify and analyze key evidence and patterns of ${topic} in our mentor text.`,
+      `I can apply ${topic} to organize and write clear, complete responses.`,
+      `I can explain my textual analysis to a partner and write complete, accurate sentences.`
+    ];
+  } else if (isHFLE) {
+    condition = condition || `Given an illustrated chart of common Belizean foods and lifestyle practices,`;
+    cognitiveObj = cognitiveObj || `Students will categorize foods and analyze dietary risk factors for non-communicable diseases with at least 80% accuracy.`;
+    psychomotorObj = psychomotorObj || `Students will design a balanced one-day Belizean meal plan and record healthy lifestyle commitments in their exercise books.`;
+    affectiveObj = affectiveObj || `Students will demonstrate responsibility and positive decision-making when discussing healthy habits with peers.`;
+    defaultSuccessCriteria = [
+      `I can distinguish nutrient-dense foods from ultra-processed foods.`,
+      `I can explain how food choices influence health and non-communicable diseases.`,
+      `I can plan a balanced, healthy meal using local Belizean foods.`
+    ];
+  } else if (isScience) {
+    condition = condition || `Given hands-on demonstration materials and structured investigation guides,`;
+    cognitiveObj = cognitiveObj || `Students will identify input and output energy forms and explain energy transformations with at least 80% accuracy.`;
+    psychomotorObj = psychomotorObj || `Students will trace energy conversion pathways and record scientific observations in their science notebooks.`;
+    affectiveObj = affectiveObj || `Students will demonstrate curiosity and scientific collaboration during inquiry investigations.`;
+    defaultSuccessCriteria = [
+      `I can identify common forms of energy in everyday devices.`,
+      `I can trace input and output energy conversions accurately.`,
+      `I can apply the law of conservation of energy to explain real systems.`
+    ];
+  } else if (isBS) {
+    condition = condition || `Given historical maps, primary sources, and Belizean heritage texts,`;
+    cognitiveObj = cognitiveObj || `Students will analyze key historical events and explain their significance in Belizean history with at least 80% accuracy.`;
+    psychomotorObj = psychomotorObj || `Students will construct annotated timelines and record reflective arguments in their notebooks.`;
+    affectiveObj = affectiveObj || `Students will demonstrate civic pride and appreciation for Belize's multicultural heritage.`;
+    defaultSuccessCriteria = [
+      `I can locate key historical sites and geographic regions in Belize.`,
+      `I can explain historical cause-and-effect relationships accurately.`,
+      `I can articulate the rights and responsibilities of responsible Belizean citizens.`
+    ];
+  } else {
+    // Mathematics
+    condition = condition || `Given concrete models, guided practice exercises, and primary workbook activities,`;
+    cognitiveObj = cognitiveObj || `Students will identify, explain, and solve problems involving ${topic} with at least 80% accuracy.`;
+    psychomotorObj = psychomotorObj || `Students will write step-by-step solutions, manipulate models, and record observations accurately in their exercise books.`;
+    affectiveObj = affectiveObj || `Students will actively participate in partner discussions, ask clarifying questions, and show confidence in their mathematical reasoning.`;
+    defaultSuccessCriteria = [
+      `I can define and explain ${topic} in my own words using academic vocabulary.`,
+      `I can correctly follow the step-by-step method to solve representative problems.`,
+      `I can explain my reasoning to a partner and verify my final answers.`
+    ];
+  }
 
   plan.learningObjectivesBoard = {
     ...plan.learningObjectivesBoard,
@@ -331,15 +406,7 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
     affective: affectiveObj,
     successCriteria: plan.learningObjectivesBoard?.successCriteria?.length 
       ? plan.learningObjectivesBoard.successCriteria 
-      : (isLA ? [
-          `I can identify and analyze key evidence and patterns of ${topic} in our mentor text.`,
-          `I can apply ${topic} to organize and write clear, complete responses.`,
-          `I can explain my textual analysis to a partner and write complete, accurate sentences.`
-        ] : [
-          `I can define and explain ${topic} in my own words using academic vocabulary.`,
-          `I can correctly follow the step-by-step method to solve representative problems.`,
-          `I can explain my reasoning to a partner and verify my final answers.`
-        ])
+      : defaultSuccessCriteria
   };
 
   // 2. Teacher Quick Reference
@@ -359,12 +426,13 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
       teachingStrategy: plan.teachingModel || 'Direct Instruction (I Do, We Do, You Do) with Concrete-Pictorial-Abstract Scaffolding',
       assessment: 'Formative CFU questioning, paired check-in, independent problem set, and exit slip',
       masteryTarget: '80% of students demonstrate independent procedural and conceptual mastery on the exit check.',
-      duration: isLanguageArtsSubject(plan.subject) ? '90 minutes' : (plan.duration || '45 minutes')
+      duration: (isLanguageArtsSubject(plan.subject) || (plan.subject || '').toLowerCase().includes('math')) ? '90 minutes' : (plan.duration || '45 minutes')
     };
   }
 
   // 3. Timing Validation & Rebalancing
-  const targetDuration = isLanguageArtsSubject(plan.subject) 
+  const is90MinSubj = isLanguageArtsSubject(plan.subject) || (plan.subject || '').toLowerCase().includes('math');
+  const targetDuration = is90MinSubj
     ? ((!plan.duration || plan.duration === '45 minutes' || plan.duration === '60 minutes') ? '90 minutes' : plan.duration)
     : (plan.duration || '45 minutes');
   plan.duration = targetDuration;
@@ -500,24 +568,24 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   // 9. Teacher Script (Verbatim Teacher Language)
   if (!plan.teacherScriptDetailed) {
     plan.teacherScriptDetailed = {
-      opening: `"Good morning class! Eyes on the board and pencils down. Today we are unlocking a powerful skill in ${subject}: ${topic}. By the end of our lesson, every single one of you will be able to solve and explain these problems with complete confidence."`,
-      introduction: `"Take a look at the problem on the board. Raise your hand if you have seen something like this in everyday life or in our previous units. Today, we are going to learn the exact rule that makes solving this easy and enjoyable."`,
-      explanation: `"Notice that when we examine ${topic}, there are three crucial elements we look for. First, we identify what we are given. Second, we choose our strategy. Third, we carry out our steps systematically without rushing."`,
-      modeling: `"Watch me carefully. I am going to solve this first example out loud so you can hear what a mathematician/reader thinks in their head. Watch my marker: Step 1, I write down... Step 2, I notice that... Step 3, I verify my answer. Notice how I did not guess; I followed our clear rule."`,
+      opening: `"Good morning class! Eyes on the board and materials ready. Today we are exploring an essential concept in ${subject}: ${topic}. By the end of our lesson, every single one of you will be able to explain, demonstrate, and apply this knowledge with confidence."`,
+      introduction: `"Take a look at the model on the board. Raise your hand if you have seen something like this in everyday life in Belize or in our previous units. Today, we are going to learn the exact principles that make this clear and exciting."`,
+      explanation: `"Notice that when we examine ${topic}, there are three crucial elements we look for. First, we identify what we are given. Second, we choose our strategy or inquiry pathway. Third, we carry out our steps systematically without rushing."`,
+      modeling: `"Watch me carefully. I am going to demonstrate this first example out loud so you can hear how we think through it step-by-step. Notice how I do not guess; I follow our clear scientific, mathematical, or analytical criteria."`,
       questioning: [
         `"Why did I complete Step 1 before moving to Step 2?"`,
-        `"What clue in the problem told me which operation or rule to apply?"`,
+        `"What clue in the scenario or problem told me which concept or rule to apply?"`,
         `"Who can put into their own words what our second step accomplished?"`
       ],
       transitions: [
         `"Now that you have seen me model it, we are going to tackle the next one together as a team."`,
-        `"Turn to your learning partner. Partner A, explain the first step; Partner B, confirm or correct."`,
-        `"Pencils ready. You have shown me you understand during our guided practice; now it's your turn to shine independently."`
+        `"Turn to your learning partner. Partner A, explain the first step; Partner B, confirm or clarify."`,
+        `"Materials ready. You have shown me you understand during our guided practice; now it's your turn to shine independently."`
       ],
-      directions: `"Open your exercise books to today's date. You have 10 minutes to complete problems 1 through 5. Show your full working for every single question. If you finish early, move directly to the extension challenge on the side board."`,
-      feedbackLanguage: `"Excellent precision with that intermediate step, Maria! Notice how keeping your work organized helped you catch that small error before moving on."`,
-      correctionPrompts: `"Stop right there and take another look at Step 2. What does our rule say about that sign/word? Review your anchor chart and adjust."`,
-      closing: `"Pencils down, eyes up in 3... 2... 1. Today, we mastered ${topic}. Turn to your neighbor and tell them the single most important rule we learned today. Great work today, class!"`
+      directions: `"Open your exercise books to today's date. You have 10 minutes to complete the practice tasks. Record your steps clearly. If you finish early, move directly to the extension challenge on the side board."`,
+      feedbackLanguage: `"Excellent precision with that intermediate step! Notice how keeping your work organized helped you catch that small error before moving on."`,
+      correctionPrompts: `"Stop right there and take another look at Step 2. What does our core rule say? Review your anchor chart and adjust."`,
+      closing: `"Materials down, eyes up in 3... 2... 1. Today, we mastered ${topic}. Turn to your neighbor and tell them the single most important principle we learned today. Great work today, class!"`
     };
   }
 
@@ -525,49 +593,49 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   if (!plan.instructionalSequence) {
     plan.instructionalSequence = {
       iDo: {
-        teacherAction: `The teacher displays Problem #1 on the board, models clear physical posture, points explicitly to each component, and writes out every intermediate line of work.`,
-        teacherExplanation: `"I am going to read the problem carefully twice. I underline the key terms. Now I ask myself: What is this asking me to find? I apply our three-step method on the board."`,
-        workedExample: `Model Problem: Clearly worked example demonstrating the target standard for ${topic} with full steps and final verified answer.`,
-        thinkAloud: `"I am thinking: I shouldn't jump directly to the answer. If I write down each step, I eliminate careless mistakes and can prove my answer is right."`,
-        expectedStudentObservation: `Students track the teacher's marker, note the organizational layout in their notebooks, and answer periodic check questions.`
+        teacherAction: `The teacher displays the model example for ${topic} on the board, models clear physical posture, points explicitly to each component, and records intermediate steps clearly.`,
+        teacherExplanation: `"I am going to examine the model carefully. I underline the key terms. Now I ask myself: What is the core question or process here? I demonstrate our step-by-step method on the board."`,
+        workedExample: `Model Demonstration: Clearly worked example demonstrating the target standard for ${topic} with full steps and verified conclusion.`,
+        thinkAloud: `"I am thinking: I shouldn't jump directly to a conclusion. If I write down each step, I eliminate careless mistakes and can prove my reasoning is sound."`,
+        expectedStudentObservation: `Students track the teacher's demonstration, note the organizational layout in their notebooks, and answer periodic check questions.`
       },
       weDo: {
         tasks: [
-          `Collaborative Practice Problem #1 solved as a whole class with student call-and-response.`,
-          `Paired Practice Problem #2 where partners take turns verbalizing and writing alternating steps.`
+          `Collaborative Practice Task #1 solved as a whole class with student call-and-response.`,
+          `Paired Practice Task #2 where partners take turns verbalizing and recording alternating steps.`
         ],
         teacherPrompts: [
-          `"Class, what is our very first move for this problem?"`,
+          `"Class, what is our very first move for this example?"`,
           `"Partner A, whisper the next step to Partner B in 5 seconds."`
         ],
         expectedResponses: [
-          `Students identify the first step synchronously and state the exact rule.`,
-          `Partners converse using academic vocabulary and confirm intermediate calculations.`
+          `Students identify the first step synchronously and state the exact concept or rule.`,
+          `Partners converse using academic vocabulary and confirm intermediate steps.`
         ],
         correctAnswers: [
           `Intermediate step verified accurately.`,
-          `Final solution computed and labeled with proper units or formatting.`
+          `Final solution or response formulated and labeled properly.`
         ],
-        feedbackLanguage: `"Brilliant teamwork at Table 2—you caught the trick in Step 2 by checking your anchor chart!"`,
-        correctionPrompts: `"Check your sign/spelling on line 3. Remember what happens when we combine those parts."`
+        feedbackLanguage: `"Brilliant teamwork at Table 2—you caught the distinction in Step 2 by checking your anchor chart!"`,
+        correctionPrompts: `"Check your reasoning on step 3. Remember what happens when we combine those elements."`
       },
       youDo: {
         studentTasks: [
-          `Complete 5 targeted practice problems in individual exercise books.`,
-          `Write a 1-sentence mathematical or conceptual justification for Problem #5.`
+          `Complete 5 targeted practice questions in individual exercise books.`,
+          `Write a 1-sentence conceptual justification for the final question.`
         ],
         problemsOrPassages: [
-          `Problem 1 (Foundational application of rule)`,
-          `Problem 2 (Standard multi-step calculation)`,
-          `Problem 3 (Problem requiring careful attention to signs/structure)`,
-          `Problem 4 (Real-world word problem set in Belizean community)`,
-          `Problem 5 (Higher-order explanation question)`
+          `Task 1 (Foundational application of rule)`,
+          `Task 2 (Standard application with intermediate step)`,
+          `Task 3 (Task requiring careful attention to structure)`,
+          `Task 4 (Real-world scenario set in Belizean community)`,
+          `Task 5 (Higher-order explanation question)`
         ],
         activities: [
-          `Independent problem-solving in exercise books.`,
+          `Independent work in exercise books.`,
           `Self-check against the board checklist before submitting.`
         ],
-        successCriteria: `Student independently solves at least 4 out of 5 problems accurately with visible working shown.`
+        successCriteria: `Student independently completes at least 4 out of 5 tasks accurately with visible evidence shown.`
       }
     };
   }
@@ -575,8 +643,8 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   // 11. Worked Examples List
   if (!plan.workedExamplesList || plan.workedExamplesList.length === 0) {
     const isMath = subject.toLowerCase().includes('math');
-    const isLA = subject.toLowerCase().includes('language') || subject.toLowerCase().includes('reading') || subject.toLowerCase().includes('english');
-    const isScience = subject.toLowerCase().includes('science');
+    const isLA = isLanguageArtsSubject(subject);
+    const isScience = subject === 'Science and Technology' || subject.toLowerCase().includes('science');
 
     if (isMath) {
       plan.workedExamplesList = [
@@ -590,7 +658,7 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
             { step: 4, action: `Verify solution and write unit label`, explanation: `Check with inverse operation to ensure mathematical validity.` }
           ],
           finalAnswerOrModelResponse: `Final Answer: Exactly computed solution with appropriate unit label.`,
-          commonErrorOrScientificReasoning: `Common Error: Students often forget to record regrouping or reverse the order of subtraction/division.`,
+          commonErrorOrScientificReasoning: `Common Error: Students often forget to record regrouping or reverse the order of operations.`,
           belizeanContextNote: `Example situated around purchasing fresh fruits at San Ignacio market or calculating miles along the George Price Highway.`
         }
       ];
@@ -609,20 +677,36 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
           belizeanContextNote: `Text set in a local Belizean village describing tapping rubber, fishing on the reef, or preparing for Garifuna Settlement Day.`
         }
       ];
+    } else if (isHFLE) {
+      plan.workedExamplesList = [
+        {
+          subjectType: 'HFLE',
+          problemOrContext: `Health Decision Scenario: Evaluating daily dietary habits and non-communicable disease risk factors.`,
+          stepByStepSolution: [
+            { step: 1, action: `Identify food items and lifestyle choices`, explanation: `Examine the meals consumed in the scenario and list all ingredients and beverages.` },
+            { step: 2, action: `Categorize nutritional quality`, explanation: `Distinguish fresh, nutrient-dense local foods (callaloo, beans, plantains, fish) from ultra-processed foods high in refined sugars and trans-fats.` },
+            { step: 3, action: `Assess disease risk factors`, explanation: `Connect chronic high-sugar and high-sodium diets to health conditions like Type 2 diabetes and hypertension.` },
+            { step: 4, action: `Formulate a balanced alternative meal plan`, explanation: `Recommend balanced Belizean food portions and regular physical activity.` }
+          ],
+          finalAnswerOrModelResponse: `Healthy Decision: A balanced one-day Belizean meal plan promoting healthy lifestyle habits and reducing lifestyle disease risks.`,
+          commonErrorOrScientificReasoning: `Misconception: Thinking non-communicable diseases are solely genetic rather than strongly influenced by daily dietary and physical activity choices.`,
+          belizeanContextNote: `Grounding in Belizean culinary traditions and locally available produce from district markets.`
+        }
+      ];
     } else if (isScience) {
       plan.workedExamplesList = [
         {
           subjectType: 'Science',
-          problemOrContext: `Investigation Prompt: What happens to [variable] when we test [condition] in our classroom environment?`,
+          problemOrContext: `Investigation Prompt: What happens to energy input when a device operates in our environment?`,
           stepByStepSolution: [
-            { step: 1, action: `Formulate a testable prediction`, explanation: `State an 'If... then...' hypothesis based on prior observations.` },
-            { step: 2, action: `Execute the fair test procedure`, explanation: `Keep all control variables constant while changing only the test variable.` },
-            { step: 3, action: `Record qualitative and quantitative data`, explanation: `Note measurements in a structured data table in exercise books.` },
-            { step: 4, action: `Formulate evidence-based claim`, explanation: `Explain what the observed data proves using scientific terminology.` }
+            { step: 1, action: `Identify the input energy source`, explanation: `Determine whether the device uses electrical, chemical, radiant, or mechanical energy.` },
+            { step: 2, action: `Observe and record output energy forms`, explanation: `Distinguish useful output energy (e.g. motion, light) from dissipated thermal energy.` },
+            { step: 3, action: `Trace the energy transformation pathway`, explanation: `Draw an energy flow diagram: Input Energy → Device → Useful Output + Dissipated Output.` },
+            { step: 4, action: `Apply the Law of Conservation of Energy`, explanation: `Explain why total input energy exactly equals total output energy.` }
           ],
-          finalAnswerOrModelResponse: `Scientific Conclusion: Clear explanation linking observed evidence to the underlying scientific principle.`,
-          commonErrorOrScientificReasoning: `Scientific Reasoning: Correlation does not equal causation; changing multiple variables invalidates the fair test.`,
-          belizeanContextNote: `Grounding in Belize's biodiversity: Mountain Pine Ridge, barrier reef marine life, or rainforest canopies.`
+          finalAnswerOrModelResponse: `Scientific Explanation: Clear tracing of energy transformations proving conservation of energy in the system.`,
+          commonErrorOrScientificReasoning: `Scientific Reasoning: Energy is never destroyed or 'used up'; it merely transforms into other forms like heat.`,
+          belizeanContextNote: `Grounding in Belize's energy systems: hydroelectricity from Chalillo/Mol lejon, solar panels in rural villages, or household appliances.`
         }
       ];
     } else {
@@ -683,15 +767,15 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
       },
       {
         checkType: 'Mini-Whiteboard / Slate Display',
-        teacherAsksOrDoes: `"Write only the answer to Step 1 for Problem #2 on your slates. 3, 2, 1... Chin it!"`,
+        teacherAsksOrDoes: `"Write only the answer to Step 1 for today's model on your slates. 3, 2, 1... Chin it!"`,
         studentsDo: `Students hold slates under their chins facing the teacher simultaneously.`,
         expectedResponse: `Class exhibits uniform correct notation and values.`,
         ifCorrect: `Praise speed and proceed to Step 2.`,
-        ifIncorrect: `Point out the common error immediately without naming students: "I see three slates that forgot our rule on place value. Erase and correct right now."`
+        ifIncorrect: `Point out the common error immediately without naming students: "I see a few slates that missed our core definition or step. Review the board anchor chart and adjust."`
       },
       {
         checkType: 'Pair-Share Cold Call',
-        teacherAsksOrDoes: `"Turn to your shoulder partner and explain why we box our final answer. I will cold-call two students in 30 seconds."`,
+        teacherAsksOrDoes: `"Turn to your shoulder partner and explain why our step or conclusion is necessary. I will cold-call two students in 30 seconds."`,
         studentsDo: `Both partners speak and listen actively.`,
         expectedResponse: `Cold-called students state the verification purpose clearly.`,
         ifCorrect: `Reinforce student explanation and record a star on the board tracker.`,
@@ -702,20 +786,36 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
 
   // 14. "If Students Are Struggling" Protocol
   if (!plan.ifStudentsAreStruggling?.simplerExplanation) {
+    let simplerExp = `Break the concept down into its simplest 1-to-1 relationship. Provide one clear model before asking the student to try.`;
+    let altEx = `Use concrete visual aids, graphic organizers, or physical sorting cards to represent the concept directly.`;
+    if (isHFLE) {
+      simplerExp = `Think of your body as an engine: nutritious local foods provide clean, long-lasting energy, while sugary processed snacks create buildup and strain your organs over time.`;
+      altEx = `Use pictorial Belize food cards to physically sort items into 'Everyday Nutrient-Dense' and 'Occasional Ultra-Processed' categories.`;
+    } else if (isScience) {
+      simplerExp = `Energy cannot simply vanish—it always transforms from one form into another! For example, electrical energy entering a fan transforms into moving air and a little heat.`;
+      altEx = `Demonstrate with a simple physical device (e.g., turning on a classroom flashlight or rubbing hands together to feel mechanical energy convert to thermal energy).`;
+    } else if (isLA) {
+      simplerExp = `Look for recognizable base words and affixes, or reread the surrounding sentence clues to understand the author's meaning.`;
+      altEx = `Use color-coded cards or a two-column word study chart to separate parts of the word or sentence.`;
+    } else if (subject.toLowerCase().includes('math')) {
+      simplerExp = `Strip away large numbers and start with small, friendly numbers to see the pattern clearly before solving.`;
+      altEx = `Use physical counters, bottle caps, or a drawn number line on grid paper to represent the quantities directly.`;
+    }
+
     plan.ifStudentsAreStruggling = {
       signsOfConfusion: [
         `Hesitating to write anything down after instructions are given.`,
         `Flipping back and forth between notebook pages repeatedly.`,
-        `Asking a neighbor to copy their answer without calculating.`,
-        `Producing an answer that is wildly unreasonable in scale or grammar.`
+        `Relying on peers to supply answers without understanding the underlying process.`,
+        `Producing responses disconnected from the lesson's target concept.`
       ],
       likelyCause: `The student has not solidified the prerequisite concept or was overwhelmed by multi-step cognitive load.`,
-      simplerExplanation: `Strip away all unnecessary words or large numbers. Break the concept down to its absolute simplest 1-to-1 relationship: "Think of this as simple grouping. If you have 2 groups of 3 mangoes, how many do you hold?"`,
-      alternativeExample: `Use physical counters, bottle caps, or a drawn number line on the desk to physically move objects rather than manipulating abstract symbols.`,
-      additionalGuidedPractice: `Work through one problem side-by-side with the teacher holding the pen for step 1, the student writing step 2, and both celebrating step 3.`,
-      visualOrManipulativeOption: `Provide a printed laminated step-by-step cue card with color-coded steps (Step 1 = Green, Step 2 = Yellow, Step 3 = Blue).`,
-      reteachingStrategy: `Form a small pull-out focus group at the teacher table during independent practice. Re-model with physical manipulatives for 5 minutes.`,
-      followUpCheck: `Have the student solve one solitary problem on a mini-whiteboard while explaining their action aloud before returning to independent work.`
+      simplerExplanation: simplerExp,
+      alternativeExample: altEx,
+      additionalGuidedPractice: `Work through one problem or scenario side-by-side with the teacher guiding the initial step and the student completing the second step.`,
+      visualOrManipulativeOption: `Provide a printed, laminated step-by-step cue card with color-coded prompts.`,
+      reteachingStrategy: `Form a small pull-out focus group at the teacher table during independent practice. Re-model with physical manipulatives or visual organizers for 5 minutes.`,
+      followUpCheck: `Have the student solve one solitary task or explain one concept on a mini-whiteboard before returning to independent work.`
     };
   }
 
@@ -731,7 +831,7 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
       {
         likelyError: `Calculation or transcription error on intermediate lines.`,
         whyItHappens: `Messy handwriting or misalignment of digits/words in exercise books.`,
-        teacherResponse: `"Your strategy is 100% correct, but your numbers drifted across columns. Let's draw vertical grid lines in your book to keep columns straight."`,
+        teacherResponse: `"Your strategy is 100% correct, but your intermediate notes drifted. Let's draw clean columns in your book to keep your work organized."`,
         correctiveExample: `Provide grid paper or have the student turn their lined notebook sideways to form columns.`
       }
     ];
@@ -747,44 +847,161 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
 
   // 17. Complete Assessment with Answer Key
   if (!plan.completeAssessment?.answerKey) {
-    plan.completeAssessment = {
-      task: `Independent Mastery Check: 4 core problems/questions and 1 applied word problem evaluating ${topic}.`,
-      expectedResponse: `Students record complete working, step-by-step algorithms, and clear final answers in their exercise books.`,
-      answerKey: `Question 1: Verified correct step-by-step working and final value.\nQuestion 2: Verified correct step-by-step working and final value.\nQuestion 3: Verified correct step-by-step working and final value.\nQuestion 4: Verified correct step-by-step working and final value.\nQuestion 5 (Applied/Explanation): Full student justification linking strategy to the mathematical/grammatical rule.`,
-      rubric: [
-        {
-          criteria: `Conceptual Understanding`,
-          exemplary: `Demonstrates thorough, flawless comprehension of underlying principles and justifies steps with precision.`,
-          proficient: `Applies concepts correctly with minor, non-systematic computational or clerical slips.`,
-          developing: `Requires teacher prompting to choose the correct approach or confuses terminology.`
-        },
-        {
-          criteria: `Procedural Execution`,
-          exemplary: `All steps organized logically, work shown clearly, final answers boxed and accurate.`,
-          proficient: `Follows the established algorithm correctly; work is legible and mostly complete.`,
-          developing: `Skips required intermediate lines or makes persistent calculation/format errors.`
-        }
-      ],
-      masteryCriteria: `Mastery Standard: Student achieves at least 80% accuracy (4 out of 5 problems correct) with full procedural working visible.`
-    };
+    if (isHFLE) {
+      plan.completeAssessment = {
+        task: `Health Decision Scenario Check: Categorize Belizean foods and evaluate lifestyle decisions for disease prevention.`,
+        expectedResponse: `Students accurately categorize foods, explain how high-sugar/high-fat diets contribute to diabetes and hypertension, and propose healthy meal alternatives.`,
+        answerKey: `Question 1: Identifies nutrient-dense foods (e.g., callaloo, beans, local fish) vs ultra-processed items.\nQuestion 2: Explains that chronic excess sugar intake damages insulin function leading to Type 2 diabetes.\nQuestion 3: Proposes 2 realistic healthy lifestyle habits (drinking water, daily 30-minute active play).\nQuestion 4: Evaluates a Belizean family meal scenario and recommends healthier substitutions.`,
+        rubric: [
+          {
+            criteria: `Health Knowledge & Classification`,
+            exemplary: `Accurately categorizes foods and identifies nutritional values without errors.`,
+            proficient: `Correctly categorizes most foods with sound basic reasoning.`,
+            developing: `Confuses processed foods with natural food groups or needs guidance.`
+          },
+          {
+            criteria: `Disease Prevention & Action Planning`,
+            exemplary: `Clearly links dietary habits to specific non-communicable diseases and designs a balanced Belizean meal plan.`,
+            proficient: `Explains general health benefits and suggests reasonable food alternatives.`,
+            developing: `Struggles to connect diet to disease prevention or proposes unrealistic changes.`
+          }
+        ],
+        masteryCriteria: `Mastery Standard: Student achieves at least 80% accuracy (at least 4 out of 5 criteria met) on health knowledge and decision planning.`
+      };
+    } else if (isScience) {
+      plan.completeAssessment = {
+        task: `Science Inquiry Check: Identify energy inputs and outputs in everyday devices, trace conversion pathways, and explain conservation of energy.`,
+        expectedResponse: `Students diagram energy transformations, label input and output forms, and explain that energy is conserved across physical systems.`,
+        answerKey: `Question 1: Identifies input energy (e.g. electrical) and outputs (light and heat) in an electric lamp.\nQuestion 2: Traces chemical energy in food/battery transforming into mechanical kinetic energy.\nQuestion 3: Explains the law of conservation of energy: energy cannot be created or destroyed, only transformed.\nQuestion 4: Analyzes an energy system diagram and identifies wasted thermal energy.`,
+        rubric: [
+          {
+            criteria: `Scientific Conceptual Understanding`,
+            exemplary: `Demonstrates thorough, flawless explanation of energy forms and transformation laws.`,
+            proficient: `Applies energy conversion principles correctly with minor terminology slips.`,
+            developing: `Confuses energy forms (e.g., heat vs temperature) or skips conversion steps.`
+          },
+          {
+            criteria: `System Diagramming & Evidence Reasoning`,
+            exemplary: `Accurately maps input/output pathways with clear labels and evidence-based justifications.`,
+            proficient: `Maps pathways correctly; diagrams are legible and mostly complete.`,
+            developing: `Incomplete diagrams or missing intermediate energy forms.`
+          }
+        ],
+        masteryCriteria: `Mastery Standard: Student achieves at least 80% accuracy (identifies input/output correctly for at least 4 out of 5 systems).`
+      };
+    } else if (isBS) {
+      plan.completeAssessment = {
+        task: `Belizean Studies Source Analysis: Interpret historical/geographic evidence and explain the civic and cultural significance of ${topic}.`,
+        expectedResponse: `Students analyze sources, place events/sites in geographical context, and write clear explanations of cultural heritage and civic duties.`,
+        answerKey: `Question 1: Accurately identifies key historical/geographic facts regarding ${topic}.\nQuestion 2: Explains cause-and-effect relationships in Belizean development.\nQuestion 3: Connects historical heritage to modern multicultural communities in Belize.\nQuestion 4: Proposes responsible civic actions supporting community well-being.`,
+        rubric: [
+          {
+            criteria: `Historical and Geographic Understanding`,
+            exemplary: `Demonstrates rich factual precision regarding Belizean heritage, districts, and civic structures.`,
+            proficient: `Accurate understanding with minor omissions in historical dates or geography.`,
+            developing: `Confuses historical eras or district landmarks.`
+          },
+          {
+            criteria: `Civic Application & Critical Thinking`,
+            exemplary: `Articulates clear connections between historical events and modern civic responsibility in Belize.`,
+            proficient: `Makes relevant connections to community life.`,
+            developing: `Requires prompting to explain personal or civic relevance.`
+          }
+        ],
+        masteryCriteria: `Mastery Standard: Student achieves at least 80% accuracy across factual identification and source analysis.`
+      };
+    } else {
+      // Mathematics default
+      const mathWs = buildAuthoritativeMathWorksheet(topic, plan.subtopic || '', plan.learningOutcome || '', grade);
+      plan.completeAssessment = {
+        task: `8-Question Practice Worksheet (10 marks) and Diagnostic Exit Ticket (5 marks) evaluating ${topic}.`,
+        expectedResponse: `Students record complete working, step-by-step algorithms, and clear final answers in their exercise books.`,
+        answerKey: mathWs.answerKeyText,
+        rubric: [
+          {
+            criteria: `Conceptual Understanding`,
+            exemplary: `Demonstrates thorough comprehension of underlying mathematical principles and justifies steps with precision.`,
+            proficient: `Applies concepts correctly with minor clerical slips.`,
+            developing: `Requires teacher prompting to choose the correct approach.`
+          },
+          {
+            criteria: `Procedural Execution`,
+            exemplary: `All steps organized logically, work shown clearly, final answers accurate.`,
+            proficient: `Follows the established algorithm correctly; work is legible.`,
+            developing: `Skips intermediate lines or makes persistent calculation errors.`
+          }
+        ],
+        masteryCriteria: `Mastery Standard: Student achieves at least 80% accuracy (e.g. 8 out of 10 marks on worksheet) with full procedural working visible.`
+      };
+    }
   }
 
   // 18. Student Materials (Generated Worksheets & Resources)
   if (!plan.studentMaterials || plan.studentMaterials.length === 0) {
-    plan.studentMaterials = [
-      {
-        title: `${topic} - Guided Practice Worksheet`,
-        type: 'worksheet',
-        content: `NAME: __________________________   DATE: ___________________\nGRADE: ${grade}   TOPIC: ${topic}\n\nDIRECTIONS: Solve each problem below. SHOW ALL YOUR WORKING. Box your final answers.\n\n1. [Foundational Practice Problem]\n   Working Space:\n\n\n   Answer: __________________\n\n2. [Standard Application Problem]\n   Working Space:\n\n\n   Answer: __________________\n\n3. [Multi-Step Challenge]\n   Working Space:\n\n\n   Answer: __________________\n\n4. [Real-World Belizean Context Problem]\n   Working Space:\n\n\n   Answer: __________________\n\n5. SUPER CHALLENGE: Explain in 2 sentences how you know your answer to Problem #4 is correct.\n   ___________________________________________________________________________\n   ___________________________________________________________________________`,
-        answerKey: `1. Correct working shown; verified answer.\n2. Correct working shown; verified answer.\n3. Correct working shown; verified answer.\n4. Correct working shown; verified answer.\n5. Student explains that checking with the reverse operation confirms the answer.`
-      },
-      {
-        title: `${topic} - Daily Exit Ticket`,
-        type: 'exit_ticket',
-        content: `EXIT TICKET: ${topic}\nName: ____________________ Date: _____________\n\n1. What was the most important rule we learned today?\n   _____________________________________________________\n\n2. Solve this problem independently:\n   [Representative problem]\n\n   Answer: _____________\n\n3. Circle your confidence level:  😃 Got it!   😐 Need practice   🙁 Still confused`,
-        answerKey: `1. Correct formulation of the core rule.\n2. Verified numerical or textual solution.\n3. Teacher sorts into three piles for next-day grouping.`
-      }
-    ];
+    if (isHFLE) {
+      plan.studentMaterials = [
+        {
+          title: `${topic} - Health & Well-Being Investigation Worksheet`,
+          type: 'worksheet',
+          content: `NAME: __________________________   DATE: ___________________\nGRADE: ${grade}   SUBJECT: HFLE   TOPIC: ${topic}\n\nDIRECTIONS: Answer each question thoughtfully in your exercise book.\n\n1. Food & Habit Sorting: List 3 local Belizean foods that are nutrient-dense, and 2 foods that should be eaten only occasionally because they are ultra-processed.\n   Nutrient-Dense: _____________________________________________________\n   Ultra-Processed: ____________________________________________________\n\n2. Health Connection: Explain how consuming too much sugar and refined flour over many years can increase a person's risk for Type 2 diabetes.\n   Explanation: ________________________________________________________\n   _____________________________________________________________________\n\n3. Scenario Analysis: Carlos buys fried snacks and two sugary soft drinks every school day. Suggest two affordable, delicious Belizean alternatives he could choose at the market.\n   Alternative 1: ______________________________________________________\n   Alternative 2: ______________________________________________________\n\n4. Healthy Lifestyle Action: What is one physical activity or healthy habit you will commit to practicing this week with your family or friends?\n   My Commitment: ______________________________________________________`,
+          answerKey: `1. Nutrient-dense: fresh fruits (mango, banana, orange), vegetables (callaloo, chaya), beans, fish, whole plantain. Ultra-processed: sodas, bagged chips, sugary pastries, processed sausages.\n2. Excess sugar causes repeated insulin spikes; over time cells become insulin resistant, leading to chronic elevated blood sugar and Type 2 diabetes.\n3. Carlos could choose fresh watermelon/orange slices, a banana, coconut water, or fresh water.\n4. Acceptable answers include walking, riding bicycle, playing football, drinking more water, or getting 8+ hours of sleep.`
+        },
+        {
+          title: `${topic} - Daily Health Exit Ticket`,
+          type: 'exit_ticket',
+          content: `EXIT TICKET: ${topic}\nName: ____________________ Date: _____________\n\n1. What is the most important lesson you learned today about ${topic}?\n   _____________________________________________________\n\n2. Name one way healthy eating helps protect you against non-communicable diseases:\n   _____________________________________________________\n\n3. How confident are you in making healthy lifestyle choices?\n   😃 Very confident   😐 Working on it   🙁 Need more guidance`,
+          answerKey: `1. Accurate statement about food choices, exercise, or lifestyle habits.\n2. Keeps blood pressure normal, maintains healthy weight, and prevents organ strain.\n3. Formative reflection for next-day support.`
+        }
+      ];
+    } else if (isScience) {
+      plan.studentMaterials = [
+        {
+          title: `${topic} - Science Investigation Worksheet`,
+          type: 'worksheet',
+          content: `NAME: __________________________   DATE: ___________________\nGRADE: ${grade}   SUBJECT: Science & Technology   TOPIC: ${topic}\n\nDIRECTIONS: Read each prompt carefully and record your scientific observations.\n\n1. Energy Identification: For an electric ceiling fan in your classroom, identify the input energy and output energies.\n   Input Energy: ________________________\n   Output Energy 1 (Useful): _____________\n   Output Energy 2 (Wasted): _____________\n\n2. Energy Transformation Pathway: Trace the energy conversions from sunlight falling on a solar panel to lighting a classroom bulb:\n   Solar Energy → ________________________ → ________________________\n\n3. Scientific Principle: State the Law of Conservation of Energy in your own words:\n   _____________________________________________________________________\n   _____________________________________________________________________\n\n4. Device Analysis: Why does a car engine or flashlight feel warm after being used for 30 minutes? What does this tell us about energy efficiency?\n   Explanation: ________________________________________________________\n   _____________________________________________________________________`,
+          answerKey: `1. Input: Electrical energy. Useful output: Mechanical (kinetic) energy of moving blades. Wasted output: Thermal (heat) and sound energy.\n2. Solar Energy → Electrical Energy → Light (radiant) Energy (and some thermal energy).\n3. Energy cannot be created or destroyed; it can only be transformed from one form into another.\n4. No device is 100% efficient; some input energy is inevitably converted into thermal energy due to friction and electrical resistance.`
+        },
+        {
+          title: `${topic} - Daily Science Exit Ticket`,
+          type: 'exit_ticket',
+          content: `EXIT TICKET: ${topic}\nName: ____________________ Date: _____________\n\n1. What is the input energy of a flashlight?\n   _____________________________________________________\n\n2. What are the two output forms of energy produced by the flashlight?\n   _____________________________________________________\n\n3. Can energy disappear completely? Explain why or why not:\n   _____________________________________________________`,
+          answerKey: `1. Chemical energy (stored in batteries).\n2. Light (radiant) energy and thermal (heat) energy.\n3. No, because the Law of Conservation of Energy states energy cannot be destroyed, only transformed.`
+        }
+      ];
+    } else if (isBS) {
+      plan.studentMaterials = [
+        {
+          title: `${topic} - Belizean Studies Inquiry Worksheet`,
+          type: 'worksheet',
+          content: `NAME: __________________________   DATE: ___________________\nGRADE: ${grade}   SUBJECT: Belizean Studies   TOPIC: ${topic}\n\nDIRECTIONS: Complete the inquiry questions below using evidence from our lesson.\n\n1. Historical/Geographical Context: Describe two key facts about ${topic} in Belize:\n   Fact 1: _____________________________________________________________\n   Fact 2: _____________________________________________________________\n\n2. District Connection: Which district(s) in Belize are most closely connected to ${topic}, and why?\n   District & Connection: _______________________________________________\n\n3. Cultural/Civic Impact: How does understanding ${topic} help us become proud, responsible Belizean citizens?\n   Reflection: _________________________________________________________\n   _____________________________________________________________________`,
+          answerKey: `1. Factual statements aligned with Belizean national history and geography.\n2. Correct district identification (Corozal, Orange Walk, Belize, Cayo, Stann Creek, Toledo) with relevant historical/economic context.\n3. Thoughtful civic reflection on cultural preservation, unity, and national development.`
+        },
+        {
+          title: `${topic} - Daily Belizean Studies Exit Ticket`,
+          type: 'exit_ticket',
+          content: `EXIT TICKET: ${topic}\nName: ____________________ Date: _____________\n\n1. Name one important fact you learned today about ${topic}:\n   _____________________________________________________\n\n2. Why is this significant for the people of Belize?\n   _____________________________________________________`,
+          answerKey: `1. Accurate historical/geographical fact.\n2. Explanation connecting the fact to Belize's identity, history, or development.`
+        }
+      ];
+    } else {
+      // Mathematics default
+      const mathWs = buildAuthoritativeMathWorksheet(topic, plan.subtopic || '', plan.learningOutcome || '', grade);
+      const mathEt = buildAuthoritativeMathExitTicket(topic, plan.subtopic || '', plan.learningOutcome || '');
+      plan.studentMaterials = [
+        {
+          title: mathWs.title,
+          type: 'worksheet' as any,
+          content: mathWs.worksheetContentText,
+          answerKey: mathWs.answerKeyText
+        },
+        {
+          title: mathEt.title,
+          type: 'exit_ticket' as any,
+          content: mathEt.contentText,
+          answerKey: mathEt.answerKeyText
+        }
+      ];
+    }
   }
 
   // 19. Belizean Context Details
@@ -984,7 +1201,9 @@ As they continued along the Macal River, they watched yellow-headed parrots fly 
     },
     inclusionSupport: {
       dyslexia: rawInclusion?.dyslexia || `High-contrast printed font, visual icons accompanying text, and oral reading option.`,
-      dyscalculia: rawInclusion?.dyscalculia || `Number line visual, color-coded arithmetic steps, and physical counter assistance.`,
+      dyscalculia: (subject === 'Mathematics') 
+        ? (rawInclusion?.dyscalculia || `Number line visual, color-coded arithmetic steps, and physical counter assistance.`)
+        : undefined,
       ell: rawInclusion?.ell || `Dual English/Kriol clarification, visual vocabulary flashcards, and paired peer translator.`,
       behavior: rawInclusion?.behavior || `Clear structured timers, positive praise reinforcement, and designated calm focus space.`,
       sensory: rawInclusion?.sensory || `Reduced auditory distractions and ergonomic flexible seating near front whiteboard.`
@@ -993,6 +1212,37 @@ As they continued along the Macal River, they watched yellow-headed parrots fly 
 
   if (isLanguageArtsSubject(plan.subject)) {
     return enforceLanguageArtsPurityAndQuality(plan);
+  }
+
+  if (isMathematicsSubject(plan.subject)) {
+    return enforceMathematicsPurityAndQuality(plan, context);
+  }
+
+  // Enforce subject purity for non-Language Arts subjects
+  if (isHFLE) {
+    plan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'HFLE', grade, cycle, topic });
+    delete (plan as any).readingPassageFull;
+    delete (plan as any).languageArtsComponents;
+    delete (plan as any).component1Details;
+    delete (plan as any).component2Details;
+  } else if (isScience) {
+    plan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'Science and Technology', grade, cycle, topic });
+    delete (plan as any).readingPassageFull;
+    delete (plan as any).languageArtsComponents;
+    delete (plan as any).component1Details;
+    delete (plan as any).component2Details;
+  } else if (isBS) {
+    plan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'Belizean Studies', grade, cycle, topic });
+    delete (plan as any).readingPassageFull;
+    delete (plan as any).languageArtsComponents;
+    delete (plan as any).component1Details;
+    delete (plan as any).component2Details;
+  } else if (subject === 'Mathematics') {
+    plan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'Mathematics', grade, cycle, topic });
+    delete (plan as any).readingPassageFull;
+    delete (plan as any).languageArtsComponents;
+    delete (plan as any).component1Details;
+    delete (plan as any).component2Details;
   }
 
   return plan;

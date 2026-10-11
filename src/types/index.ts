@@ -311,6 +311,7 @@ export interface CurriculumEntry {
   academicYear?: string;
   schoolYear?: string;
   strand?: string;
+  curriculumCode?: string;
   topic: string;
   subtopic: string;
   learning_outcomes: string[];
@@ -618,7 +619,11 @@ export interface PowerPointPresentation {
 
 export interface LessonPhase {
   phase: string;
+  title?: string;
   timeAllocation: string;
+  duration?: string;
+  stageNumber?: number;
+  checkForUnderstanding?: string;
   teacherActions: string[];
   studentActions: string[];
   questionsToAsk: string[];
@@ -630,7 +635,6 @@ export interface LessonPhase {
   keyConceptFocus?: string;
   misconceptionsToWatchFor?: string[];
   supportScaffolding?: string;
-  checkForUnderstanding?: string;
   expectedOutcome?: string;
   studentTask?: string;
   teacherMonitoringActions?: string[];
@@ -814,7 +818,7 @@ export interface InstructionalSequence {
 }
 
 export interface WorkedExampleItem {
-  subjectType: 'Mathematics' | 'Language Arts' | 'Science' | 'Belizean Studies / Social Studies' | 'General';
+  subjectType: 'Mathematics' | 'Language Arts' | 'Science' | 'HFLE' | 'Belizean Studies / Social Studies' | 'General';
   problemOrContext: string;
   stepByStepSolution?: { step: number; action: string; explanation: string }[];
   finalAnswerOrModelResponse: string;
@@ -893,6 +897,7 @@ export interface LessonPlan {
   grade: GradeLevel;
   subject: Subject;
   academicYear?: string;
+  curriculumCode?: string;
   topic: string;
   subtopic: string;
   strand?: string;
@@ -1077,6 +1082,9 @@ export interface LessonPlan {
   exitTicketPackage?: ExitTicketPackage;
   languageArtsAlignmentAudit?: LanguageArtsAlignmentAudit;
 
+  // Science Inquiry Architecture
+  scienceInquiryFramework?: any;
+
   // PowerPoint Presentation
   powerpointPresentation?: PowerPointPresentation;
 
@@ -1160,6 +1168,9 @@ export interface LanguageArtsAlignmentAudit {
   auditDetails: Record<string, { status: 'PASS' | 'FAIL'; message: string }>;
   primaryComponent?: LanguageArtsComponent;
   supportingComponent?: LanguageArtsComponent;
+  passedAudit?: boolean;
+  score?: number;
+  summary?: string;
 }
 
 export interface LanguageArtsDailyStrand {
@@ -1750,3 +1761,188 @@ export interface GraphicOrganizerContent {
   organizerType: 'venn' | 'story_map' | 'concept_map' | 'kwl';
   data: any;
 }
+
+// ==========================================
+// WEEKLY TEST GENERATOR TYPES
+// ==========================================
+
+export type TestQuestionType = 
+  | 'Multiple Choice'
+  | 'True/False'
+  | 'Fill in the Blank'
+  | 'Matching'
+  | 'Short Answer'
+  | 'Extended Response'
+  | 'Problem Solving'
+  | 'Mixed Question Types';
+
+export type SpecificQuestionType =
+  | 'Multiple Choice'
+  | 'True/False'
+  | 'Fill in the Blank'
+  | 'Matching'
+  | 'Short Answer'
+  | 'Extended Response'
+  | 'Problem Solving';
+
+export type TestDifficulty = 'Easy' | 'Moderate' | 'Challenging' | 'Mixed';
+
+export interface MatchingPair {
+  id: string;
+  left: string;
+  right: string;
+}
+
+export type VisualType = 
+  | 'diagram' 
+  | 'fraction_model' 
+  | 'shape' 
+  | 'clock' 
+  | 'chart' 
+  | 'table' 
+  | 'map' 
+  | 'sequence' 
+  | 'comparison' 
+  | 'organizer';
+
+export type VisualQuestionType =
+  | 'identify'
+  | 'label_diagram'
+  | 'compare'
+  | 'classify'
+  | 'sequence'
+  | 'observation'
+  | 'matching'
+  | 'visual_mc';
+
+export interface VisualLabel {
+  id: string | number;
+  text?: string;
+  x?: number;
+  y?: number;
+  target?: string;
+}
+
+export interface QuestionVisual {
+  type: VisualType;
+  visualQuestionType?: VisualQuestionType;
+  title?: string;
+  caption?: string;
+  altText: string;
+  svgContent?: string;
+  imageUrl?: string;
+  labels?: VisualLabel[];
+  diagramData?: Record<string, any>;
+}
+
+export interface TestQuestion {
+  id: string;
+  questionNumber: number;
+  type: SpecificQuestionType;
+  questionText: string;
+  marks: number;
+  difficulty: 'Easy' | 'Moderate' | 'Challenging';
+  lessonTopicSource: string;
+  learningOutcomeSource?: string;
+  visual?: QuestionVisual; // Instructional visual, diagram, chart, or model
+  options?: string[]; // For Multiple Choice (A, B, C, D)
+  matchingPairs?: MatchingPair[]; // For Matching
+  blankAnswer?: string; // For Fill in the Blank
+  correctAnswer: string; // Answer solution for Teacher key
+  markingGuidance?: string; // Guidance for open-ended marking
+  answerLines?: number; // Lines to provide in printable view
+  workspaceBox?: boolean; // Show clean workspace box for problem solving
+}
+
+export interface WeeklyLessonUnitSummary {
+  lessonNumber: number;
+  dayName?: string;
+  topic: string;
+  subtopic: string;
+  learningOutcome: string;
+  specificObjectives: string[];
+  vocabulary: { term: string; definition: string; exampleSentence?: string }[];
+  workedExamples: string[];
+  practiceProblems: string[];
+  misconceptions: string[];
+  exitTicketQuestions: { question: string; answerKey?: string }[];
+  proceduresOrSteps: string[];
+  readingPassages?: string[];
+  realLifeApplications?: string[];
+  contentNotes?: string[];
+  demonstrations?: string[];
+  importantFacts?: string[];
+  activities?: string[];
+  belizeanContext?: string[];
+  bloomQuestions?: { level: string; question: string }[];
+}
+
+export interface WeeklyTestCoverageMap {
+  classLevel: GradeLevel;
+  subject: Subject;
+  academicYear: string;
+  cycle: number;
+  week: number;
+  totalLessonsFound: number;
+  lessonTopics: string[];
+  subtopics: string[];
+  learningOutcomes: string[];
+  skills: string[];
+  competencies: string[];
+  importantConcepts: string[];
+  workedExamples: string[];
+  assessmentItems: string[];
+  lessonUnits?: WeeklyLessonUnitSummary[];
+}
+
+export interface WeeklyTestSettings {
+  questionCount: number;
+  questionTypes: TestQuestionType;
+  difficulty: TestDifficulty;
+  timeAllowed: string;
+  marksPerQuestion?: number;
+  totalMarks: number;
+  instructions: string;
+  randomizeQuestions: boolean;
+  randomizeAnswerChoices: boolean;
+  includeAnswerKey: boolean;
+  includeVisuals?: boolean; // Enable instructional visuals, diagrams, and models
+}
+
+export interface WeeklyTest {
+  id?: string;
+  userId?: string;
+  schoolName: string;
+  schoolLogo?: string;
+  classLevel: GradeLevel;
+  className?: string;
+  classId?: string;
+  subject: Subject;
+  academicYear: string;
+  cycle: number;
+  week: number;
+  testTitle: string;
+  date: string;
+  teacherName: string;
+  timeAllowed: string;
+  totalMarks: number;
+  instructions: string;
+  questionCount: number;
+  questionTypeSelection: TestQuestionType;
+  difficulty: TestDifficulty;
+  randomizeQuestions: boolean;
+  randomizeAnswerChoices: boolean;
+  includeAnswerKey: boolean;
+  weeklyTopic: string;
+  weeklySubtopics: string[];
+  weeklyOutcomes: string[];
+  coverageSummary: {
+    lessonTopics: string[];
+    outcomesCovered: string[];
+    competenciesCovered: string[];
+  };
+  questions: TestQuestion[];
+  createdAt: string;
+  updatedAt?: string;
+}
+

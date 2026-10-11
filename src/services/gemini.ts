@@ -36,9 +36,18 @@ async function callAi(action: string, params: any) {
   }
 
   if (!response.ok) {
-    throw new Error(
-      data?.error || data?.message || `Server error (${response.status})`
-    );
+    let cleanMsg = data?.error || data?.message || `Server error (${response.status})`;
+    try {
+      if (typeof cleanMsg === 'string' && cleanMsg.trim().startsWith('{')) {
+        const parsed = JSON.parse(cleanMsg);
+        if (parsed?.error?.message) {
+          cleanMsg = parsed.error.message;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    throw new Error(cleanMsg);
   }
 
   return data;
@@ -59,6 +68,7 @@ export const generateResource = (type: string, lessonContext: any, options: any 
 export const improveContent = (content: string, instruction: string, context: any) => callAi('improveContent', { content, instruction, context });
 export const regenerateSection = (sectionName: string, lessonContext: any) => callAi('regenerateSection', { sectionName, lessonContext });
 export const generateWeeklyLessonPlan = (params: any) => callAi('generateWeeklyLessonPlan', params);
+export const generateWeeklyTestQuestions = (params: any) => callAi('generateWeeklyTestQuestions', params);
 export const generateLessonResources = (grade: string, topic: string) => callAi('generateLessonResources', { grade, topic });
 
 // Add other necessary exports as needed

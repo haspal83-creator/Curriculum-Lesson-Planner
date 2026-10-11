@@ -2,26 +2,27 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { addDays, isWithinInterval, startOfWeek } from 'date-fns';
 import { getClassId } from '../types';
+import { getMasterCalendar } from '../services/calendarService';
 
 export const BELIZE_ACADEMIC_DATA = {
   cycles: [
-    { number: 1, start: '2024-09-02', end: '2024-11-08', totalWeeks: 10 },
-    { number: 2, start: '2024-11-11', end: '2025-01-31', totalWeeks: 9 },
-    { number: 3, start: '2025-02-03', end: '2025-04-11', totalWeeks: 10 },
-    { number: 4, start: '2025-04-28', end: '2025-06-27', totalWeeks: 9 },
+    { number: 1, start: '2026-09-01', end: '2026-10-30', totalWeeks: 9 },
+    { number: 2, start: '2026-11-02', end: '2027-01-22', totalWeeks: 9 },
+    { number: 3, start: '2027-01-25', end: '2027-03-26', totalWeeks: 9 },
+    { number: 4, start: '2027-04-12', end: '2027-06-25', totalWeeks: 11 },
   ],
   holidays: [
-    { name: "St. George's Caye Day", date: '2024-09-10' },
-    { name: "Independence Day", date: '2024-09-21' },
-    { name: "Indigenous Peoples’ Resistance Day", date: '2024-10-14' },
-    { name: "Garifuna Settlement Day", date: '2024-11-19' },
-    { name: "George Price Day", date: '2025-01-15' },
-    { name: "National Heroes & Benefactors’ Day", date: '2025-03-10' },
-    { name: "Labour Day", date: '2025-05-01' },
+    { name: "St. George's Caye Day", date: '2026-09-10' },
+    { name: "Independence Day", date: '2026-09-21' },
+    { name: "Indigenous Peoples’ Resistance Day", date: '2026-10-12' },
+    { name: "Garifuna Settlement Day", date: '2026-11-19' },
+    { name: "George Price Day", date: '2027-01-15' },
+    { name: "National Heroes & Benefactors’ Day", date: '2027-03-09' },
+    { name: "Labour Day", date: '2027-05-01' },
   ],
   vacations: [
-    { name: "Christmas Vacation", start: '2024-12-16', end: '2025-01-03' },
-    { name: "Easter Vacation", start: '2025-04-14', end: '2025-04-25' },
+    { name: "Christmas Vacation", start: '2026-12-14', end: '2027-01-01' },
+    { name: "Easter Vacation", start: '2027-03-29', end: '2027-04-09' },
   ]
 };
 

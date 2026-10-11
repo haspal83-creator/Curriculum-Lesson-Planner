@@ -21,7 +21,9 @@ import {
   Download,
   Save,
   CalendarDays,
-  BookOpenCheck
+  BookOpenCheck,
+  FileCheck,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Card, Input, Select, LessonStatusBadge, DropdownMenu } from '../ui';
@@ -42,6 +44,7 @@ import {
   LanguageArtsWeeklyPlan,
   LanguageArtsWeeklyStructure,
   WeeklyLessonPlan,
+  WeeklyCurriculumPlan,
   LanguageArtsComponent,
   LANGUAGE_ARTS_5_COMPONENTS
 } from '../../types';
@@ -62,11 +65,23 @@ import {
   validateGeneratedLesson, 
   getCurriculumEmptyStateMessage 
 } from '../../services/curriculumFilterService';
-import { getInstructionalWeekForDate, getMasterCalendar } from '../../services/calendarService';
+import { 
+  buildCleanGenerationContext, 
+  validatePreGenerationContext, 
+  validateGeneratedLessonQuality 
+} from '../../services/curriculumHierarchyService';
+import { 
+  getInstructionalWeekForDate, 
+  getMasterCalendar, 
+  getAcademicWeekDetails, 
+  getDatesForCycleWeek, 
+  AcademicWeekDetails 
+} from '../../services/calendarService';
 import { useToasts } from '../../context/ToastContext';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
 import { WeeklyLessonPlanDisplay } from '../WeeklyLessonPlanDisplay';
+import { WeeklyTestGeneratorModal } from '../WeeklyTestGeneratorModal';
 
 interface PlannerViewProps {
   activeClass: GradeLevel | null;
@@ -77,6 +92,9 @@ interface PlannerViewProps {
   cyclePacingMaps: CyclePacingMap[];
   userSettings: UserSettings;
   prefillData?: any;
+  plans?: LessonPlan[];
+  weeklyPlans?: WeeklyCurriculumPlan[];
+  laWeeklyPlans?: LanguageArtsWeeklyPlan[];
   onSave: (plan: any) => Promise<void>;
   onGenerateResource: (plan: LessonPlan, type: string) => Promise<void>;
   onGenerateFullPack?: (plan: LessonPlan) => Promise<void>;
@@ -91,6 +109,9 @@ export function PlannerView({
   cyclePacingMaps,
   userSettings, 
   prefillData, 
+  plans = [],
+  weeklyPlans = [],
+  laWeeklyPlans = [],
   onSave,
   onGenerateResource,
   onGenerateFullPack
@@ -114,7 +135,19 @@ export function PlannerView({
       if (prefillData.grade) setSelectedGrade(prefillData.grade);
       if (prefillData.subject) setSelectedSubject(prefillData.subject);
       if (prefillData.cycle) setSelectedCycle(prefillData.cycle);
-      if (prefillData.date) setSelectedDate(prefillData.date);
+      if (prefillData.date) {
+        setSelectedDate(prefillData.date);
+      } else if (prefillData.cycle && prefillData.week) {
+        // Derive date from cycle and week if date was not provided
+        const weekDates = getDatesForCycleWeek(
+          prefillData.cycle, 
+          prefillData.week, 
+          prefillData.academicYear || selectedAcademicYear
+        );
+        if (weekDates.length > 0) {
+          setSelectedDate(format(weekDates[0], 'yyyy-MM-dd'));
+        }
+      }
       if (prefillData.topic) setSelectedTopic(prefillData.topic);
       if (prefillData.subtopic) setSelectedSubtopic(prefillData.subtopic);
       if (prefillData.outcomes?.[0]) setSelectedOutcome(prefillData.outcomes[0]);
@@ -142,6 +175,7 @@ export function PlannerView({
     'Production and Language Structure — Writing and Composition'
   ]);
   const [autoSelectLAComponents, setAutoSelectLAComponents] = useState<boolean>(true);
+  const [isTestGeneratorOpen, setIsTestGeneratorOpen] = useState(false);
 
   const activeCalendar = useMemo(() => {
     return yearlyCalendars.find(c => c.grade === selectedGrade && c.subject === selectedSubject) || null;
@@ -152,43 +186,27 @@ export function PlannerView({
     return activeCalendar.days.find(d => d.date === selectedDate) || null;
   }, [activeCalendar, selectedDate]);
 
-  // AUTOMATIC INSTRUCTIONAL WEEK & CYCLE CALCULATION:
-  // Evaluates the selected lesson date against the school's academic calendar.
-  // Never requires the teacher to manually select or enter a week.
-  const detectedWeekInfo = useMemo(() => {
-    if (!selectedDate) return null;
-    try {
-      const parsed = parseISO(selectedDate);
-      if (isNaN(parsed.getTime())) return null;
+  // AUTHORITATIVE DATE-TO-WEEK CALCULATION:
+  // The selected lesson date is the single source of truth for:
+  // Selected Lesson Date -> Academic Week -> Cycle -> Subject -> Week's Curriculum Topics -> Outcomes -> Lesson
+  const detectedWeekDetails = useMemo<AcademicWeekDetails>(() => {
+    return getAcademicWeekDetails(selectedDate, selectedAcademicYear);
+  }, [selectedDate, selectedAcademicYear]);
 
-      // 1. If active calendar plan has a custom day assignment, verify and use it
-      if (activeCalendar?.days && activeCalendar.days.length > 0) {
-        const dayEntry = activeCalendar.days.find(d => d.date === selectedDate);
-        if (dayEntry) {
-          if (!dayEntry.isTeachingDay && dayEntry.type === 'School Holiday / Break') {
-            return null;
-          }
-          if (dayEntry.cycle && dayEntry.week) {
-            return { cycle: dayEntry.cycle, week: dayEntry.week };
-          }
-        }
-      }
+  const detectedWeek = detectedWeekDetails.isValid ? detectedWeekDetails.week : null;
+  const detectedCycle = detectedWeekDetails.isValid ? detectedWeekDetails.cycle : selectedCycle;
 
-      // 2. Official master academic calendar calculation
-      return getInstructionalWeekForDate(parsed, selectedAcademicYear);
-    } catch {
-      return null;
-    }
-  }, [selectedDate, selectedAcademicYear, activeCalendar]);
-
-  const detectedWeek = detectedWeekInfo?.week ?? null;
-
-  // Synchronize cycle automatically when detected from the date
+  // Synchronize cycle and academic year automatically when detected from the date
   useEffect(() => {
-    if (detectedWeekInfo?.cycle && detectedWeekInfo.cycle !== selectedCycle) {
-      setSelectedCycle(detectedWeekInfo.cycle);
+    if (detectedWeekDetails.isValid) {
+      if (detectedWeekDetails.academicYear !== selectedAcademicYear) {
+        setSelectedAcademicYear(detectedWeekDetails.academicYear);
+      }
+      if (detectedWeekDetails.cycle !== selectedCycle) {
+        setSelectedCycle(detectedWeekDetails.cycle);
+      }
     }
-  }, [detectedWeekInfo, selectedCycle]);
+  }, [detectedWeekDetails.isValid, detectedWeekDetails.cycle, detectedWeekDetails.academicYear, selectedCycle, selectedAcademicYear]);
 
   // Cycle selector remains available for navigation: changing cycle jumps date to cycle start
   const handleCycleChange = (newCycle: number) => {
@@ -205,8 +223,8 @@ export function PlannerView({
   };
 
   const activeMap = useMemo(() => {
-    return cyclePacingMaps.find(m => m.grade === selectedGrade && m.subject === selectedSubject && m.cycle === selectedCycle) || null;
-  }, [cyclePacingMaps, selectedGrade, selectedSubject, selectedCycle]);
+    return cyclePacingMaps.find(m => m.grade === selectedGrade && m.subject === selectedSubject && m.cycle === detectedCycle) || null;
+  }, [cyclePacingMaps, selectedGrade, selectedSubject, detectedCycle]);
 
   const activeWeekData = useMemo(() => {
     if (!activeMap || detectedWeek === null) return null;
@@ -214,21 +232,22 @@ export function PlannerView({
   }, [activeMap, detectedWeek]);
 
   // SYSTEM-WIDE CURRICULUM FILTERING RULE:
-  // Strictly filter by Academic Year + Class + Subject + Cycle + Automatically Detected Instructional Week
+  // Strictly filter by Academic Year + Class + Subject + Date's Cycle + Date's Academic Week
+  // NEVER displays topics from another cycle, subject, class, unrelated week, or current week if a past date is selected.
   const filteredTopics = useMemo(() => {
-    if (detectedWeek === null) {
+    if (!detectedWeekDetails.isValid || detectedWeek === null) {
       return [];
     }
 
     return getFilteredTopics(curriculum, {
-      academicYear: selectedAcademicYear,
+      academicYear: detectedWeekDetails.academicYear,
       className: selectedGrade,
       subject: selectedSubject,
-      cycle: selectedCycle,
+      cycle: detectedWeekDetails.cycle,
       week: detectedWeek,
       pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, detectedWeek, cyclePacingMaps]);
+  }, [curriculum, detectedWeekDetails, selectedGrade, selectedSubject, detectedWeek, cyclePacingMaps]);
 
   // When changing lesson date, class, or subject:
   // Clear any previously selected topic that is no longer valid for the newly detected week
@@ -240,30 +259,47 @@ export function PlannerView({
     }
   }, [filteredTopics, selectedTopic]);
 
+  // STRICT SUBJECT ISOLATION:
+  // When changing subject, grade, or cycle, reset all previous lesson state to prevent cross-subject contamination
+  useEffect(() => {
+    setGeneratedPlan(null);
+    setGeneratedWeeklyPlan(null);
+    setGeneratedLAWeeklyPlan(null);
+    setSelectedTopic('');
+    setSelectedSubtopic('');
+    setSelectedOutcome('');
+  }, [selectedSubject, selectedGrade, selectedCycle]);
+
   const filteredSubtopics = useMemo(() => {
+    if (!detectedWeekDetails.isValid || detectedWeek === null || !selectedTopic) {
+      return [];
+    }
     return getFilteredSubtopics(curriculum, {
-      academicYear: selectedAcademicYear,
+      academicYear: detectedWeekDetails.academicYear,
       className: selectedGrade,
       subject: selectedSubject,
-      cycle: selectedCycle,
+      cycle: detectedWeekDetails.cycle,
       topic: selectedTopic,
       week: detectedWeek,
       pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, detectedWeek, cyclePacingMaps]);
+  }, [curriculum, detectedWeekDetails, selectedGrade, selectedSubject, selectedTopic, detectedWeek, cyclePacingMaps]);
 
   const filteredOutcomes = useMemo(() => {
+    if (!detectedWeekDetails.isValid || detectedWeek === null || !selectedTopic) {
+      return [];
+    }
     return getFilteredOutcomes(curriculum, {
-      academicYear: selectedAcademicYear,
+      academicYear: detectedWeekDetails.academicYear,
       className: selectedGrade,
       subject: selectedSubject,
-      cycle: selectedCycle,
+      cycle: detectedWeekDetails.cycle,
       topic: selectedTopic,
       subtopic: selectedSubtopic,
       week: detectedWeek,
       pacingMaps: cyclePacingMaps
     });
-  }, [curriculum, selectedAcademicYear, selectedGrade, selectedSubject, selectedCycle, selectedTopic, selectedSubtopic, detectedWeek, cyclePacingMaps]);
+  }, [curriculum, detectedWeekDetails, selectedGrade, selectedSubject, selectedTopic, selectedSubtopic, detectedWeek, cyclePacingMaps]);
 
   // Synchronize topic selection with filteredTopics
   useEffect(() => {
@@ -331,8 +367,8 @@ export function PlannerView({
   }, [filteredOutcomes, selectedOutcome]);
 
   const handleGenerate = async () => {
-    if (detectedWeek === null) {
-      showToast("The instructional week could not be determined for this date.", "error");
+    if (!detectedWeekDetails.isValid || detectedWeek === null) {
+      showToast(detectedWeekDetails.error || "The instructional week could not be determined for this date.", "error");
       return;
     }
 
@@ -341,15 +377,17 @@ export function PlannerView({
       return;
     }
 
-    const targetWeek = detectedWeek;
+    const targetWeek = detectedWeekDetails.week;
+    const targetCycle = detectedWeekDetails.cycle;
+    const targetAcademicYear = detectedWeekDetails.academicYear;
 
     // MANDATORY PRE-GENERATION VALIDATION:
     // Verify that the selected topic belongs to the approved curriculum for the detected week
     const validation = validateTopicInContext(curriculum, {
-      academicYear: selectedAcademicYear,
+      academicYear: targetAcademicYear,
       className: selectedGrade,
       subject: selectedSubject,
-      cycle: selectedCycle,
+      cycle: targetCycle,
       week: targetWeek,
       pacingMaps: cyclePacingMaps,
       topic: selectedTopic
@@ -361,14 +399,38 @@ export function PlannerView({
     }
 
     setIsGenerating(true);
+    // Guarantee clean isolation: reset previous generated plans immediately
+    setGeneratedPlan(null);
+    setGeneratedWeeklyPlan(null);
+    setGeneratedLAWeeklyPlan(null);
+
+    // Build and validate clean generation context
+    const cleanContext = buildCleanGenerationContext({
+      academicYear: targetAcademicYear,
+      grade: selectedGrade,
+      subject: selectedSubject,
+      cycle: targetCycle,
+      topic: selectedTopic,
+      subtopic: selectedSubtopic,
+      learningOutcome: selectedOutcome,
+      curriculum
+    });
+
+    const preVal = validatePreGenerationContext(cleanContext);
+    if (!preVal.valid) {
+      showToast(`Pre-generation validation error: ${preVal.errors[0]}`, "error");
+      setIsGenerating(false);
+      return;
+    }
+
     try {
       if (isWeeklyPlanMode) {
         const weeklyPlan = await generateWeeklyLessonPlan({
-          academicYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
           grade: selectedGrade,
           subject: selectedSubject,
           topic: selectedTopic,
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week: targetWeek,
           teachingModel,
           style: outputStyle,
@@ -379,10 +441,10 @@ export function PlannerView({
 
         // Validate generated plan against curriculum integrity
         const weeklyIntegrity = validateGeneratedLesson(weeklyPlan, curriculum, {
-          academicYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
           className: selectedGrade,
           subject: selectedSubject,
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week: targetWeek,
           pacingMaps: cyclePacingMaps,
           topic: selectedTopic
@@ -395,18 +457,18 @@ export function PlannerView({
 
         setGeneratedWeeklyPlan({
           ...weeklyPlan,
-          academicYear: selectedAcademicYear,
-          schoolYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
+          schoolYear: targetAcademicYear,
           grade: selectedGrade,
           subject: selectedSubject,
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week_number: targetWeek
         } as any);
       } else if (isLAWeeklyMode && selectedSubject === 'Language Arts') {
         const plan = await generateLanguageArtsWeeklyPlan({
-          academicYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
           grade: selectedGrade,
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week: targetWeek,
           topic: selectedTopic,
           learningOutcomes: [selectedOutcome],
@@ -415,10 +477,10 @@ export function PlannerView({
         });
 
         const laIntegrity = validateGeneratedLesson(plan, curriculum, {
-          academicYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
           className: selectedGrade,
           subject: selectedSubject,
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week: targetWeek,
           pacingMaps: cyclePacingMaps,
           topic: selectedTopic
@@ -431,11 +493,11 @@ export function PlannerView({
 
         setGeneratedLAWeeklyPlan({
           ...plan,
-          academicYear: selectedAcademicYear,
-          schoolYear: selectedAcademicYear,
+          academicYear: targetAcademicYear,
+          schoolYear: targetAcademicYear,
           grade: selectedGrade,
           subject: 'Language Arts',
-          cycle: selectedCycle,
+          cycle: targetCycle,
           week: targetWeek,
           structure: laWeeklyStructure,
           createdAt: new Date().toISOString(),
@@ -523,19 +585,19 @@ export function PlannerView({
         }).catch(err => console.warn('Background AI PowerPoint generation notice:', err));
       } else {
         const plan = await generateLessonPlan({
-          academicYear: selectedAcademicYear,
-          grade: selectedGrade,
-          subject: selectedSubject,
-          cycle: selectedCycle,
+          academicYear: cleanContext.academicYear,
+          grade: cleanContext.classLevel,
+          subject: cleanContext.subject,
+          cycle: cleanContext.cycle,
           week: targetWeek,
           day: selectedDayInfo?.dayNumber || 1, 
           date: selectedDate,
-          topic: selectedTopic,
-          subtopic: selectedSubtopic,
-          lessonTitle: selectedTopic, 
-          learningOutcome: selectedOutcome,
-          objectives: [selectedOutcome], 
-          duration: selectedSubject.toLowerCase().includes('language') ? '90 minutes' : '45 minutes', 
+          topic: cleanContext.topic,
+          subtopic: cleanContext.subtopic,
+          lessonTitle: selectedTopic || cleanContext.topic, 
+          learningOutcome: cleanContext.learningOutcome,
+          objectives: [cleanContext.learningOutcome], 
+          duration: cleanContext.duration, 
           teachingModel,
           style: outputStyle,
           includeTeacherScript: userSettings.aiQuality.includeTeacherScript,
@@ -543,16 +605,21 @@ export function PlannerView({
           calendarDays: activeCalendar?.days
         });
 
-        // Validate generated lesson against curriculum integrity
+        // Validate generated lesson against curriculum integrity and quality report
+        const qualityReport = validateGeneratedLessonQuality(plan, cleanContext);
+        if (!qualityReport.valid) {
+          console.warn('[Quality Gate] Post-generation validation notes:', qualityReport.errors);
+        }
+
         const lessonIntegrity = validateGeneratedLesson(plan, curriculum, {
-          academicYear: selectedAcademicYear,
-          className: selectedGrade,
-          subject: selectedSubject,
-          cycle: selectedCycle,
+          academicYear: cleanContext.academicYear,
+          className: cleanContext.classLevel,
+          subject: cleanContext.subject,
+          cycle: cleanContext.cycle,
           week: targetWeek,
           pacingMaps: cyclePacingMaps,
-          topic: selectedTopic,
-          subtopic: selectedSubtopic
+          topic: cleanContext.topic,
+          subtopic: cleanContext.subtopic
         });
 
         if (!lessonIntegrity.valid) {
@@ -563,16 +630,17 @@ export function PlannerView({
         const standardPlanWithContext = {
           ...plan,
           structured_json: plan,
-          academicYear: selectedAcademicYear,
-          schoolYear: selectedAcademicYear,
-          grade: selectedGrade,
-          subject: selectedSubject,
-          cycle: selectedCycle,
+          academicYear: cleanContext.academicYear,
+          schoolYear: cleanContext.academicYear,
+          grade: cleanContext.classLevel,
+          subject: cleanContext.subject,
+          cycle: cleanContext.cycle,
           week: targetWeek,
           date: selectedDate,
-          topic: selectedTopic,
-          subtopic: selectedSubtopic,
-          learningOutcome: selectedOutcome,
+          topic: cleanContext.topic,
+          subtopic: cleanContext.subtopic,
+          curriculumCode: cleanContext.curriculumCode,
+          learningOutcome: cleanContext.learningOutcome,
           style: outputStyle,
           includeTeacherScript: userSettings.aiQuality.includeTeacherScript,
           includeDifferentiation: userSettings.aiQuality.includeDifferentiation,
@@ -582,11 +650,11 @@ export function PlannerView({
           isReadyToTeach: !!(plan.videoAssistant && plan.inDepthVisuals && plan.boardVisualPlan && plan.exactMaterials),
           powerpointPresentation: buildDeterministicPowerPoint({
             ...plan,
-            subject: selectedSubject,
-            grade: selectedGrade,
-            topic: selectedTopic,
-            subtopic: selectedSubtopic,
-            learningOutcome: selectedOutcome
+            subject: cleanContext.subject,
+            grade: cleanContext.classLevel,
+            topic: cleanContext.topic,
+            subtopic: cleanContext.subtopic,
+            learningOutcome: cleanContext.learningOutcome
           })
         };
 
@@ -599,8 +667,19 @@ export function PlannerView({
         }).catch(err => console.warn('Background AI PowerPoint generation notice:', err));
       }
     } catch (err: any) {
-      console.error("Error generating lesson plan:", err);
-      showToast(err?.message || "Failed to generate lesson plan. Please try again.", "error");
+      let friendlyMsg = err?.message || "Failed to generate lesson plan. Please try again.";
+      try {
+        if (typeof friendlyMsg === 'string' && friendlyMsg.trim().startsWith('{')) {
+          const parsed = JSON.parse(friendlyMsg);
+          if (parsed?.error?.message) {
+            friendlyMsg = parsed.error.message;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      console.warn("Lesson plan generation notification:", friendlyMsg);
+      showToast(friendlyMsg, "error");
     } finally {
       setIsGenerating(false);
     }
@@ -761,23 +840,34 @@ export function PlannerView({
                     <label className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1 block">Instructional Week</label>
                     <div className={cn(
                       "flex items-center justify-between px-3.5 py-2 rounded-lg border text-sm font-semibold transition-colors min-h-[42px]",
-                      detectedWeek !== null
+                      detectedWeekDetails.isValid
                         ? "bg-slate-50 border-slate-200 text-slate-900"
                         : "bg-rose-50 border-rose-200 text-rose-700"
                     )}>
                       <div className="flex items-center gap-2">
-                        <Clock className={cn("w-4 h-4", detectedWeek !== null ? "text-indigo-600" : "text-rose-500")} />
-                        <span className="font-bold">
-                          {detectedWeek !== null ? `Cycle ${selectedCycle} • Week ${detectedWeek}` : 'Undetermined Week'}
-                        </span>
+                        <Clock className={cn("w-4 h-4", detectedWeekDetails.isValid ? "text-indigo-600" : "text-rose-500")} />
+                        <div className="flex flex-col">
+                          <span className="font-bold text-xs sm:text-sm">
+                            {detectedWeekDetails.isValid ? detectedWeekDetails.fullLabel : 'Undetermined Week'}
+                          </span>
+                          {detectedWeekDetails.isValid && (
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              Cycle {detectedWeekDetails.cycle} • {selectedAcademicYear}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <span className={cn(
-                        "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
-                        detectedWeek !== null
-                          ? "bg-indigo-50 text-indigo-700 border-indigo-100"
-                          : "bg-rose-100 text-rose-800 border-rose-200"
+                        "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0",
+                        !detectedWeekDetails.isValid
+                          ? "bg-rose-100 text-rose-800 border-rose-200"
+                          : detectedWeekDetails.isPastWeek
+                            ? "bg-amber-100 text-amber-800 border-amber-200"
+                            : detectedWeekDetails.isCurrentWeek
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              : "bg-indigo-50 text-indigo-700 border-indigo-100"
                       )}>
-                        {detectedWeek !== null ? 'Read-Only' : 'Non-Instructional'}
+                        {!detectedWeekDetails.isValid ? 'Non-Instructional' : detectedWeekDetails.statusText}
                       </span>
                     </div>
                   </div>
@@ -786,6 +876,25 @@ export function PlannerView({
             </div>
 
             <div className="space-y-6 pt-4 border-t border-gray-50">
+              {detectedWeekDetails.isValid && detectedWeekDetails.isPastWeek && (
+                <div className="p-4 bg-amber-50/90 border border-amber-200 rounded-xl flex items-start gap-3 shadow-xs">
+                  <History className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider">
+                        Historical Lesson Planning
+                      </h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full">
+                        {detectedWeekDetails.fullLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      You are planning or regenerating a lesson for a previous week. Curriculum topics, subtopics, and outcomes below are strictly scoped to {detectedWeekDetails.fullLabel} (Cycle {detectedWeekDetails.cycle}).
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {activeWeekData && filteredTopics.includes(activeWeekData.topic) && (
                 <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
                   <div className="flex items-center justify-between">
@@ -816,13 +925,13 @@ export function PlannerView({
                 </div>
               )}
 
-              {detectedWeek === null ? (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              {!detectedWeekDetails.isValid ? (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Instructional Week Undetermined</h4>
-                    <p className="text-xs text-amber-800 leading-relaxed">
-                      The instructional week could not be determined for this date.
+                    <h4 className="text-xs font-bold text-rose-900 uppercase tracking-wider">Date Outside Curriculum Calendar</h4>
+                    <p className="text-xs text-rose-800 leading-relaxed">
+                      {detectedWeekDetails.error || "The instructional week could not be determined for this date."}
                     </p>
                   </div>
                 </div>
@@ -832,7 +941,7 @@ export function PlannerView({
                   <div className="space-y-1">
                     <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">No Scheduled Topics</h4>
                     <p className="text-xs text-amber-800 leading-relaxed">
-                      No approved topics are scheduled for this week.
+                      No approved topics are scheduled for {detectedWeekDetails.fullLabel} in {selectedSubject}.
                     </p>
                   </div>
                 </div>
@@ -849,16 +958,16 @@ export function PlannerView({
                   )}
                 </div>
                 <Select 
-                  disabled={filteredTopics.length === 0 || detectedWeek === null}
+                  disabled={filteredTopics.length === 0 || !detectedWeekDetails.isValid}
                   options={filteredTopics.map(t => ({ label: t, value: t }))} 
                   value={selectedTopic} 
                   onChange={(val) => setSelectedTopic(val)} 
                   placeholder={
-                    detectedWeek === null
-                      ? "The instructional week could not be determined for this date."
+                    !detectedWeekDetails.isValid
+                      ? (detectedWeekDetails.error || "The instructional week could not be determined for this date.")
                       : filteredTopics.length > 0 
-                        ? `Select an approved Cycle ${selectedCycle} • Week ${detectedWeek} topic...` 
-                        : "No approved topics are scheduled for this week."
+                        ? `Select an approved topic for ${detectedWeekDetails.fullLabel}...` 
+                        : `No approved topics scheduled for ${detectedWeekDetails.fullLabel}.`
                   }
                 />
               </div>
@@ -893,17 +1002,28 @@ export function PlannerView({
                     <CalendarDays className="w-5 h-5 text-indigo-600" />
                     <h4 className="text-sm font-bold text-indigo-900">Weekly Lesson Planner</h4>
                   </div>
-                  <Button 
-                    variant={isWeeklyPlanMode ? "primary" : "outline"} 
-                    size="sm"
-                    onClick={() => {
-                        setIsWeeklyPlanMode(!isWeeklyPlanMode);
-                        if (isLAWeeklyMode) setIsLAWeeklyMode(false);
-                    }}
-                    className="text-[10px] h-7"
-                  >
-                    {isWeeklyPlanMode ? "Enabled" : "Enable Mode"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setIsTestGeneratorOpen(true)}
+                      className="text-[10px] h-7 font-bold text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-100 flex items-center gap-1"
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      Weekly Test
+                    </Button>
+                    <Button 
+                      variant={isWeeklyPlanMode ? "primary" : "outline"} 
+                      size="sm" 
+                      onClick={() => {
+                          setIsWeeklyPlanMode(!isWeeklyPlanMode);
+                          if (isLAWeeklyMode) setIsLAWeeklyMode(false);
+                      }}
+                      className="text-[10px] h-7"
+                    >
+                      {isWeeklyPlanMode ? "Enabled" : "Enable Mode"}
+                    </Button>
+                  </div>
                 </div>
                 {isWeeklyPlanMode && (
                   <p className="text-xs text-indigo-800">Generate a progressive 5-day plan (Monday–Friday) for this topic.</p>
@@ -917,14 +1037,25 @@ export function PlannerView({
                       <BookOpenCheck className="w-5 h-5 text-amber-600" />
                       <h4 className="text-sm font-bold text-amber-900">Language Arts Weekly Scope & Sequence</h4>
                     </div>
-                    <Button 
-                      variant={isLAWeeklyMode ? "primary" : "outline"} 
-                      size="sm"
-                      onClick={() => setIsLAWeeklyMode(!isLAWeeklyMode)}
-                      className="text-[10px] h-7"
-                    >
-                      {isLAWeeklyMode ? "Enabled" : "Enable Mode"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setIsTestGeneratorOpen(true)}
+                        className="text-[10px] h-7 font-bold text-amber-800 bg-white border-amber-300 hover:bg-amber-100 flex items-center gap-1"
+                      >
+                        <FileCheck className="w-3.5 h-3.5" />
+                        Weekly Test
+                      </Button>
+                      <Button 
+                        variant={isLAWeeklyMode ? "primary" : "outline"} 
+                        size="sm" 
+                        onClick={() => setIsLAWeeklyMode(!isLAWeeklyMode)}
+                        className="text-[10px] h-7"
+                      >
+                        {isLAWeeklyMode ? "Enabled" : "Enable Mode"}
+                      </Button>
+                    </div>
                   </div>
                   {isLAWeeklyMode && (
                     <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
@@ -1023,6 +1154,16 @@ export function PlannerView({
                 <Sparkles className="w-5 h-5" />
                 {isWeeklyPlanMode ? "Generate Weekly Plan" : isLAWeeklyMode && selectedSubject === 'Language Arts' ? "Generate Weekly LA Plan" : "Generate Lesson Plan"}
               </Button>
+
+              <Button 
+                type="button"
+                variant="outline" 
+                onClick={() => setIsTestGeneratorOpen(true)} 
+                className="w-full py-3.5 text-sm font-bold border-2 border-indigo-200 text-indigo-900 bg-indigo-50/70 hover:bg-indigo-100 flex items-center justify-center gap-2 rounded-xl transition-all"
+              >
+                <FileCheck className="w-4 h-4 text-indigo-600" />
+                Generate Weekly Test (Cycle {selectedCycle} • Week {detectedWeek ?? 1})
+              </Button>
             </div>
           </Card>
 
@@ -1079,7 +1220,15 @@ export function PlannerView({
               <ArrowLeft className="w-4 h-4" />
               Back to Planner
             </Button>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              <Button 
+                variant="outline"
+                onClick={() => setIsTestGeneratorOpen(true)}
+                className="font-bold text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 flex items-center gap-1.5"
+              >
+                <FileCheck className="w-4 h-4 text-indigo-600" />
+                Generate Weekly Test
+              </Button>
               {generatedPlan && (
                 <Button variant="secondary" onClick={() => handleImprove('Make it more interactive')}>
                   <RefreshCw className="w-4 h-4" />
@@ -1133,6 +1282,25 @@ export function PlannerView({
           )}
         </div>
       )}
+
+      <WeeklyTestGeneratorModal
+        isOpen={isTestGeneratorOpen}
+        onClose={() => setIsTestGeneratorOpen(false)}
+        initialContext={{
+          grade: selectedGrade,
+          subject: selectedSubject,
+          academicYear: selectedAcademicYear,
+          cycle: selectedCycle,
+          week: detectedWeek ?? 1,
+          activeWeeklyPlan: generatedWeeklyPlan || generatedLAWeeklyPlan
+        }}
+        plans={plans}
+        weeklyPlans={weeklyPlans}
+        laWeeklyPlans={laWeeklyPlans}
+        dailyLessonPlans={dailyLessonPlans}
+        curriculum={curriculum}
+        schoolName={userSettings.schoolName}
+      />
     </div>
   );
 }

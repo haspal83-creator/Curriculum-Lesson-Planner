@@ -300,6 +300,7 @@ export function YearlyCalendarView({
                               subject: selectedSubject,
                               cycle: week.cycle_number,
                               week: week.week_number,
+                              date: format(startDate, 'yyyy-MM-dd')
                             });
                             setActiveTab('planner');
                           }}

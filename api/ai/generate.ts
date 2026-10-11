@@ -208,6 +208,10 @@ export default async function handler(
         result = await geminiService.generateWeeklyLessonPlan(actionParams);
         break;
 
+      case 'generateWeeklyTestQuestions':
+        result = await geminiService.generateWeeklyTestQuestions(actionParams);
+        break;
+
       case 'generateReteachLesson':
         result = await geminiService.generateReteachLesson(
           actionParams.originalPlan,
@@ -275,6 +279,38 @@ export default async function handler(
         result = await geminiService.generatePowerPointPresentation(actionParams);
         break;
 
+      case 'generateWeeklyTest': {
+        const { buildWeeklyCoverageMap, buildDeterministicTestQuestions } = await import('../../src/lib/weeklyTestService');
+        const coverage = buildWeeklyCoverageMap({
+          classLevel: actionParams.grade || actionParams.classLevel || 'Standard 4',
+          subject: actionParams.subject || 'Mathematics',
+          academicYear: actionParams.academicYear || '2026-2027',
+          cycle: actionParams.cycle || 1,
+          week: actionParams.week || 1,
+          plans: actionParams.plans,
+          weeklyPlans: actionParams.weeklyPlans,
+          curriculum: actionParams.curriculum,
+          activeWeeklyPlan: actionParams.activeWeeklyPlan
+        });
+        const questions = buildDeterministicTestQuestions(coverage, {
+          questionCount: actionParams.questionCount || 10,
+          questionTypes: actionParams.questionTypes || 'Mixed Question Types',
+          difficulty: actionParams.difficulty || 'Mixed',
+          timeAllowed: actionParams.timeAllowed || '45 minutes',
+          totalMarks: actionParams.questionCount || 10,
+          instructions: actionParams.instructions || 'Answer all questions in the spaces provided.',
+          randomizeQuestions: false,
+          randomizeAnswerChoices: false,
+          includeAnswerKey: true
+        });
+        result = {
+          coverage,
+          questions,
+          totalMarks: questions.reduce((acc: number, q: any) => acc + (q.marks || 1), 0)
+        };
+        break;
+      }
+
       default:
         return res.status(400).json({
           success: false,
@@ -286,17 +322,145 @@ export default async function handler(
     return res.status(200).json(payload);
 
   } catch (error: any) {
-    console.error('Lesson generation API error:', {
-      action,
-      message: error?.message,
-      stack: error?.stack,
-      details: error?.details || error?.response?.data
-    });
+    const rawErrorMsg = error?.message || String(error || '');
+    let cleanMessage = rawErrorMsg;
+    try {
+      const parsed = JSON.parse(rawErrorMsg);
+      if (parsed?.error?.message) {
+        cleanMessage = parsed.error.message;
+      }
+    } catch (e) {
+      // not JSON
+    }
+
+    console.warn(`[API /api/ai/generate] Recovering action "${action}" after upstream API event:`, cleanMessage);
+
+    const actionParams = params || {};
+
+    if (action === 'generateLessonPlan' || action === 'generateLanguageArtsDailyPlan') {
+      try {
+        const { enrichAndGuaranteeTeachReady } = await import('../../src/lib/lessonQualityGate');
+        const isLA = action === 'generateLanguageArtsDailyPlan' || actionParams.subject === 'Language Arts';
+        const safePlan = enrichAndGuaranteeTeachReady({
+          lessonTitle: actionParams.lessonTitle || actionParams.topic || 'Instructional Lesson Plan',
+          subject: actionParams.subject || (isLA ? 'Language Arts' : 'Curriculum Subject'),
+          grade: actionParams.grade || 'Standard 2',
+          cycle: actionParams.cycle || 2,
+          week: actionParams.week || 1,
+          day: actionParams.day || 1,
+          date: actionParams.date,
+          topic: actionParams.topic || 'Core Concept',
+          subtopic: actionParams.subtopic || actionParams.topic,
+          learningOutcome: actionParams.learningOutcome,
+          duration: actionParams.duration || (isLA ? '90 minutes' : '45 minutes'),
+          languageArtsComponents: actionParams.components
+        }, actionParams);
+        return res.status(200).json(safePlan);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for daily lesson:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateWeeklyLessonPlan') {
+      try {
+        const geminiService = await getGeminiService();
+        const safeWeekly = await geminiService.generateWeeklyLessonPlan(actionParams);
+        return res.status(200).json(safeWeekly);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for weekly plan:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateLanguageArtsWeeklyPlan') {
+      try {
+        const geminiService = await getGeminiService();
+        const safeLAWeekly = await geminiService.generateLanguageArtsWeeklyPlan(actionParams);
+        return res.status(200).json(safeLAWeekly);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for LA weekly plan:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateWeeklyPlan' || action === 'generateWeeklyCurriculumPlan' || action === 'generateWeeklyBreakdown') {
+      try {
+        const geminiService = await getGeminiService();
+        const safeBreakdown = await geminiService.generateWeeklyBreakdown(actionParams);
+        return res.status(200).json(safeBreakdown);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for breakdown:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateCyclePacingMap') {
+      try {
+        const geminiService = await getGeminiService();
+        const safePacing = await geminiService.generateCyclePacingMap(actionParams);
+        return res.status(200).json(safePacing);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for pacing map:', fallbackErr);
+      }
+    }
+
+    if (action === 'generatePowerPoint' || action === 'rebuildPowerPoint') {
+      try {
+        const { buildDeterministicPowerPoint } = await import('../../src/lib/powerpointService');
+        return res.status(200).json(buildDeterministicPowerPoint(actionParams));
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for PowerPoint:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateLessonResources') {
+      try {
+        const safeRes = await generateLessonResources(actionParams.grade || 'Standard 2', actionParams.topic || 'Curriculum Concept');
+        return res.status(200).json(safeRes);
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for resources:', fallbackErr);
+      }
+    }
+
+    if (action === 'generateWeeklyTest') {
+      try {
+        const { buildWeeklyCoverageMap, buildDeterministicTestQuestions } = await import('../../src/lib/weeklyTestService');
+        const coverage = buildWeeklyCoverageMap({
+          classLevel: actionParams.grade || actionParams.classLevel || 'Standard 4',
+          subject: actionParams.subject || 'Mathematics',
+          academicYear: actionParams.academicYear || '2026-2027',
+          cycle: actionParams.cycle || 1,
+          week: actionParams.week || 1
+        });
+        const questions = buildDeterministicTestQuestions(coverage, {
+          questionCount: actionParams.questionCount || 10,
+          questionTypes: actionParams.questionTypes || 'Mixed Question Types',
+          difficulty: actionParams.difficulty || 'Mixed',
+          timeAllowed: actionParams.timeAllowed || '45 minutes',
+          totalMarks: actionParams.questionCount || 10,
+          instructions: actionParams.instructions || 'Answer all questions in the spaces provided.',
+          randomizeQuestions: false,
+          randomizeAnswerChoices: false,
+          includeAnswerKey: true
+        });
+        return res.status(200).json({
+          coverage,
+          questions,
+          totalMarks: questions.reduce((acc: number, q: any) => acc + (q.marks || 1), 0)
+        });
+      } catch (fallbackErr: any) {
+        console.error('Safety net fallback failed for weekly test:', fallbackErr);
+      }
+    }
+
+    // Format friendly message
+    let finalUserMessage = cleanMessage;
+    if (cleanMessage.includes('503') || cleanMessage.includes('UNAVAILABLE') || cleanMessage.includes('high demand')) {
+      finalUserMessage = "The AI service is temporarily experiencing high demand. Please try again in a few moments.";
+    } else if (cleanMessage.includes('429') || cleanMessage.includes('RESOURCE_EXHAUSTED') || cleanMessage.includes('quota')) {
+      finalUserMessage = "AI rate limit reached. Please wait a few moments before trying again.";
+    }
 
     return res.status(500).json({
       success: false,
-      error: error?.message || 'Internal Server Error during lesson generation',
-      details: error?.details || undefined
+      error: finalUserMessage
     });
   }
 }

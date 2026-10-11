@@ -428,6 +428,11 @@ export function runLanguageArtsAlignmentAudit(plan: LessonPlan, context?: any): 
     scoringAlignment: auditDetails.scoringAlignment.status,
     scorePercentage,
     isReadyToTeach,
+    passedAudit: isReadyToTeach,
+    score: scorePercentage,
+    summary: isReadyToTeach 
+      ? 'MoECST 30-Point Language Arts Quality Standard Passed (100% Component Integrity)'
+      : `Language Arts audit action required: ${criticalFailures.join(', ')}`,
     criticalFailures,
     auditDetails,
     primaryComponent: compsToUse[0],
@@ -736,7 +741,9 @@ export function enforceAndAuditLanguageArtsLesson(rawPlan: any, context?: any): 
     plan.executionBoard = defaultStages.map(st => ({
       stageNumber: st.num,
       title: st.name,
+      phase: st.name,
       duration: st.dur,
+      timeAllocation: st.dur,
       teacherActions: [
         `Explicitly introduces and facilitates ${st.name} focused on "${topic}" and ${normComps[0]}.`,
         `Demonstrates clear modeling, poses text-dependent questions, and monitors student responses.`
@@ -750,7 +757,13 @@ export function enforceAndAuditLanguageArtsLesson(rawPlan: any, context?: any): 
         `What evidence from the mentor text supports your answer?`
       ],
       checkForUnderstanding: `Formative observation and student response verification aligned to ${normComps[0]}.`,
-      materialsUsed: ['Belizean Mentor Text', 'Student Exercise Books', 'Anchor Chart', 'Worksheet']
+      materialsUsed: ['Belizean Mentor Text', 'Student Exercise Books', 'Anchor Chart', 'Worksheet'],
+      ongoingAssessment: {
+        observe: `Student active participation in ${st.name}`,
+        evidenceOfLearning: `Formative checks and student work during ${st.name}`,
+        misconceptions: [`Misinterpreting task requirements or key definitions`],
+        checkUnderstanding: `Formative observation and student response verification aligned to ${normComps[0]}.`
+      }
     }));
   } else {
     // Sanitize existing stages to ensure no unrelated prefix drill bleed

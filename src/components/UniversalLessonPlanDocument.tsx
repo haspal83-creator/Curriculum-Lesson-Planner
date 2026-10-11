@@ -37,6 +37,7 @@ import { parseMinutes } from '../lib/timingValidation';
 import { isLanguageArtsSubject } from '../lib/languageArtsQualityGate';
 import { parseAndNormalizeWorksheet, printWorksheetToWindow } from '../lib/worksheetSystem';
 import { runLanguageArtsAlignmentAudit } from '../lib/languageArtsAlignmentAudit';
+import { MasterReferenceDailyPlanTable } from './MasterReferenceDailyPlanTable';
 
 interface UniversalLessonPlanDocumentProps {
   plan: LessonPlan;
@@ -52,7 +53,7 @@ interface UniversalLessonPlanDocumentProps {
 
 export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentProps> = ({
   plan,
-  teacherName = 'Hassan',
+  teacherName = plan.studentTeacherName || 'Student Teacher',
   schoolName = 'SAN JUAN BOSCO R.C. SCHOOL',
   isTeachMode = false,
   status,
@@ -62,6 +63,7 @@ export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentPr
   isGenerating = false
 }) => {
   const res = resolveCompleteLessonResources(plan, { schoolName, teacherName });
+  const [docMode, setDocMode] = useState<'interactive' | 'master_table'>('interactive');
   const [sequenceView, setSequenceView] = useState<'timeline' | 'table'>('timeline');
   const [activeSection, setActiveSection] = useState<string>('header');
   const [copiedResourceIdx, setCopiedResourceIdx] = useState<number | null>(null);
@@ -70,12 +72,14 @@ export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentPr
 
   // Timing Validation Calculation
   const isLA = isLanguageArtsSubject(res.subject);
+  const isMath = Boolean((res.subject || '').toLowerCase().includes('math'));
+  const is90Min = isLA || isMath;
   const audit = isLA 
     ? (res.languageArtsAlignmentAudit || (plan as any).languageArtsAlignmentAudit || runLanguageArtsAlignmentAudit(plan, { grade: res.grade, topic: res.topic, subtopic: res.subtopic, cycle: res.cycle, subject: 'Language Arts' }))
     : null;
   const [showAuditDetails, setShowAuditDetails] = useState<boolean>(false);
 
-  const targetMinutes = isLA 
+  const targetMinutes = is90Min 
     ? (parseMinutes(res.duration, 90) || 90) 
     : (parseMinutes(res.duration, 45) || 45);
     
@@ -203,10 +207,10 @@ export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentPr
       <nav 
         id="section-nav"
         aria-label="Lesson Plan Section Navigation"
-        className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-sm overflow-x-auto no-scrollbar print:hidden"
+        className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-sm overflow-x-auto no-scrollbar print:hidden flex items-center justify-between gap-2"
       >
         <div className="flex items-center gap-1 min-w-max">
-          {navSections.map((sec) => {
+          {docMode === 'interactive' && navSections.map((sec) => {
             const isActive = activeSection === sec.id;
             return (
               <button
@@ -223,8 +227,44 @@ export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentPr
             );
           })}
         </div>
+
+        {/* View Mode Toggle: Interactive Workspace vs Reference 2-Column Template */}
+        <div className="flex items-center gap-1 min-w-max shrink-0 bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setDocMode('interactive')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              docMode === 'interactive'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Interactive Workspace</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDocMode('master_table')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              docMode === 'master_table'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-500 hover:text-indigo-600'
+            }`}
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span>Master 2-Column Template</span>
+          </button>
+        </div>
       </nav>
 
+      {docMode === 'master_table' ? (
+        <MasterReferenceDailyPlanTable
+          plan={plan}
+          teacherName={teacherName}
+          schoolName={schoolName}
+        />
+      ) : (
+        <>
       {/* ========================================================================= */}
       {/* 1. LESSON HEADER & INSTITUTIONAL BAR                                      */}
       {/* ========================================================================= */}
@@ -1582,6 +1622,8 @@ export const UniversalLessonPlanDocument: React.FC<UniversalLessonPlanDocumentPr
           </div>
         )}
       </section>
+        </>
+      )}
 
     </div>
   );

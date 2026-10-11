@@ -5,28 +5,31 @@ import { fileURLToPath } from "url";
 import generateHandler from "./api/ai/generate";
 
 // Use a safe way to derive __dirname and __filename that works in both ESM and CJS
-let __filename = '';
-let __dirname = '';
-
-try {
-  // @ts-ignore
-  if (typeof __filename !== 'undefined') {
-    // @ts-ignore
-    __filename = __filename;
-    // @ts-ignore
-    __dirname = __dirname;
-  } else {
-    __filename = fileURLToPath(import.meta.url);
-    __dirname = path.dirname(__filename);
+const getDirname = () => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
   }
-} catch (e) {
-  __dirname = process.cwd();
-  __filename = path.join(__dirname, 'server.ts');
-}
+};
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  
+  // Support CLI arguments (--port, --host) passed by Vite/AI Studio runner
+  let port = 3000;
+  let host = "0.0.0.0";
+
+  const portArgIndex = process.argv.indexOf("--port");
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    const parsed = parseInt(process.argv[portArgIndex + 1], 10);
+    if (!isNaN(parsed)) port = parsed;
+  }
+
+  const hostArgIndex = process.argv.indexOf("--host");
+  if (hostArgIndex !== -1 && process.argv[hostArgIndex + 1]) {
+    host = process.argv[hostArgIndex + 1];
+  }
 
   // Allow large payloads for multi-page curriculum PDFs and document uploads
   app.use(express.json({ limit: '100mb' }));
@@ -74,8 +77,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(port, host, () => {
+    console.log(`Server running on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
+    console.log(`  ➜  Local:   http://localhost:${port}/`);
+    console.log(`  ➜  Network: http://${host}:${port}/`);
   });
 }
 

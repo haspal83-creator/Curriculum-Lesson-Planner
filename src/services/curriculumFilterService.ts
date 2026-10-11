@@ -135,6 +135,11 @@ export function getFilteredCurriculum(
   const targetSubject = normalizeSubject(params.subject);
   const targetCycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : null;
 
+  // If a week is explicitly null (non-instructional or undetermined week), return empty array
+  if (params.week === null) {
+    return [];
+  }
+
   // 1. Primary Filter: Grade and Subject
   const gradeSubjectMatches = curriculum.filter(entry => {
     // Grade match
@@ -282,8 +287,8 @@ export function getFilteredCurriculum(
           for (let i = 0; i < uniqueTopics.length; i++) {
             const isLast = i === uniqueTopics.length - 1;
             const duration = topicDurations[i];
-            // The last topic covers the remaining weeks of the cycle
-            const endWeek = isLast ? Math.max(currentStartWeek + duration - 1, 25) : currentStartWeek + duration - 1;
+            // The last topic covers the remaining instructional weeks of the cycle (up to 12 weeks)
+            const endWeek = isLast ? Math.max(currentStartWeek + duration - 1, 12) : currentStartWeek + duration - 1;
             if (targetWeek >= currentStartWeek && targetWeek <= endWeek) {
               matchedTopic = uniqueTopics[i];
               break;
@@ -294,8 +299,8 @@ export function getFilteredCurriculum(
           if (matchedTopic) {
             finalResults = cycleFiltered.filter(e => (e.topic || '').trim() === matchedTopic);
           } else {
-            // Fallback: return all cycle topics so teacher always has approved curriculum options
-            finalResults = cycleFiltered;
+            // Strictly return empty when target week has no scheduled topics
+            finalResults = [];
           }
         }
       } else {
@@ -328,16 +333,26 @@ export function getFilteredTopics(
  * Robustly inspects singular and plural subtopic properties across filtered curriculum,
  * broader cycle context, national curriculum, and pacing maps.
  */
+/**
+ * Returns subtopics mapped to the selected Academic Year + Class + Subject + Cycle + Topic.
+ * Strictly guarantees that subtopics from other subjects or classes are NEVER returned.
+ */
 export function getFilteredSubtopics(
   curriculum: CurriculumEntry[],
   params: CurriculumTopicFilterParams
 ): string[] {
   if (!params.topic || !params.topic.trim()) return [];
   const targetTopic = params.topic.trim().toLowerCase();
+  const targetGrade = normalizeGrade(params.className || params.grade);
+  const targetSubject = normalizeSubject(params.subject);
   const subtopics: string[] = [];
 
   const extractSubtopics = (entries: CurriculumEntry[]) => {
     for (const e of entries) {
+      // STRICT ISOLATION: Only inspect entries matching target grade and target subject
+      if (normalizeGrade(e.grade) !== targetGrade) continue;
+      if (targetSubject && normalizeSubject(e.subject) !== targetSubject) continue;
+
       if ((e.topic || '').trim().toLowerCase() === targetTopic) {
         if (e.subtopic && typeof e.subtopic === 'string' && e.subtopic.trim()) {
           subtopics.push(e.subtopic.trim());
@@ -366,7 +381,7 @@ export function getFilteredSubtopics(
     extractSubtopics(broader);
   }
 
-  // 3. Tertiary: search base national curriculum and raw entries
+  // 3. Tertiary: search base national curriculum and raw entries strictly for target subject + grade
   if (subtopics.length === 0) {
     extractSubtopics(curriculum);
     extractSubtopics(BELIZE_NATIONAL_CURRICULUM);
@@ -374,8 +389,6 @@ export function getFilteredSubtopics(
 
   // 4. Quaternary: inspect pacingMaps for scheduled subtopics
   if (params.pacingMaps && Array.isArray(params.pacingMaps)) {
-    const targetGrade = normalizeGrade(params.className || params.grade);
-    const targetSubject = normalizeSubject(params.subject);
     const targetCycle = params.cycle !== undefined && params.cycle !== null ? normalizeCycle(params.cycle) : null;
     for (const map of params.pacingMaps) {
       if (normalizeGrade(map.grade) === targetGrade && normalizeSubject(map.subject) === targetSubject) {
@@ -409,6 +422,7 @@ export function getFilteredSubtopics(
 
 /**
  * Returns learning outcomes mapped to the selected Academic Year + Class + Subject + Cycle + Topic (+ Subtopic).
+ * Strictly guarantees that outcomes from other subjects or classes are NEVER returned.
  */
 export function getFilteredOutcomes(
   curriculum: CurriculumEntry[],
@@ -417,11 +431,17 @@ export function getFilteredOutcomes(
   if (!params.topic || !params.topic.trim()) return [];
   const targetTopic = params.topic.trim().toLowerCase();
   const targetSubtopic = params.subtopic ? params.subtopic.trim().toLowerCase() : null;
+  const targetGrade = normalizeGrade(params.className || params.grade);
+  const targetSubject = normalizeSubject(params.subject);
 
   const outcomes: string[] = [];
 
   const extractOutcomes = (entries: CurriculumEntry[]) => {
     for (const e of entries) {
+      // STRICT ISOLATION: Only inspect entries matching target grade and target subject
+      if (normalizeGrade(e.grade) !== targetGrade) continue;
+      if (targetSubject && normalizeSubject(e.subject) !== targetSubject) continue;
+
       const matchTopic = (e.topic || '').trim().toLowerCase() === targetTopic;
       if (!matchTopic) continue;
 
@@ -454,7 +474,7 @@ export function getFilteredOutcomes(
     extractOutcomes(broader);
   }
 
-  // 3. Tertiary: raw and national curriculum
+  // 3. Tertiary: raw and national curriculum strictly for target subject + grade
   if (outcomes.length === 0) {
     extractOutcomes(curriculum);
     extractOutcomes(BELIZE_NATIONAL_CURRICULUM);
@@ -562,6 +582,50 @@ export function validateGeneratedLesson(
       valid: false,
       reason: `Generated lesson cycle (${genCycle}) does not match selected cycle (${expectedCycle}).`
     };
+  }
+
+  // 3. Verify subject purity on generated lesson
+  const expectedSubject = normalizeSubject(expectedContext.subject);
+  const genSubject = normalizeSubject(lesson.subject);
+  if (genSubject && expectedSubject && genSubject !== expectedSubject) {
+    return {
+      valid: false,
+      reason: `Cross-subject contamination: Generated subject is "${genSubject}" but selected subject is "${expectedSubject}".`
+    };
+  }
+
+  // 4. Verify curriculum code belongs to the selected subject
+  const genCode = (lesson.curriculumCode || lesson.structured_json?.curriculumCode || '').trim();
+  if (genCode) {
+    if (expectedSubject === 'HFLE' && (genCode.startsWith('LA.') || genCode.startsWith('MA.') || genCode.startsWith('SC.') || genCode.startsWith('BS.'))) {
+      return {
+        valid: false,
+        reason: `Curriculum code mismatch: "${genCode}" belongs to another subject and cannot be used for HFLE.`
+      };
+    }
+    if (expectedSubject === 'Science and Technology' && (genCode.startsWith('LA.') || genCode.startsWith('MA.') || genCode.startsWith('HFLE.') || genCode.startsWith('BS.'))) {
+      return {
+        valid: false,
+        reason: `Curriculum code mismatch: "${genCode}" belongs to another subject and cannot be used for Science.`
+      };
+    }
+    if (expectedSubject === 'Mathematics' && (genCode.startsWith('LA.') || genCode.startsWith('SC.') || genCode.startsWith('HFLE.') || genCode.startsWith('BS.'))) {
+      return {
+        valid: false,
+        reason: `Curriculum code mismatch: "${genCode}" belongs to another subject and cannot be used for Mathematics.`
+      };
+    }
+  }
+
+  // 5. Verify subtopic does not contain cross-subject contamination
+  const genSubtopic = (lesson.subtopic || '').toLowerCase();
+  if (expectedSubject !== 'Language Arts') {
+    if (genSubtopic.includes('decoding multisyllabic') || genSubtopic.includes('mentor text') || genSubtopic.includes('morpholog') || genSubtopic.includes('prefixes and suffixes')) {
+      return {
+        valid: false,
+        reason: `Cross-subject contamination: Subtopic "${lesson.subtopic}" contains Language Arts literacy concepts inside a ${expectedSubject} lesson.`
+      };
+    }
   }
 
   return { valid: true };

@@ -1126,12 +1126,18 @@ STRICT GLOBAL WORKSHEET FORMATTING STANDARD:
    - Section C: REASONING & CHALLENGE (Open-ended analysis, justification, synthesis)
 
 4. QUESTION TYPES & SUBJECT ADAPTATION:
-   - For Mathematics: Word problems, calculation tasks, tables, show-working prompts.
-   - For English Language: Reading excerpts, morphology (prefix/root/suffix), comprehension, sentence construction.
+${context.subject.toLowerCase().includes('math') ? `   - STRICT MATHEMATICS REQUIREMENTS:
+     * Generate exactly 8 complete, solvable mathematical problems (Questions 1 through 8 sequentially).
+     * Section A: CONCEPT FOUNDATION & NUMERICAL EVALUATION (Questions 1–3). Focus on foundational arithmetic, definitions, and direct evaluation.
+     * Section B: APPLIED PROBLEM SOLVING & BELIZEAN CONTEXTS (Questions 4–6). Real-world problems situated in Belize (e.g., market traders in San Ignacio, agriculture in Stann Creek/Cayo, school sports, bus travel along George Price Highway). All numbers, initial values, and rates must be explicitly given.
+     * Section C: MULTI-STEP REASONING & ERROR ANALYSIS (Questions 7–8). Question 7 MUST be an Error Analysis problem where students diagnose a common misconception (e.g., confusing 2³ with 2 × 3 = 6) and calculate the correct solution. Question 8 MUST be a Multi-Step Reasoning problem (e.g., comparing a linear plan vs an exponential growth plan over time).
+     * Mathematical Accuracy: Distinguish repeated multiplication (2 × 2 × 2 = 2³ = 8) from repeated addition (2 × 3 = 6). For growth sequences, explicitly define initial quantity (Stage 0) and stage numbering (n).
+     * NO PLACEHOLDERS: Every question must be fully developed with actual numbers and context. Never use "[Foundational Problem]" or generic prompts.
+     * EXACT TEACHER ANSWER KEY: The answer key MUST provide the exact numerical answer, complete step-by-step mathematical working, units, and clear mark allocations for all 8 questions. Total score = 10 Marks (1 mark each for Q1–Q6, 2 marks each for Q7–Q8). No generic phrases like "verified answer".` : `   - For English Language: Reading excerpts, morphology (prefix/root/suffix), comprehension, sentence construction.
    - For Science: Observations, diagram labeling, experimental reasoning, classification.
    - For Social Studies: Belizean geography/culture/history analysis, map/timeline tasks.
    - Age-appropriate complexity for ${context.grade}.
-   - Situations relevant to Belize where appropriate.
+   - Situations relevant to Belize where appropriate.`}
 
 5. ACCURATE SCORING & TEACHER ANSWER KEY:
    - Total questions must equal the total score (e.g., 8 questions = Score: ______ / 8; 10 questions = Score: ______ / 10).

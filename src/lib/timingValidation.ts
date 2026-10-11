@@ -69,19 +69,18 @@ export function validateAndBalanceLessonTiming(
     plan.subject.toLowerCase().includes('writing') ||
     plan.subject.toLowerCase().includes('english')
   ));
+  const isMath = Boolean(plan.subject && plan.subject.toLowerCase().includes('math'));
+  const isScience = Boolean(plan.subject && (plan.subject === 'Science and Technology' || plan.subject.toLowerCase().includes('science')));
+  const is90Min = isLA || isMath;
 
-  // If Language Arts, default duration is ALWAYS 90 minutes unless explicitly overridden
+  // Mathematics and Language Arts lessons default to 90 minutes unless the teacher explicitly selects another duration
   let targetMinutes: number;
-  if (isLA) {
-    if (!selectedDuration && (!plan.duration || plan.duration === '45 minutes' || plan.duration === '45 mins' || plan.duration === '60 minutes')) {
-      targetMinutes = 90;
-    } else if (selectedDuration === '45 minutes' || selectedDuration === 45) {
-      targetMinutes = 90;
-    } else {
-      targetMinutes = parseMinutes(selectedDuration || plan.duration, 90);
-    }
+  if (selectedDuration !== undefined && selectedDuration !== null && selectedDuration !== '') {
+    targetMinutes = parseMinutes(selectedDuration, is90Min ? 90 : 45);
+  } else if (plan.duration && plan.duration !== '45 minutes' && plan.duration !== '45 mins') {
+    targetMinutes = parseMinutes(plan.duration, is90Min ? 90 : 45);
   } else {
-    targetMinutes = parseMinutes(selectedDuration || plan.duration, 45);
+    targetMinutes = is90Min ? 90 : 45;
   }
 
   let rows: LessonAtAGlanceRow[] = plan.lessonAtAGlance && plan.lessonAtAGlance.length > 0 
@@ -134,6 +133,88 @@ export function validateAndBalanceLessonTiming(
       ];
 
       rows = la7Stages.map((s, idx) => ({
+        time: "",
+        timeMinutes: 0,
+        stage: s.stage,
+        teacherDoes: executionPhases[idx]?.teacherActions?.join("; ") || s.teacherDoes,
+        studentsDo: executionPhases[idx]?.studentActions?.join("; ") || s.studentsDo
+      }));
+    } else if (isMath && targetMinutes === 90) {
+      const math7Stages = [
+        {
+          stage: "Stage 1: Mental Math Warm-Up & Prior Knowledge Hook",
+          teacherDoes: "Lead rapid-fire mental arithmetic warm-up, activate prerequisite computation, and state lesson objectives.",
+          studentsDo: "Solve mental math fluency problems on individual whiteboards and articulate prerequisite concepts."
+        },
+        {
+          stage: "Stage 2: Concrete Exploration & Manipulatives Inquiry",
+          teacherDoes: "Facilitate hands-on exploration using concrete manipulatives situated in an authentic Belizean problem scenario.",
+          studentsDo: "Manipulate physical or visual models in pairs, explore quantitative patterns, and record observations."
+        },
+        {
+          stage: "Stage 3: Explicit Modeling & Visual Representation (I DO)",
+          teacherDoes: "Model transition from concrete to pictorial/abstract models using think-aloud, detailing standard algorithmic steps.",
+          studentsDo: "Track teacher think-aloud, sketch bar models or diagrams in notebooks, and record standard procedure."
+        },
+        {
+          stage: "Stage 4: Guided Interactive Practice (WE DO)",
+          teacherDoes: "Guide students through multi-step worked examples, conduct structured checks for understanding, and provide corrective feedback.",
+          studentsDo: "Work paired calculations, explain mathematical reasoning using formal vocabulary, and self-correct."
+        },
+        {
+          stage: "Stage 5: Differentiated Collaborative Problem-Solving",
+          teacherDoes: "Facilitate tiered problem challenges, scaffold struggling learners, and challenge advanced groups with multi-step Belizean word problems.",
+          studentsDo: "Collaborate in small groups to solve complex application problems and verify calculations reciprocally."
+        },
+        {
+          stage: "Stage 6: Independent Exercise Book Practice (YOU DO)",
+          teacherDoes: "Circulate for micro-interventions, monitor independent execution, and ensure proper algorithmic working.",
+          studentsDo: "Complete individual exercise book problem set independently, showing all step-by-step working and units."
+        },
+        {
+          stage: "Stage 7: Diagnostic Exit Assessment & Reflection",
+          teacherDoes: "Administer short diagnostic exit check, synthesize core mathematical principles, and summarize key takeaways.",
+          studentsDo: "Complete exit ticket independently, self-assess procedural mastery, and reflect on strategy effectiveness."
+        }
+      ];
+
+      rows = math7Stages.map((s, idx) => ({
+        time: "",
+        timeMinutes: 0,
+        stage: s.stage,
+        teacherDoes: executionPhases[idx]?.teacherActions?.join("; ") || s.teacherDoes,
+        studentsDo: executionPhases[idx]?.studentActions?.join("; ") || s.studentsDo
+      }));
+    } else if (isScience) {
+      const science5Stages = [
+        {
+          stage: "Stage 1: Phenomenon Hook & Driving Question",
+          teacherDoes: "Present the observable phenomenon mystery, activate student curiosity, and pose the central inquiry question without revealing the answer.",
+          studentsDo: "Closely observe physical specimen or demonstration, record initial observations, and note the inquiry question in science notebooks."
+        },
+        {
+          stage: "Stage 2: Prior Knowledge & Student Prediction",
+          teacherDoes: "Facilitate diagnostic check to reveal student thinking and prompt individual predictions ('I predict... because...').",
+          studentsDo: "Complete diagnostic probe, articulate justified prediction with causal reasoning, and review the investigation recording log."
+        },
+        {
+          stage: "Stage 3: Hands-on Investigation & Evidence Collection",
+          teacherDoes: "Facilitate student-driven testing, monitor fair testing variables, and prompt systematic data logging in observation tables.",
+          studentsDo: "Manipulate apparatus in collaborative lab pairs, test conditions, measure outcomes, and record empirical evidence in tables."
+        },
+        {
+          stage: "Stage 4: Data Analysis & Scientific Explanation (CER)",
+          teacherDoes: "Lead class data synthesis, introduce formal vocabulary in context, and guide Claim + Evidence + Reasoning construction.",
+          studentsDo: "Analyze patterns across trials, connect evidence to formal scientific concepts, and write CER explanation in notebooks."
+        },
+        {
+          stage: "Stage 5: Belizean Application & Science Exit Ticket",
+          teacherDoes: "Connect concepts to real Belizean ecosystems or technology, address misconceptions, and administer daily Science Exit Ticket.",
+          studentsDo: "Apply scientific mechanism to solve a Belizean challenge, reflect on initial predictions, and complete exit ticket independently."
+        }
+      ];
+
+      rows = science5Stages.map((s, idx) => ({
         time: "",
         timeMinutes: 0,
         stage: s.stage,
@@ -195,7 +276,15 @@ export function validateAndBalanceLessonTiming(
       // Exactly 90 minutes across 7 Language Arts phases
       // 8 + 15 + 15 + 15 + 10 + 15 + 12 = 90
       distributed = [8, 15, 15, 15, 10, 15, 12];
-    } else if (isLA && targetMinutes === 90 && count === 5) {
+    } else if (isMath && targetMinutes === 90 && count === 7) {
+      // Exactly 90 minutes across 7 Mathematics CPA phases
+      // 10 + 15 + 15 + 15 + 15 + 12 + 8 = 90
+      distributed = [10, 15, 15, 15, 15, 12, 8];
+    } else if (isMath && targetMinutes === 45 && count === 7) {
+      // Exactly 45 minutes across 7 Mathematics CPA phases
+      // 5 + 8 + 8 + 8 + 8 + 5 + 3 = 45
+      distributed = [5, 8, 8, 8, 8, 5, 3];
+    } else if ((isLA || isMath) && targetMinutes === 90 && count === 5) {
       // Exactly 90 minutes across 5 phases: 10 + 25 + 25 + 20 + 10 = 90
       distributed = [10, 25, 25, 20, 10];
     } else if (count === 5) {

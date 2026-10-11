@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { WeeklyLessonPlan, LessonPlan } from '../types';
+import { WeeklyLessonPlan, LessonPlan, GradeLevel, Subject } from '../types';
 import { LessonPlanDisplay } from './LessonPlanDisplay';
 import { Card, Tabs, TabsList, TabsTrigger, TabsContent, Button } from './ui';
-import { Calendar, ChevronRight, ChevronLeft, Download, CheckCircle2, Copy } from 'lucide-react';
+import { Calendar, ChevronRight, ChevronLeft, Download, CheckCircle2, Copy, FileCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { exportWeeklyLessonPlanToWord, exportWeeklyLessonPlanToPDF } from '../lib/exportUtils';
+import { WeeklyTestGeneratorModal } from './WeeklyTestGeneratorModal';
 
 interface WeeklyLessonPlanDisplayProps {
   plan: WeeklyLessonPlan;
@@ -22,6 +23,7 @@ export function WeeklyLessonPlanDisplay({
   onSave 
 }: WeeklyLessonPlanDisplayProps) {
   const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   const handleNext = () => {
@@ -62,7 +64,16 @@ export function WeeklyLessonPlanDisplay({
               <p className="text-gray-500 font-medium">{plan.week?.grade || '-'} • {plan.week?.subject || '-'}</p>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={() => setIsTestModalOpen(true)}
+                className="h-9 px-4 rounded-full font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+              >
+                <FileCheck className="w-4 h-4 mr-2" />
+                Generate Weekly Test
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -173,13 +184,24 @@ export function WeeklyLessonPlanDisplay({
                   }
                 }}
                 onGenerateResource={onGenerateResource}
-                // We wrap it in a container so it doesn't look like a full-page stand-alone if needed
-                // But the user said "render using the same lesson UI already built"
               />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
+
+      <WeeklyTestGeneratorModal
+        isOpen={isTestModalOpen}
+        onClose={() => setIsTestModalOpen(false)}
+        initialContext={{
+          grade: (plan.week?.grade || 'Standard 4') as GradeLevel,
+          subject: (plan.week?.subject || 'Mathematics') as Subject,
+          academicYear: (plan as any).academicYear || '2026-2027',
+          cycle: (plan as any).cycle || (plan.week as any)?.cycle || 1,
+          week: (plan as any).week_number || (plan.week as any)?.week || 1,
+          activeWeeklyPlan: plan
+        }}
+      />
     </div>
   );
 }

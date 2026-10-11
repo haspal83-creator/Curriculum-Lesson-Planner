@@ -9,7 +9,13 @@ interface LessonAtAGlanceTableProps {
 
 export const LessonAtAGlanceTable: React.FC<LessonAtAGlanceTableProps> = ({ plan }) => {
   const rows: LessonAtAGlanceRow[] = plan.lessonAtAGlance || [];
-  const targetDurationMinutes = parseMinutes(plan.duration, 45);
+  const is90Min = Boolean(plan.subject && (
+    plan.subject.toLowerCase().includes('math') ||
+    plan.subject.toLowerCase().includes('language') ||
+    plan.subject.toLowerCase().includes('reading') ||
+    plan.subject.toLowerCase().includes('english')
+  ));
+  const targetDurationMinutes = parseMinutes(plan.duration, is90Min ? 90 : 45);
 
   const calculatedMinutes = rows.reduce((acc, row) => {
     return acc + (row.timeMinutes || parseMinutes(row.time, 0));

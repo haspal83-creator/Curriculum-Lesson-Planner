@@ -947,6 +947,9 @@ export default function App() {
       return (
         <WeeklyPlanDetailView 
           plan={selectedWeeklyPlan}
+          plans={lessonPlans}
+          weeklyPlans={weeklyPlans}
+          curriculum={curriculum}
           onBack={() => {
             setSelectedWeeklyPlan(null);
             setActiveTab('saved');
@@ -1028,6 +1031,9 @@ export default function App() {
             cyclePacingMaps={cyclePacingMaps}
             userSettings={userSettings}
             prefillData={prefillData}
+            plans={lessonPlans}
+            weeklyPlans={weeklyPlans}
+            laWeeklyPlans={laWeeklyPlans}
             onSave={async (plan) => { await handleSavePlan(plan); }}
             onGenerateResource={handleGenerateResource}
             onGenerateFullPack={handleGenerateFullPack}

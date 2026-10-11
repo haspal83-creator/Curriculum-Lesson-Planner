@@ -12,21 +12,23 @@ import {
   FileText, 
   Layers, 
   Users, 
-  Sparkles,
-  MessageSquare,
-  HelpCircle,
-  Lightbulb,
-  PenTool,
-  Mic2,
-  Music
+  Sparkles, 
+  MessageSquare, 
+  HelpCircle, 
+  Lightbulb, 
+  PenTool, 
+  Mic2, 
+  Music,
+  FileCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Card, Badge } from './ui';
-import { LanguageArtsWeeklyPlan, LanguageArtsDailyPlan, LanguageArtsDailyStrand } from '../types';
+import { LanguageArtsWeeklyPlan, LanguageArtsDailyPlan, LanguageArtsDailyStrand, GradeLevel, Subject } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { exportLAWeeklyToWord, exportLAWeeklyToPDF } from '../lib/exportUtils';
 import { auth } from '../firebase';
 import { useToasts } from '../context/ToastContext';
+import { WeeklyTestGeneratorModal } from './WeeklyTestGeneratorModal';
 
 interface Props {
   plan: LanguageArtsWeeklyPlan;
@@ -36,6 +38,7 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
   const { showToast } = useToasts();
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
   const [activeView, setActiveTab] = useState<'weekly' | 'daily' | 'resources'>('weekly');
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
   const toggleDay = (day: number) => {
     setExpandedDay(expandedDay === day ? null : day);
@@ -91,7 +94,16 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="primary" 
+              size="sm" 
+              className="gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs" 
+              onClick={() => setIsTestModalOpen(true)}
+            >
+              <FileCheck className="w-4 h-4" />
+              Generate Weekly Test
+            </Button>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => window.print()}>
               <Printer className="w-4 h-4" />
               Print
@@ -491,6 +503,19 @@ export function LanguageArtsWeeklyPlanDisplay({ plan }: Props) {
           </div>
         </div>
       )}
+
+      <WeeklyTestGeneratorModal
+        isOpen={isTestModalOpen}
+        onClose={() => setIsTestModalOpen(false)}
+        initialContext={{
+          grade: (typeof plan.grade === 'object' && plan.grade !== null ? (plan.grade as any).name : String(plan.grade || 'Standard 4')) as GradeLevel,
+          subject: 'Language Arts',
+          academicYear: (plan as any).academicYear || '2026-2027',
+          cycle: typeof plan.cycle === 'object' && plan.cycle !== null ? Number((plan.cycle as any).cycle) : Number(plan.cycle || 1),
+          week: typeof plan.week === 'object' && plan.week !== null ? Number((plan.week as any).week_number || (plan.week as any).week) : Number(plan.week || 1),
+          activeWeeklyPlan: plan
+        }}
+      />
     </div>
   );
 }

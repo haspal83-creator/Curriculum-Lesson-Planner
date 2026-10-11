@@ -59,7 +59,7 @@ export const TeachingModelSelector: React.FC<TeachingModelSelectorProps> = ({
   subject = 'Mathematics',
   topic = '',
   subtopic = '',
-  duration = '45 minutes',
+  duration,
   learningOutcome = '',
   objectives = [],
   mode,
@@ -77,6 +77,12 @@ export const TeachingModelSelector: React.FC<TeachingModelSelectorProps> = ({
 
   const allModels = useMemo(() => getAllTeachingModels(), []);
 
+  const is90Min = subject.toLowerCase().includes('math') || 
+    subject.toLowerCase().includes('language') || 
+    subject.toLowerCase().includes('reading') || 
+    subject.toLowerCase().includes('english');
+  const effectiveDuration = duration || (is90Min ? '90 minutes' : '45 minutes');
+
   // Compute recommendation based on context
   const recommendation = useMemo(() => {
     return recommendTeachingModel({
@@ -84,14 +90,14 @@ export const TeachingModelSelector: React.FC<TeachingModelSelectorProps> = ({
       grade: grade as any,
       topic: topic || 'Unit Topic',
       subtopic,
-      duration,
+      duration: effectiveDuration,
       learningOutcome,
       objectives,
       preferredMode: mode,
       manualPrimary: mode !== 'auto' ? selectedModel : undefined,
       manualSupporting: mode === 'manual' ? supportingModels : undefined
     });
-  }, [subject, grade, topic, subtopic, duration, learningOutcome, objectives, mode, selectedModel, supportingModels]);
+  }, [subject, grade, topic, subtopic, effectiveDuration, learningOutcome, objectives, mode, selectedModel, supportingModels]);
 
   // Sync recommendation to parent if changed
   useEffect(() => {
