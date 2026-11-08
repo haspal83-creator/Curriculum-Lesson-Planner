@@ -587,7 +587,7 @@ export const PrintableLessonPlan: React.FC<PrintableLessonPlanProps> = ({
               <div className="grid grid-cols-3 gap-4 text-xs font-semibold text-slate-800 pt-2 border-t border-slate-200">
                 <div>Name: _______________________________</div>
                 <div>Date: ____________________</div>
-                <div className="text-right">Score: _______ / {res.exitTicket.questions.length}</div>
+                <div className="text-right">Score: _______ / {res.exitTicket.questions.reduce((sum, q) => sum + (q.points || 1), 0)}</div>
               </div>
             </div>
 

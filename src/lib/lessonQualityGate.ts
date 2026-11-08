@@ -319,6 +319,13 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
   const isHFLE = subject === 'HFLE' || subject.toLowerCase().includes('health');
   const isScience = subject === 'Science and Technology' || subject.toLowerCase().includes('science');
   const isBS = subject === 'Belizean Studies';
+  const isMath = isMathematicsSubject(subject);
+
+  // Dedicated Mathematics Engine delegation
+  if (isMath) {
+    plan.subject = 'Mathematics';
+    return enforceMathematicsPurityAndQuality(plan, context);
+  }
 
   // Dedicated Science & Technology Inquiry Engine delegation
   if (isScience) {
@@ -326,7 +333,7 @@ export function enrichAndGuaranteeTeachReady(rawPlan: any, context?: any): Lesso
     const targetDuration = sciencePlan.duration || '45 minutes';
     const { plan: timedPlan } = validateAndBalanceLessonTiming(sciencePlan, targetDuration);
     Object.assign(sciencePlan, timedPlan);
-    sciencePlan.curriculumCode = getAuthoritativeCurriculumCode({ subject: 'Science and Technology', grade, cycle, topic });
+    sciencePlan.curriculumCode = plan.curriculumCode || context?.curriculumCode || sciencePlan.curriculumCode || getAuthoritativeCurriculumCode({ subject: 'Science and Technology', grade, cycle, topic });
     delete (sciencePlan as any).readingPassageFull;
     delete (sciencePlan as any).languageArtsComponents;
     delete (sciencePlan as any).component1Details;

@@ -1,5 +1,6 @@
 import { CurriculumEntry, GradeLevel, Subject, LessonPlan, ALL_GRADE_LEVELS, CyclePacingMap } from '../types';
 import { BELIZE_NATIONAL_CURRICULUM } from '../data/belize_national_curriculum';
+import { runMathematicsAlignmentAudit, isMathematicsSubject } from '../lib/mathQualityGate';
 
 export interface CurriculumFilterParams {
   academicYear?: string;
@@ -625,6 +626,26 @@ export function validateGeneratedLesson(
         valid: false,
         reason: `Cross-subject contamination: Subtopic "${lesson.subtopic}" contains Language Arts literacy concepts inside a ${expectedSubject} lesson.`
       };
+    }
+  }
+
+  // 6. Mathematics-specific alignment and curriculum purity check
+  if (expectedSubject === 'Mathematics' || isMathematicsSubject(expectedSubject)) {
+    const isWeekly = Boolean(lesson.week?.days && Array.isArray(lesson.week.days));
+    const lessonsToCheck = isWeekly ? lesson.week.days.map((d: any) => d.lesson) : [lesson];
+
+    for (let i = 0; i < lessonsToCheck.length; i++) {
+      const dayLesson = lessonsToCheck[i];
+      if (!dayLesson) continue;
+
+      const dayNum = isWeekly ? i + 1 : (dayLesson.day || 1);
+      const dayAudit = runMathematicsAlignmentAudit(dayLesson);
+      if (!dayAudit.isValid) {
+        return {
+          valid: false,
+          reason: `Mathematics alignment failure on ${isWeekly ? `Day ${dayNum}` : 'lesson'}: ${dayAudit.errors[0]}`
+        };
+      }
     }
   }
 

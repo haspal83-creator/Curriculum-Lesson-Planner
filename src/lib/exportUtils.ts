@@ -495,10 +495,11 @@ export function formatLessonForExport(
   output += `   - On-Level Learners: ${res.differentiation.onLevelLearners.join('; ')}\n`;
   output += `   - Advanced Learners: ${res.differentiation.advancedLearners.join('; ')}\n`;
   output += `23. Extended Activity: ${cleanText(res.extensionActivity?.tasks.join('; ') || data.homeworkExtension?.task || 'Apply lesson principles to solve an authentic real-world problem at home.')}\n`;
-  output += `24. Lesson Evaluation:\n`;
-  output += `   - Strengths: ${cleanText(res.reflection.whatWorked || 'High engagement and clear mastery of behavioral objectives.')}\n`;
-  output += `   - Weaknesses: ${cleanText(res.reflection.challenges || 'Pacing during independent work required careful oversight.')}\n`;
-  output += `   - Recommendations: ${cleanText(res.reflection.adjustments || res.reflection.nextSteps || 'Begin next lesson with spiral review.')}\n`;
+  const isMathSubject = res.subject === 'Mathematics' || data?.subject === 'Mathematics';
+  output += `24. Lesson Evaluation (Post-Lesson Reflection):\n`;
+  output += `   - Strengths Observed: ${cleanText(res.reflection.whatWorked || (isMathSubject ? '[Teacher to complete post-lesson: Specific learning evidence and concepts mastered]' : 'High engagement and clear mastery of behavioral objectives.'))}\n`;
+  output += `   - Difficulties / Weaknesses: ${cleanText(res.reflection.challenges || (isMathSubject ? '[Teacher to complete post-lesson: Specific student misconceptions or pacing difficulties]' : 'Pacing during independent work required careful oversight.'))}\n`;
+  output += `   - Recommendations / Next Steps: ${cleanText(res.reflection.adjustments || res.reflection.nextSteps || (isMathSubject ? '[Teacher to complete post-lesson: Follow-up interventions for next lesson]' : 'Begin next lesson with spiral review.'))}\n`;
 
   return output;
 }

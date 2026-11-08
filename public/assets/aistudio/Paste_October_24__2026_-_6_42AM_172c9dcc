@@ -1,0 +1,820 @@
+PROJECT: EduPlan Builder
+TASK: CORRECT AND IMPROVE THE MATHEMATICS WEEKLY LESSON-PLANNING ENGINE
+SPECIFIC CASE: STANDARD 6 MATHEMATICS — ALGEBRAIC FOUNDATIONS
+CURRICULUM CONTEXT: BELIZE PRIMARY EDUCATION
+PRIORITY: HIGH
+SCOPE: MATHEMATICS ONLY
+
+========================================================
+ROLE AND OBJECTIVE
+========================================================
+
+Act as a senior Mathematics curriculum specialist, instructional designer,
+primary-school Mathematics teacher, assessment specialist, and software
+quality-assurance engineer.
+
+Inspect the existing application and correct the Mathematics lesson-planning
+system responsible for generating the uploaded Standard 6 weekly plan.
+
+The current weekly plan covers:
+
+Monday: Translating verbal phrases into algebraic expressions.
+Tuesday: Nested grouping symbols and evaluation of expressions.
+Wednesday: Error analysis and mathematical reasoning.
+Thursday: Formulating algebraic expressions from real-life scenarios.
+Friday: Weekly review and mastery assessment.
+
+The existing plan contains weaknesses in instructional alignment,
+mathematical progression, assessment design, lesson development,
+differentiation, reflection, and resource generation.
+
+Your responsibility is to correct the underlying Mathematics generation
+logic so that the application generates coherent, practical, accurate,
+curriculum-aligned weekly plans.
+
+Do not merely reformat the uploaded document.
+Do not simply regenerate the same content with different wording.
+Fix the underlying causes of the defects.
+
+========================================================
+1. STRICTLY PROTECT THE REST OF THE APPLICATION
+========================================================
+
+Modify only the Mathematics lesson-planning engine and the components
+specifically responsible for generating Mathematics plans and resources.
+
+Before editing:
+
+1. Inspect the codebase.
+2. Identify the Mathematics generation prompts, templates, schemas,
+   services, assessment generators, and resource-generation components.
+3. Trace how weekly topics, daily objectives, activities, worksheets,
+   answer keys, and assessments are generated.
+4. Identify whether any shared components are responsible for the errors.
+5. Implement the smallest safe changes that correct the problems.
+
+Preserve all non-Mathematics subjects and their existing functionality.
+
+Do not alter:
+- Science generation.
+- Language Arts generation.
+- Belizean Studies generation.
+- Health and Family Life Education generation.
+- Spanish or other subject engines.
+- Authentication.
+- Firebase configuration or security rules.
+- Existing user accounts.
+- Saved plans.
+- Curriculum uploads.
+- School settings.
+- Application navigation.
+- Unrelated export functionality.
+
+Do not rebuild the application.
+Do not remove existing features.
+Do not introduce duplicate generation services.
+Do not invent curriculum codes or official learning outcomes.
+
+If a shared component must be modified, ensure its existing behavior remains
+unchanged for all non-Mathematics subjects.
+
+========================================================
+2. PRESERVE THE FIVE-DAY WEEKLY STRUCTURE
+========================================================
+
+Retain the Monday-to-Friday structure of the selected weekly plan.
+
+Improve the instructional progression as follows.
+
+MONDAY:
+TRANSLATING VERBAL PHRASES INTO ALGEBRAIC EXPRESSIONS
+
+Students should learn to:
+- Identify variables and constants.
+- Identify coefficients.
+- Translate verbal phrases into algebraic expressions.
+- Distinguish expressions from equations.
+- Use correct algebraic notation.
+- Understand phrases involving addition, subtraction, multiplication,
+  and division.
+
+TUESDAY:
+SUBSTITUTION AND EVALUATION OF ALGEBRAIC EXPRESSIONS
+
+Students should learn to:
+- Replace a variable with a given numerical value.
+- Use parentheses appropriately when substituting negative values,
+  if appropriate for the selected grade-level curriculum.
+- Evaluate expressions correctly.
+- Show intermediate working.
+- Apply order of operations when required.
+
+IMPORTANT:
+The current Tuesday lesson is titled around nested grouping symbols and
+innermost-first evaluation, but its stated outcome focuses on substituting
+whole-number values into algebraic expressions.
+
+Correct this mismatch.
+
+Make substitution a clearly taught skill, and include nested grouping
+symbols only to the extent required by the selected curriculum outcomes.
+
+Do not claim students are learning substitution if the activities never
+require them to replace a variable with a specified value.
+
+WEDNESDAY:
+ERROR ANALYSIS AND MATHEMATICAL REASONING
+
+Students should learn to:
+- Identify incorrect algebraic notation.
+- Correct substitution errors.
+- Identify errors in evaluating expressions.
+- Explain why an incorrect solution is wrong.
+- Provide corrected working and answers.
+- Justify their reasoning using appropriate mathematical vocabulary.
+
+THURSDAY:
+FORMULATING ALGEBRAIC EXPRESSIONS FROM REAL-LIFE SCENARIOS
+
+Students should learn to:
+- Identify the unknown quantity.
+- Define an appropriate variable.
+- Identify fixed quantities and variable quantities.
+- Formulate expressions from verbal descriptions.
+- Evaluate expressions when numerical values are provided.
+- Explain what the resulting expression represents.
+
+Use relevant Belizean contexts where appropriate.
+
+FRIDAY:
+CUMULATIVE REVIEW AND MASTERY ASSESSMENT
+
+Assess the skills actually taught during the week:
+- Identifying variables, coefficients, and constants.
+- Translating verbal phrases into expressions.
+- Substituting numerical values.
+- Evaluating expressions.
+- Identifying and correcting mathematical errors.
+- Formulating expressions from practical situations.
+
+Do not assess an important skill that has not been adequately taught.
+
+The application must use the selected curriculum outcomes to determine the
+final weekly sequence. The sequence above is the intended structure for
+this specific case, not permission to override a different curriculum topic.
+
+========================================================
+3. VERIFY CURRICULUM ALIGNMENT
+========================================================
+
+The current plan uses the code MA.ST6.C1.02 and describes the curriculum
+framework as the Belize National Primary School Curriculum Framework.
+
+Inspect the curriculum data actually available in the application.
+
+Verify that:
+- The selected class is Standard 6.
+- The subject is Mathematics.
+- The selected cycle is Cycle 1.
+- The selected week is Week 8.
+- The selected topic is Algebraic Foundations.
+- The selected learning outcomes support the generated lessons.
+- The selected curriculum code exists in the available source data.
+
+Do not assume that the current code is correct merely because it appears
+in the uploaded plan.
+
+If the uploaded curriculum supports the code, preserve it.
+
+If the code cannot be verified, flag it for teacher review instead of
+inventing a replacement.
+
+Do not invent official content standards or learning outcomes.
+
+Separate verified curriculum information from general teaching strategies
+created by the application.
+
+========================================================
+4. FIX THE OBJECTIVES
+========================================================
+
+Each daily lesson must have measurable objectives that match the actual
+instruction, practice, and assessment.
+
+Use the structure:
+
+Condition + Student Performance + Criterion.
+
+For example:
+
+"Given five verbal mathematical phrases, students will translate at least
+four correctly into algebraic expressions without using an equals sign."
+
+For substitution:
+
+"Given five algebraic expressions and specified values for their variables,
+students will substitute the values and evaluate at least four expressions
+correctly, showing their working."
+
+For error analysis:
+
+"Given four worked solutions containing mathematical errors, students will
+identify and correct at least three errors and explain the relevant rule."
+
+These are examples of the required quality. Generate final objectives
+appropriate to the verified curriculum outcomes.
+
+Requirements:
+
+1. Use observable action verbs.
+2. Specify measurable success criteria.
+3. Ensure that the objectives are realistic for the available time.
+4. Align the objectives with the actual lesson content.
+5. Include suitable cognitive and practical skills.
+6. Do not force an affective objective into every lesson if it adds no
+   meaningful instructional value.
+7. Avoid vague objectives such as "understand algebra."
+8. Avoid objectives that cannot be assessed during the lesson.
+
+Every objective must have a corresponding teaching activity and assessment.
+
+========================================================
+5. CORRECT THE MATHEMATICS AND NOTATION
+========================================================
+
+Implement a Mathematics-specific validation process.
+
+Check every generated expression, worked example, worksheet question,
+assessment question, and answer key.
+
+Ensure that:
+- Multiplication signs are not omitted accidentally.
+- Exponents display correctly.
+- Parentheses and brackets are balanced.
+- Expressions are unambiguous.
+- Variables are substituted correctly.
+- Every numerical answer is correct.
+- Units and currency are correct where applicable.
+- The answer key matches the displayed question.
+
+For example, retain the distinction between:
+
+3x
+
+and
+
+3 + x.
+
+When x = 6:
+
+3x = 3 × 6 = 18.
+
+Do not incorrectly write 36 or 56.
+
+For an expression such as:
+
+3x², where x = 2,
+
+substitute first:
+
+3 × 2²
+= 3 × 4
+= 12.
+
+Do not incorrectly evaluate it as:
+
+(3 × 2)² = 36.
+
+When teaching expressions, explain the mathematical meaning of the notation.
+
+When teaching order of operations, use the correct precedence rules:
+- Evaluate grouping symbols from the inside outward.
+- Evaluate exponents.
+- Evaluate multiplication and division from left to right.
+- Evaluate addition and subtraction from left to right.
+
+Multiplication does not automatically precede division, and addition does
+not automatically precede subtraction.
+
+Use a reliable arithmetic evaluator or independently verified calculations
+where feasible.
+
+Reject malformed expressions instead of silently guessing their meaning.
+
+Do not mark a lesson mathematically validated until its expressions and
+answer keys have been checked.
+
+========================================================
+6. IMPROVE THE DAILY LESSON DEVELOPMENT
+========================================================
+
+The existing lesson procedures rely heavily on repetitive statements such
+as "actively monitor student calculations" and generic questions about
+mathematical procedures.
+
+Replace these with specific, practical teaching instructions.
+
+Every lesson must include:
+
+A. INTRODUCTION AND DIAGNOSTIC CHECK
+
+Specify:
+- The starter activity.
+- The exact questions students will answer.
+- Expected responses.
+- The prior knowledge being assessed.
+- How the teacher will use the responses.
+
+B. EXPLICIT TEACHING — I DO
+
+Specify:
+- The concept being taught.
+- What the teacher writes or demonstrates.
+- A complete worked example.
+- Each calculation or reasoning step.
+- Questions asked during the explanation.
+- Likely misconceptions and how to correct them.
+
+C. GUIDED PRACTICE — WE DO
+
+Include:
+- Actual mathematical questions.
+- The steps completed together.
+- Questions that guide students' thinking.
+- Expected answers.
+- Opportunities to correct errors before independent work.
+
+D. COLLABORATIVE PRACTICE — YOU DO TOGETHER
+
+Include:
+- A specific pair or group task.
+- Actual questions.
+- Clear instructions.
+- The expected student product.
+- A way for students to explain and check their reasoning.
+
+E. INDEPENDENT PRACTICE — YOU DO ALONE
+
+Include:
+- Actual questions.
+- A reasonable difficulty progression.
+- Independent work that measures individual understanding.
+- Clear expectations for showing working.
+
+F. ERROR ANALYSIS WHERE APPROPRIATE
+
+Include:
+- A complete incorrect solution.
+- The precise step where the error occurs.
+- An explanation of why it is wrong.
+- Corrected working.
+- The correct answer.
+
+G. CLOSURE AND EXIT ASSESSMENT
+
+Include:
+- A concise summary.
+- A specific exit ticket.
+- A final reasoning question where appropriate.
+- The intended evidence of learning.
+- The next instructional step based on the results.
+
+Every stage must be usable by a teacher without having to invent the
+missing activity or questions.
+
+Avoid vague instructions such as:
+"Explain the concept."
+
+Instead state what concept to explain, which example to use, what to ask,
+and how to check student understanding.
+
+========================================================
+7. FIX THE TIME ALLOCATIONS
+========================================================
+
+Each daily lesson is 90 minutes.
+
+Ensure that all phases and timed activities total exactly 90 minutes.
+
+The current structure uses:
+- 10 minutes for the starter.
+- 15 minutes for concrete exploration.
+- 15 minutes for modeling.
+- 15 minutes for guided practice.
+- 15 minutes for collaboration.
+- 12 minutes for independent practice.
+- 8 minutes for closure.
+
+This totals 90 minutes.
+
+You may retain this structure when appropriate, but the actual activities
+must be realistic for the time provided.
+
+Validate:
+- Main phase totals.
+- Subphase totals.
+- No overlapping time ranges.
+- No activity extending beyond its allocated phase.
+- No duplicate counting of time.
+
+If a task cannot realistically be completed in its allotted time, simplify
+the task or revise the allocation while preserving the 90-minute total.
+
+Do not add a new activity without accounting for its time.
+
+========================================================
+8. GENERATE ACTUAL WORKSHEETS
+========================================================
+
+The plan refers to an eight-question worksheet for each day, but the
+lesson itself does not contain the complete worksheets.
+
+Correct the resource-generation workflow.
+
+For every daily worksheet, generate:
+- A clear title.
+- Class and subject.
+- Topic and date.
+- Student name field.
+- Clear instructions.
+- Complete numbered questions.
+- Appropriate working space.
+- A suitable range of difficulty.
+- Marks where appropriate.
+- A separate teacher answer key.
+
+Make the worksheets match the lesson objectives.
+
+MONDAY:
+Focus on translating verbal phrases into expressions.
+
+TUESDAY:
+Focus on substitution and evaluation, including grouping symbols where
+required by the selected outcomes.
+
+WEDNESDAY:
+Focus on identifying, explaining, and correcting errors.
+
+THURSDAY:
+Focus on formulating expressions from practical scenarios.
+
+FRIDAY:
+Use a cumulative review or assessment that samples the week's learning.
+
+Do not generate the same worksheet for all five days.
+
+Do not place unrelated order-of-operations problems in a lesson focused
+on translating verbal phrases unless they serve an explicit learning
+objective.
+
+Check all worksheet answers independently.
+
+Ensure that the worksheet's length matches the time allocated.
+
+========================================================
+9. FIX THE ASSESSMENT DESIGN
+========================================================
+
+Each day must contain an assessment that measures the specific objectives
+for that day.
+
+Replace generic prompts such as:
+
+"Complete this independent diagnostic check before class dismissal to
+demonstrate mastery."
+
+with actual assessment questions.
+
+For each assessment, specify:
+- The exact question.
+- The expected answer.
+- The marks.
+- The scoring rule.
+- The mastery threshold.
+- The response to students who do not meet the threshold.
+
+Keep the mathematics and scoring consistent.
+
+If an exit ticket contains five questions worth one mark each, an 80%
+threshold means at least four out of five marks.
+
+Do not describe an assessment as five questions if it contains a different
+number of questions.
+
+Do not confuse the number of questions with the number of marks.
+
+For Friday, create a complete five-question cumulative assessment.
+Map each question to a weekly objective.
+
+The assessment must cover the week's intended skills in a balanced way.
+
+Provide a separate teacher answer key and marking guide.
+
+Do not count the same assessment as both a worksheet and an exit ticket
+unless the plan explicitly explains the distinction.
+
+========================================================
+10. IMPROVE DIFFERENTIATION
+========================================================
+
+The current plan repeats generic differentiation language across several
+days.
+
+Make differentiation specific to the mathematical skill being taught.
+
+For learners needing additional support:
+- Provide simpler examples.
+- Use partially completed working.
+- Highlight key words or mathematical symbols.
+- Use guided prompts.
+- Provide worked examples and gradual release.
+- Reduce the number of steps before increasing difficulty.
+
+For learners working at the expected level:
+- Provide appropriate grade-level questions.
+- Require correct notation and working.
+- Ask students to explain their choices.
+
+For advanced learners:
+- Provide more complex expressions or scenarios.
+- Require justification.
+- Ask students to create their own examples.
+- Include error analysis and comparison of solution methods.
+
+For learners requiring language support:
+- Explain key vocabulary.
+- Read verbal problems aloud when appropriate.
+- Use visual supports and sentence frames.
+- Provide bilingual support when available and appropriate.
+
+Do not automatically label students with a disability or assume a specific
+learning need without relevant information.
+
+Offer inclusive strategies as options rather than inventing diagnoses.
+
+Every strategy must directly support the day's mathematical objective.
+
+========================================================
+11. FIX THE REFLECTION SECTION
+========================================================
+
+Do not generate reflections that claim a lesson has already taken place.
+
+Separate pre-lesson anticipation from post-lesson reflection.
+
+PRE-LESSON:
+- Anticipated misconceptions.
+- Planned evidence collection.
+- Potential barriers.
+- Planned support strategies.
+- Intended next steps.
+
+POST-LESSON:
+- Objectives achieved.
+- Evidence from student work.
+- Observed misconceptions.
+- Students requiring additional support.
+- Effective strategies.
+- Changes needed for the next lesson.
+
+Leave post-lesson reflection fields blank or provide editable prompts until
+actual classroom evidence is available.
+
+Do not fabricate student names, scores, results, or classroom events.
+
+Use actual saved assessment data only when it is available and relevant.
+
+========================================================
+12. IMPROVE THE FRIDAY REVIEW
+========================================================
+
+The Friday lesson must genuinely consolidate the learning from Monday
+through Thursday.
+
+Do not simply repeat the same generic lesson stages used throughout the
+week.
+
+Create a clear review sequence:
+
+1. Brief retrieval practice.
+2. Review of common errors from earlier lessons.
+3. Targeted practice based on actual assessment evidence, if available.
+4. Independent cumulative assessment.
+5. Brief reflection and next-step planning.
+
+If no earlier assessment data is available, use a short diagnostic task
+rather than inventing student weaknesses.
+
+Make the cumulative assessment the primary source of evidence for the
+weekly mastery decision.
+
+Ensure the assessment duration is realistic.
+
+If the lesson includes an eight-question practice worksheet and a separate
+five-question assessment, allocate sufficient time for both. Otherwise,
+reduce the practice workload or revise the sequence while preserving the
+90-minute duration.
+
+========================================================
+13. IMPROVE RESOURCES AND FORMATTING
+========================================================
+
+Generate resources that are practical for a Belizean Standard 6 classroom.
+
+Use local contexts when mathematically relevant, including:
+- Belizean dollars.
+- Market purchases.
+- Agricultural production.
+- Transportation fees.
+- School fundraising.
+- Community projects.
+
+Ensure that each context supports the intended objective.
+
+The final lesson plan must have:
+- Clear headings.
+- Consistent formatting.
+- Readable tables.
+- Correct mathematical symbols.
+- Complete questions and worked examples.
+- Distinct student worksheets and teacher answer keys.
+- Practical teaching instructions.
+- Consistent lesson timing.
+
+Prevent:
+- Raw Markdown symbols in the rendered output.
+- Missing multiplication signs.
+- Broken exponents.
+- Empty or generic instructional sections.
+- Unexplained placeholders.
+- Repeated assessment questions.
+- Incorrect answer keys.
+- Text overflow in Word and PDF exports.
+
+Verify that the generated notation survives all export formats supported
+by the existing application.
+
+========================================================
+14. ADD MATHEMATICS QUALITY VALIDATION
+========================================================
+
+Before a Mathematics plan is saved or presented as complete, validate:
+
+CURRICULUM:
+- Correct class.
+- Correct subject.
+- Correct cycle and week.
+- Correct topic.
+- Verified curriculum outcomes where available.
+
+OBJECTIVES:
+- Measurable.
+- Appropriate for the class.
+- Aligned with the curriculum.
+- Taught and assessed.
+
+INSTRUCTION:
+- Complete worked examples.
+- Specific guided practice.
+- Specific independent practice.
+- Logical progression.
+- Appropriate difficulty.
+
+MATHEMATICS:
+- Correct notation.
+- Correct calculations.
+- Correct substitutions.
+- Correct answer keys.
+- Appropriate units and currency.
+
+ASSESSMENT:
+- Actual questions.
+- Correct marks.
+- Consistent mastery thresholds.
+- Alignment with objectives.
+- Realistic duration.
+
+RESOURCES:
+- Complete worksheets.
+- Correct answer keys.
+- No unrelated or accidental duplicate content.
+
+TIMING:
+- Exactly 90 minutes for each 90-minute lesson.
+- Consistent phase and subphase durations.
+
+REFLECTION:
+- No fabricated classroom evidence.
+
+Return explicit validation results:
+PASS, WARNING, or FAIL.
+
+Each warning or failure must identify the affected section and explain
+what must be corrected.
+
+Where safe, automatically correct the defect and run validation again.
+
+Do not silently change curriculum outcomes or the mathematical meaning
+of an expression.
+
+========================================================
+15. AUTOMATED TESTS
+========================================================
+
+Add or update tests for the following.
+
+TEST A:
+Verify that translating "six less than twice y" produces 2y - 6.
+
+TEST B:
+Verify that "four less than five times x" produces 5x - 4.
+
+TEST C:
+Verify that 3x, when x = 6, evaluates to 18 rather than 56 or 36.
+
+TEST D:
+Verify that 3x², when x = 2, evaluates to 12 rather than 36.
+
+TEST E:
+Verify that 5 × [2 × (3² + 1)] × 4 evaluates to 400.
+
+TEST F:
+Verify that 100 − 4 × (2³ + 2) evaluates to 60.
+
+TEST G:
+Verify that all daily lesson phase durations sum to 90 minutes.
+
+TEST H:
+Verify that every daily objective is supported by teaching activities
+and at least one assessment item.
+
+TEST I:
+Verify that Friday's five-question assessment contains exactly five
+questions and that its answer key matches them.
+
+TEST J:
+Verify that worksheet question counts, marks, answer keys, and timings
+remain consistent.
+
+TEST K:
+Verify that Mathematics generation uses the selected class, cycle,
+week, topic, and curriculum data.
+
+TEST L:
+Verify that no non-Mathematics lesson-planning engine has been changed
+in behavior.
+
+TEST M:
+Verify that mathematical symbols remain correct in all supported exports.
+
+Run the available tests, type checks, lint checks, and build checks relevant
+to the changes.
+
+Do not claim a test passed unless it was actually executed successfully.
+
+========================================================
+16. IMPLEMENTATION REQUIREMENTS
+========================================================
+
+Do not stop after describing the corrections.
+
+Inspect and modify the actual code responsible for Mathematics lesson
+generation.
+
+Use the project's existing architecture and coding conventions.
+
+Avoid unnecessary dependencies.
+
+Preserve saved lesson plans and user data.
+
+If the current system uses an AI prompt, improve the prompt but also add
+deterministic validation where practical.
+
+Do not rely exclusively on the language model to check its own arithmetic.
+
+If an essential file or service cannot be accessed, explain the limitation
+instead of pretending the implementation is complete.
+
+========================================================
+17. FINAL REPORT
+========================================================
+
+After implementation, report:
+
+1. Root causes identified.
+2. Files changed.
+3. Mathematics generation defects corrected.
+4. Curriculum alignment checks added.
+5. Mathematical validation added.
+6. Lesson development and timing improvements.
+7. Worksheet and assessment improvements.
+8. Reflection and differentiation improvements.
+9. Tests actually executed and their results.
+10. Export formats actually tested.
+11. Any remaining limitations.
+12. Confirmation that non-Mathematics subjects were preserved.
+
+BEGIN by inspecting the current codebase and tracing the Mathematics
+weekly-planning workflow.
+
+Then implement the changes, run the available tests, and report the results.

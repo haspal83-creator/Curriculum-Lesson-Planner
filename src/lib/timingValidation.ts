@@ -276,14 +276,19 @@ export function validateAndBalanceLessonTiming(
       // Exactly 90 minutes across 7 Language Arts phases
       // 8 + 15 + 15 + 15 + 10 + 15 + 12 = 90
       distributed = [8, 15, 15, 15, 10, 15, 12];
-    } else if (isMath && targetMinutes === 90 && count === 7) {
-      // Exactly 90 minutes across 7 Mathematics CPA phases
-      // 10 + 15 + 15 + 15 + 15 + 12 + 8 = 90
-      distributed = [10, 15, 15, 15, 15, 12, 8];
-    } else if (isMath && targetMinutes === 45 && count === 7) {
-      // Exactly 45 minutes across 7 Mathematics CPA phases
-      // 5 + 8 + 8 + 8 + 8 + 5 + 3 = 45
-      distributed = [5, 8, 8, 8, 8, 5, 3];
+    } else if (isMath && count === 7) {
+      if (targetMinutes === 90) {
+        // Exactly 90 minutes across 7 Mathematics CPA phases
+        // 10 + 15 + 15 + 15 + 15 + 12 + 8 = 90
+        distributed = [10, 15, 15, 15, 15, 12, 8];
+      } else if (targetMinutes === 45) {
+        // Exactly 45 minutes across 7 Mathematics CPA phases
+        // 5 + 8 + 8 + 8 + 8 + 5 + 3 = 45
+        distributed = [5, 8, 8, 8, 8, 5, 3];
+      } else {
+        const mathRatios = [10/90, 15/90, 15/90, 15/90, 15/90, 12/90, 8/90];
+        distributed = mathRatios.map(r => Math.max(2, Math.round(targetMinutes * r)));
+      }
     } else if ((isLA || isMath) && targetMinutes === 90 && count === 5) {
       // Exactly 90 minutes across 5 phases: 10 + 25 + 25 + 20 + 10 = 90
       distributed = [10, 25, 25, 20, 10];
@@ -326,10 +331,10 @@ export function validateAndBalanceLessonTiming(
     // Also update executionBoard timeAllocations if phases exist
     if (executionPhases.length > 0) {
       executionPhases = executionPhases.map((phase, i) => {
-        const correspondingMins = distributed[i] || Math.round(targetMinutes / executionPhases.length);
+        const correspondingMins = distributed[i] || rows[i]?.timeMinutes || Math.round(targetMinutes / executionPhases.length);
         return {
           ...phase,
-          timeAllocation: `${correspondingMins} minutes`
+          timeAllocation: rows[i]?.time || `${correspondingMins} minutes`
         };
       });
     }
@@ -344,6 +349,21 @@ export function validateAndBalanceLessonTiming(
         ...row,
         time: timeFormatted,
         timeMinutes: mins
+      };
+    });
+  }
+
+  // Harmonize any internal subphase activity times within execution phases
+  if (executionPhases.length > 0) {
+    executionPhases = executionPhases.map((phase, i) => {
+      const correspondingMins = rows[i]?.timeMinutes || Math.round(targetMinutes / executionPhases.length);
+      const harmonizedTeacher = harmonizePhaseSubactivityTimings(phase.teacherActions || [], correspondingMins);
+      const harmonizedStudent = harmonizePhaseSubactivityTimings(phase.studentActions || [], correspondingMins);
+      return {
+        ...phase,
+        teacherActions: harmonizedTeacher,
+        studentActions: harmonizedStudent,
+        timeAllocation: rows[i]?.time || `${correspondingMins} minutes`
       };
     });
   }
@@ -376,3 +396,58 @@ export function validateAndBalanceLessonTiming(
     }
   };
 }
+
+/**
+ * Harmonizes any internal subphase minute allocations inside action strings
+ * so that no internal subphase durations exceed their parent phase, and the
+ * sum of sub-activities never exceeds the parent phase's duration.
+ */
+export function harmonizePhaseSubactivityTimings(
+  actions: string[],
+  parentMinutes: number
+): string[] {
+  if (!actions || actions.length === 0 || parentMinutes <= 0) return actions;
+
+  // Find all action items that have explicit duration tags like (10 mins), (15 minutes), etc.
+  const timeRegex = /\((\d+)\s*(?:minutes|minute|mins|min|m)\)/gi;
+  const matches: { index: number; minutes: number; matchStr: string }[] = [];
+
+  actions.forEach((act, idx) => {
+    let match;
+    while ((match = timeRegex.exec(act)) !== null) {
+      const mins = parseInt(match[1], 10);
+      if (!isNaN(mins) && mins > 0) {
+        matches.push({ index: idx, minutes: mins, matchStr: match[0] });
+      }
+    }
+  });
+
+  if (matches.length === 0) return actions;
+
+  const totalSubMins = matches.reduce((sum, m) => sum + m.minutes, 0);
+  if (totalSubMins <= parentMinutes && matches.every(m => m.minutes <= parentMinutes)) {
+    return actions; // Already within bounds
+  }
+
+  // Rescale subphase minutes proportionally to fit exactly inside parentMinutes
+  let remaining = parentMinutes;
+  const scaledMinutes: number[] = matches.map((m, i) => {
+    if (i === matches.length - 1) {
+      return Math.max(1, remaining);
+    }
+    const scaled = Math.max(1, Math.round(m.minutes * (parentMinutes / totalSubMins)));
+    remaining -= scaled;
+    return scaled;
+  });
+
+  // Rebuild the actions with adjusted time strings
+  const newActions = [...actions];
+  matches.forEach((m, i) => {
+    const newMin = scaledMinutes[i];
+    newActions[m.index] = newActions[m.index].replace(m.matchStr, `(${newMin} mins)`);
+  });
+
+  return newActions;
+}
+
+export const validateAndHarmonizeLessonTiming = validateAndBalanceLessonTiming;

@@ -572,7 +572,7 @@ export function buildReferenceLessonPlanDocx(
         spacing: { before: idx === 0 ? 30 : 120, after: 40, line: 240 },
         children: [
           new TextRun({
-            text: `${stage.title}${stage.duration ? ` (${stage.duration})` : ''}`,
+            text: `${stage.title}${stage.duration ? (stage.duration.includes('(') ? ` — ${stage.duration}` : ` (${stage.duration})`) : ''}`,
             bold: true,
             size: 21,
             color: '000000'
@@ -961,15 +961,30 @@ export function buildReferenceLessonPlanDocx(
             children: [new TextRun({ text: sec.instructions, size: 20, italics: true, color: TEXT_MUTED })]
           })
         ] : []),
-        ...sec.questions.map(q => new Paragraph({
-          spacing: { before: 40, after: 60 },
-          children: [
-            new TextRun({ text: `${q.number}. `, bold: true, size: 20, color: PRIMARY_NAVY }),
-            new TextRun({ text: q.prompt, size: 20 })
-          ]
-        }))
+        ...sec.questions.flatMap(q => [
+          new Paragraph({
+            spacing: { before: 60, after: 30 },
+            children: [
+              new TextRun({ text: `${q.number}. `, bold: true, size: 20, color: PRIMARY_NAVY }),
+              new TextRun({ text: q.prompt, size: 20 })
+            ]
+          }),
+          new Paragraph({
+            spacing: { before: 20, after: 20 },
+            children: [
+              new TextRun({ text: "Working: ____________________________________________________________________________________", size: 18, color: TEXT_MUTED })
+            ]
+          }),
+          new Paragraph({
+            spacing: { before: 20, after: 50 },
+            children: [
+              new TextRun({ text: "Answer: ____________________________________", size: 18, color: TEXT_MUTED })
+            ]
+          })
+        ])
       ]),
       ...(res.worksheet.answerKey && res.worksheet.answerKey.length > 0 ? [
+        new Paragraph({ children: [new PageBreak()] }),
         createSectionHeading("Worksheet Teacher Answer Key & Scoring Guide", 240),
         ...res.worksheet.answerKey.flatMap(akSec => [
           createSubheading(`SECTION ${akSec.sectionLetter || ''}: ${akSec.sectionTitle.toUpperCase()}`, 120),
@@ -1157,13 +1172,16 @@ export function buildReferenceLessonPlanDocx(
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: masterTableBorders,
         rows: [
-          new TableRow({
-            children: [
-              createGenericCell("Name: ____________________________________", 40),
-              createGenericCell("Date: ____________________", 35),
-              createGenericCell(`Score: _______ / ${res.exitTicket.questions.length}`, 25, { isLabel: true })
-            ]
-          })
+          (() => {
+            const totalETPoints = res.exitTicket.questions.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
+            return new TableRow({
+              children: [
+                createGenericCell("Name: ____________________________________", 40),
+                createGenericCell("Date: ____________________", 35),
+                createGenericCell(`Score: _______ / ${totalETPoints}`, 25, { isLabel: true })
+              ]
+            });
+          })()
         ]
       }),
       new Paragraph({

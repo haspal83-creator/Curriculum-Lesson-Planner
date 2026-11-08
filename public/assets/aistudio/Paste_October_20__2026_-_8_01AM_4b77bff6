@@ -1,0 +1,346 @@
+Act as a senior full-stack engineer, mathematics curriculum specialist, instructional designer, and software test engineer. Inspect the existing EduPlan Builder codebase and repair the Mathematics weekly lesson-planning engine based on the specific defects identified in the supplied Standard 6 Cycle 1 Week 8 Algebraic Foundations lesson plan.
+
+Do not merely rewrite the lesson plan or provide recommendations. Implement the necessary code changes in the existing project.
+
+NON-NEGOTIABLE SCOPE: Modify only Mathematics lesson generation and its directly related Mathematics-specific validation. Do not modify other subjects, authentication, Firebase security rules, unrelated curriculum records, navigation, application branding, or working export features.
+1. Diagnose before modifying
+Inspect the actual source code and identify the functions responsible for:
+- Curriculum and outcome retrieval.
+- Weekly topic selection.
+- Daily lesson generation.
+- Prompt construction.
+- Objectives and success criteria.
+- Teaching procedures and content notes.
+- Assessment generation and scoring.
+- Differentiation and inclusion.
+- Academic calendar and lesson dates.
+- Teacher reflection fields.
+- Saving and validating generated plans.
+Trace the defects to their causes. Do not assume a particular file structure or invent functions that do not exist. Reuse existing architecture wherever practical.
+2. Eliminate generic, repetitive daily procedures
+Remove the behavior that copies essentially identical seven-stage procedures into every daily lesson.
+
+Preserve the 90-minute Mathematics lesson duration when that is the configured duration, but generate the teaching sequence from the actual daily objective.
+
+Every instructional phase must contain specific mathematical content, including:
+- The exact skill being taught.
+- The teacher's explanation and demonstration.
+- Correct worked examples.
+- The questions learners will answer.
+- The activity learners will complete.
+- Likely misconceptions and corrective feedback.
+- Evidence used to assess understanding.
+Generic phrases such as "explain the algorithm," "complete the worksheet," "check the answer," and "solve Belizean word problems" must not substitute for actual teaching instructions.
+
+Reuse a phase structure if useful, but generate the content inside each phase independently from the validated daily learning objective.
+3. Generate a genuine five-day instructional sequence
+For the uploaded Algebraic Foundations example, use the following progression, provided these skills are supported by the authoritative selected curriculum:
+- Monday: Introduce variables and expressions; translate verbal phrases into mathematical expressions.
+- Tuesday: Substitute assigned numerical values into expressions and evaluate them.
+- Wednesday: Analyze incorrect expressions or evaluations, identify the exact error, and correct it.
+- Thursday: Translate realistic situations into expressions and evaluate them when sufficient information is provided.
+- Friday: Conduct a structured review and an independent assessment covering the skills actually taught during the week.
+These are illustrative instructional targets derived from the supplied plan, not a substitute for verifying official curriculum outcomes.
+
+Each day must build on prerequisite knowledge and previous learning. Avoid introducing equations, solving for unknowns, or other advanced skills unless they are supported by the selected curriculum and intended learning outcomes.
+
+Do not force every lesson through manipulatives, multi-step calculations, inverse operations, or the same activity sequence. Select resources and methods that fit the mathematics being taught.
+4. Enforce curriculum integrity
+Treat the selected class, subject, cycle, week, topic, official outcomes, and standards as a single validated planning context.
+
+Preserve official curriculum wording and codes exactly as stored in the selected curriculum records.
+
+Do not assign the same outcome code to multiple different outcomes unless the authoritative curriculum data confirms that the code legitimately applies to each one.
+
+Distinguish between:
+- Official curriculum outcomes.
+- Teacher-developed daily objectives.
+- Suggested instructional activities.
+- Assessment criteria generated for the lesson.
+If the curriculum record is missing or contradictory, report the discrepancy and do not falsely label invented content as officially aligned.
+5. Generate measurable objectives
+Every daily lesson must contain objectives appropriate to that day's learning.
+
+Each objective must include:
+- A clear instructional condition.
+- An observable mathematical performance.
+- A measurable success criterion.
+Use one shared condition across the objectives unless the existing output format explicitly requires otherwise.
+
+Example:
+
+"Given five verbal phrases, learners will translate at least four correctly into algebraic expressions."
+
+For Tuesday, an appropriate objective might assess substitution and evaluation. For Wednesday, it might assess identifying and correcting errors. Do not copy Monday's objective into those lessons.
+
+Affective and practical skills objectives must also be observable where included. Do not use unsupported claims of 100% accuracy or vague statements such as "demonstrate curiosity" as the sole evidence of achievement.
+6. Generate topic-specific content notes
+Produce accurate, learner-friendly notes that Standard 6 pupils can copy into their exercise books.
+
+For translating expressions, explicitly distinguish between:
+- A variable and a numerical constant.
+- An expression and an equation.
+- "Five more than a number" and "five times a number."
+- "The difference between a number and three" and "three minus a number," where order matters.
+Include correct notation, worked examples, explanations of the steps, and short practice questions.
+
+For substitution, show exactly how the assigned value replaces the variable and how the resulting numerical expression is evaluated.
+
+For error analysis, include an incorrect worked solution, identify the precise error, and demonstrate the correction.
+
+For contextual applications, use realistic scenarios with enough information to formulate the intended expression.
+
+Validate every mathematical example and answer key before saving the plan. Do not introduce irrelevant requirements for units or inverse operations when they are not mathematically appropriate.
+7. Align instruction, assessment, and mastery thresholds
+Every objective must be taught, practised, and assessed.
+
+Remove the current generic assessment text and generate assessment items that directly measure the day's intended skill.
+
+Ensure that:
+- The number of questions matches the stated assessment.
+- The answer key matches the questions.
+- The score denominator matches the actual marks available.
+- The mastery threshold is mathematically consistent.
+- Exit-ticket instructions and benchmarks agree.
+- Friday's assessment covers the week's taught content without introducing unannounced topics.
+For example, a five-question exit ticket with an 80% threshold requires four correct answers. A three-question exit ticket cannot use a four-out-of-five benchmark.
+
+Include actual questions, expected answers, and scoring guidance in teacher-facing resources. Keep student-facing assessment papers free of answers.
+8. Make differentiation meaningful
+Generate specific support, core practice, and extension tasks for the actual skill being taught.
+
+Examples include:
+- Support: visual variable cards, sentence frames, highlighted operation words, and partially completed expressions.
+- Core: independent translation and evaluation exercises at Standard 6 level.
+- Extension: ambiguous-language analysis, comparison of different expressions, and error correction with justification.
+Treat inclusion strategies as structured data and render them as readable lists in the final lesson plan. Never expose raw JSON to the teacher.
+
+Do not assume specific diagnoses or label individual learners without information supplied by the teacher.
+9. Correct reflection and calendar logic
+Keep pre-lesson planning separate from post-lesson reflection.
+
+Before teaching, allow the teacher to record anticipated difficulties, planned evidence collection, and intended adjustments.
+
+After teaching, provide editable fields for actual learner performance, strengths, difficulties observed, students needing follow-up, and changes required for the next lesson.
+
+Never fabricate completed teaching reflections.
+
+Use the configured academic calendar and selected instructional week to determine dates. Ensure the weekday and date agree, and respect school holidays and closures. If the calendar is unavailable, flag the missing information rather than inventing dates.
+10. Implement a Mathematics-specific validation layer
+Before a generated plan can be marked as aligned, validate:
+1. Correct class, subject, cycle, week, topic, and academic year.
+2. Traceable official outcomes and curriculum codes.
+3. Distinct daily instructional purposes.
+4. Specific worked examples and topic-appropriate activities.
+5. Alignment between objectives, instruction, and assessment.
+6. Correct mathematical answers and scoring.
+7. Consistent assessment denominators and mastery thresholds.
+8. Readable differentiation and reflection fields.
+9. Valid dates and instructional durations.
+Critical failures must not be concealed by an automatic correction step. Show the teacher the exact problem and allow the underlying data or generation logic to be corrected.
+
+Avoid rejecting a valid lesson simply because it does not follow one rigid template. Validation should check educational correctness and alignment rather than identical wording.
+11. Add automated regression tests
+Implement tests using the existing test framework. At minimum, verify:
+- The five Algebraic Foundations lessons have distinct, appropriate instructional procedures.
+- Monday's translation objectives are not replaced with Tuesday's evaluation objectives.
+- Wednesday's error-analysis activities contain actual errors and valid corrections.
+- Assessment question counts, answer keys, and mastery thresholds agree.
+- Official outcome codes come from the selected curriculum records.
+- Missing curriculum records trigger clear validation errors.
+- The Mathematics engine does not modify or invoke other subject-generation logic unexpectedly.
+- Existing saved plans, user access controls, and unrelated features remain intact.
+Run available tests and type checks. Correct regressions caused by your changes.
+12. Required completion report
+When finished, report:
+1. Root causes discovered.
+2. Exact files modified.
+3. Specific fixes implemented.
+4. Tests executed and their actual results.
+5. Any outstanding issues or information required from the curriculum database.
+Do not claim successful implementation or testing without evidence.
+
+Acceptance standard: A teacher must be able to generate five distinct, mathematically accurate, curriculum-aligned lessons with detailed instructional development, meaningful differentiation, valid assessments, and correct dates. Cosmetic changes alone do not satisfy this task.
+
+How to verify the fix
+After AI Studio applies the changes, regenerate the same Week 8 plan and check these three things first:
+1. Monday versus Tuesday: Monday should teach how to write expressions from words; Tuesday should teach substitution and evaluation. Their worked examples and practice tasks must differ accordingly.
+2. Assessment consistency: A five-question assessment using an 80% benchmark should require four correct answers, and its actual questions must assess the stated objective.
+3. Curriculum integrity: The system must verify MA.ST6.C1.01 against your stored curriculum data instead of assuming the code is valid for every outcome in the plan.
+One final point: the uploaded plan alone cannot establish whether MA.ST6.C1.01 is the correct official code for each listed outcome. The app must check the actual curriculum records before correcting or preserving those codes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+any errors in the plan?
+
+
+
+
+
+
+
+
+
+
+
+
+
+Yes. Based on your Standard 6 Mathematics weekly plan for Cycle 1, Week 8: Algebraic Foundations (October 19–23, 2026), there are several errors worth correcting before you use it with your students.
+
+The biggest issue is that the five daily lessons appear too similar in their procedures, even though students are supposed to develop different algebraic skills throughout the week.
+Main errors in the plan
+Area	Error	Why it matters
+Daily lesson development	Monday through Friday repeat nearly identical lesson stages and generic procedures.	The lessons do not show a clear progression in students’ learning.
+Resources	Base-ten blocks, fraction strips, and counters appear in an algebra-focused unit without a clear purpose.	Resources should support variables, expressions, substitution, and error analysis directly.
+Learning objectives	Some objectives and success criteria are generic or do not match the specific daily task.	It becomes difficult to determine whether students achieved that day’s intended outcome.
+Assessment	Some exit tickets reportedly contain 3 questions, while the success criterion requires 4 out of 5.	The assessment and criterion contradict each other.
+Differentiation	Strategies are not sufficiently tailored to students who struggle with variables or need more challenging algebra problems.	Students may not receive the support or extension they need.
+Inclusion strategies	Some strategies appear as raw JSON rather than readable instructional directions.	The plan is not professional or ready to use as printed.
+Reflection	The reflection section contains anticipated reflections rather than actual post-lesson observations.	A teacher cannot accurately record student performance before teaching the lesson.
+Additional issues to check
+1. Curriculum alignment: The plan uses MA.ST6.C1.01. I cannot confirm from the plan alone that this is the official outcome code or that its wording matches the Belize primary curriculum. Check it against the curriculum guide stored in your app before treating it as verified.
+
+2. Monday–Friday progression: The lessons should build in a logical sequence:
+- Monday: Identify variables and translate verbal phrases into algebraic expressions.
+- Tuesday: Substitute given values and evaluate expressions.
+- Wednesday: Identify, explain, and correct errors in expressions and evaluations.
+- Thursday: Formulate and evaluate expressions in practical, real-world situations.
+- Friday: Complete an independent assessment covering the week’s skills.
+3. Assessment quality: Every assessment must match its stated success criterion. For example, if students answer 3 questions, the plan should not require 4 correct answers out of 5. Each day should have its own assessment aligned with that day’s objective.
+
+4. Lesson timing: Each lesson is 90 minutes. The activities should have clear time allocations that total exactly 90 minutes, with enough time for guided practice, independent work, feedback, and an exit ticket.
+
+5. Content notes and examples: Students need clear, age-appropriate notes and worked examples. For instance, the plan should explicitly distinguish \(3x\) from \(3+x\), and show how to evaluate \(2x+5\) when \(x=4\).
+
+6. Teacher reflection: Replace predicted reflections with a blank or post-lesson section for recording what students understood, the difficulties encountered, and the adjustments needed for the next lesson.
+My overall judgment
+The plan has a workable weekly topic and a sensible sequence of algebra skills, but it needs revision before it is ready for classroom use. The priority is to make each day a complete, distinct lesson rather than repeating the same lesson structure with different headings.
+
+I would fix these issues in this order:
+1. Verify the official curriculum outcome and code.
+2. Rewrite the five daily lesson developments so each teaches a distinct skill.
+3. Align objectives, activities, resources, and assessments for each day.
+4. Correct assessment counts, success criteria, and timing.
+5. Clean up the inclusion strategies and reflection section.
+These changes should be made in the Mathematics engine only, without altering the lesson-planning logic for other subjects. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+write the prompt to fix the mathematics planning
+
+
+
+
+
+
+
+
+
+
+
+
+
+Copy and paste the following prompt into Google AI Studio. It is designed to fix the Mathematics planning engine in EduPlan Builder while preserving all other subjects and existing app functionality.
+Google AI Studio Implementation Prompt
+
+Scope: Mathematics weekly and daily lesson planning · Standard 1–6 · Belize Primary National Curriculum
+
+PROMPT — FIX THE MATHEMATICS PLANNING ENGINE
+
+ Copy full prompt
+
+You are working on my existing EduPlan Builder application. Your task is to diagnose and fix the Mathematics lesson-planning engine only. Do not redesign the app or change the planning engines for any other subject.
+
+1. INSPECT BEFORE EDITING
+
+Inspect the existing code, Mathematics generation prompts, curriculum data flow, weekly planner, daily lesson generator, objective builder, assessment generator, resource generator, reflection fields, and relevant validation logic. Identify the actual causes of the defects before changing code. Reuse the existing architecture and components where possible.
+
+2. STRICT SCOPE
+
+Only modify code required to improve Mathematics weekly and daily lesson planning and directly related Mathematics-specific validation. Do not change Science, Language Arts, Belizean Studies, HFLE, Spanish, Religious Studies, other subjects, authentication, Firebase security rules, database ownership, navigation, branding, unrelated screens, or export systems unless a directly necessary Mathematics dependency is demonstrated. Do not perform unrelated refactoring. Preserve existing saved plans and curriculum records.
+
+3. CURRICULUM ACCURACY
+
+Use the authoritative curriculum records already stored in the application for the selected class, subject, cycle, week, academic year, strand, content standard, and learning outcomes. Preserve the official wording and codes. Never invent or silently rewrite an outcome or curriculum code. Verify codes against the stored source before using them. If the required source is missing or ambiguous, flag the alignment for review rather than claiming it is verified. Do not substitute a different grade, cycle, week, or subject's curriculum content.
+
+4. CREATE FIVE DISTINCT DAILY LESSONS
+
+Generate five complete lessons for Monday through Friday, each aligned to the selected weekly topic and curriculum outcome. Each day must have a distinct instructional purpose and an appropriate progression of learning. Do not copy the same generic procedure into all five lessons.
+
+For an algebra unit, for example, a progression may move from understanding variables and translating verbal phrases, to substitution and evaluation, to error analysis, to practical applications, and finally to cumulative assessment—but use the actual selected curriculum topic and outcomes rather than forcing this example onto every Mathematics week.
+
+Each daily lesson must contain specific teaching explanations, examples, teacher modelling, guided practice, student tasks, independent practice, formative assessment, feedback, and a meaningful closure or exit ticket. Explain what learners will do and what evidence of learning the teacher should observe. Activities must become appropriately more demanding as the week progresses. Friday must consolidate and assess the week's actual learning rather than introduce unrelated content.
+
+5. STRONG MATHEMATICS DEVELOPMENT
+
+For every lesson, include mathematically correct, age-appropriate worked examples with step-by-step solutions where appropriate. Explain the reasoning behind procedures, not just the answers. Identify likely misconceptions and show how the lesson will address them. Include mathematical vocabulary, symbols, representations, and problem-solving strategies that genuinely support the selected topic. Check every generated calculation, answer, worked example, and answer key for correctness.
+
+6. OBJECTIVES AND SUCCESS CRITERIA
+
+Write measurable objectives for the actual skill taught that day. Objectives must describe observable student performance and include a clear condition and measurable criterion where appropriate. Keep objectives, activities, practice tasks, and assessments aligned. Do not reuse identical objectives or criteria across days unless justified by the curriculum. Ensure success criteria are realistic and measurable using the actual task and number of questions.
+
+7. MATHEMATICS-SPECIFIC RESOURCES
+
+Recommend resources that directly support the selected Mathematics topic. Explain how each resource will be used. Do not automatically insert base-ten blocks, fraction strips, counters, or other manipulatives into every lesson. Use them only when pedagogically appropriate. Include practical worksheets, differentiated question sets, worked examples, and answer keys when relevant. Ensure every resource matches the class level, lesson objective, and actual weekly topic.
+
+8. ACCURATE 90-MINUTE LESSON TIMING
+
+For lessons configured for 90 minutes, allocate realistic times to each instructional stage and ensure the durations add up to exactly 90 minutes. Include time for teaching and modelling, guided practice, independent or collaborative application, checking understanding, feedback, and closure. Do not assign unrealistic amounts of time to simple tasks or omit time for student practice. Respect the app's existing subject-specific duration settings.
+
+9. ASSESSMENT VALIDATION
+
+Every assessment must measure the day's objective. The number of questions, marks available, answer key, scoring instructions, and success criterion must agree. Never state “4 out of 5” when the assessment contains only 3 questions. If a criterion is 80%, calculate the required number of correct responses consistently and make the denominator explicit. Distinguish formative checks from graded assessments. Friday's assessment must cover the selected week's taught outcomes, with a clear mark scheme and balanced coverage. Validate generated answers and marks before displaying the plan.
+
+10. DIFFERENTIATION AND INCLUSION
+
+Provide practical support for learners who struggle, including worked examples, scaffolded questions, vocabulary support, guided practice, and gradual removal of scaffolds. Provide appropriate extension tasks for learners who master the content. Include strategies for learners with different readiness levels without lowering the core learning expectation unnecessarily. All inclusion and differentiation instructions must render as readable text or lists, never raw JSON, object notation, or internal data structures.
+
+11. WEEKLY CONSISTENCY AND REFLECTION
+
+Ensure all five lessons belong to the selected class, subject, academic year, cycle, week, and topic. Prevent unrelated topics and generic filler from appearing. Keep planned reflection prompts separate from actual post-lesson reflection. Before teaching, show reflection prompts or leave the reflection field blank. After teaching, allow the teacher to record what students mastered, difficulties observed, evidence collected, and the next instructional steps. Never present predicted results as completed observations.
+
+12. GENERATION AND VALIDATION LOGIC
+
+Fix the underlying Mathematics-specific causes rather than merely changing the wording of one example plan. Add or update validation to check curriculum alignment, day-to-day progression, objective-task-assessment alignment, calculation correctness, assessment denominators, duration totals, readable formatting, and class/cycle/week/topic consistency. Regenerate or flag only the defective Mathematics section when validation fails. Avoid unnecessary repeated generation and preserve the app's existing data model and user workflow.
+
+13. REGRESSION TESTS
+
+Test the Mathematics engine against multiple topics and grade levels, including a topic that uses manipulatives and one that does not. Test a full Monday-to-Friday week, a different selected week, and a case with missing or ambiguous curriculum data. Verify that lesson content changes according to the selected topic and that assessment counts and scoring criteria agree. Verify that existing non-Mathematics generation remains unchanged. Do not claim tests passed unless they were actually run.
+
+14. IMPLEMENTATION RULES
+
+Work directly in the existing codebase. First report the files and functions responsible for the problems, then implement the smallest reliable changes. Do not stop at providing recommendations or a sample prompt; make the code changes. Do not replace the application, rebuild unrelated modules, remove existing functionality, hardcode the example Algebraic Foundations week, or invent curriculum data. If an essential dependency is missing, explain exactly what is missing and make only safe changes that can be verified.
+
+15. FINAL REPORT
+
+After implementation, report: (a) root causes found, (b) files changed, (c) exact Mathematics planning improvements made, (d) validation and regression tests actually run and their results, (e) any remaining defects or unverified curriculum mappings, and (f) confirmation of which unrelated subjects and systems were left untouched.
+
+SUCCESS STANDARD
+
+A teacher should receive five genuinely distinct, complete, mathematically accurate lessons that align with the selected official curriculum, use appropriate resources, include measurable objectives and consistent assessments, have realistic timing, support different learner needs, and are ready to teach after normal teacher review. Fix the Mathematics planning engine itself, not just the appearance of its output.

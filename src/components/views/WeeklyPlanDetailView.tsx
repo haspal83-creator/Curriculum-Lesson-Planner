@@ -87,9 +87,9 @@ export default function WeeklyPlanDetailView({
               </Button>
             }
             items={[
-              { label: 'Worksheet', onClick: () => onGenerateResource(plan as any, 'Worksheet'), icon: <Layers className="w-4 h-4" /> },
-              { label: 'Quiz', onClick: () => onGenerateResource(plan as any, 'Quiz'), icon: <ListChecks className="w-4 h-4" /> },
-              { label: 'Discussion Guide', onClick: () => onGenerateResource(plan as any, 'Discussion Guide'), icon: <MessageSquare className="w-4 h-4" /> }
+              { label: 'Worksheet', onClick: () => onGenerateResource?.(plan as any, 'Worksheet'), icon: <Layers className="w-4 h-4" /> },
+              { label: 'Quiz', onClick: () => onGenerateResource?.(plan as any, 'Quiz'), icon: <ListChecks className="w-4 h-4" /> },
+              { label: 'Discussion Guide', onClick: () => onGenerateResource?.(plan as any, 'Discussion Guide'), icon: <MessageSquare className="w-4 h-4" /> }
             ]}
           />
         </div>
@@ -100,14 +100,14 @@ export default function WeeklyPlanDetailView({
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">Weekly Overview</span>
-              <span className="text-xs text-gray-400 font-medium">{new Date(plan.createdAt).toLocaleDateString()}</span>
+              <span className="text-xs text-gray-400 font-medium">{plan?.createdAt ? new Date(plan.createdAt).toLocaleDateString() : 'N/A'}</span>
             </div>
-            <h2 className="text-3xl font-black text-gray-900 tracking-tight print:text-2xl">{plan.weekly_topic}</h2>
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight print:text-2xl">{plan?.weekly_topic || 'Weekly Curriculum Plan'}</h2>
             <div className="flex flex-wrap gap-2">
-              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">{plan.grade_level}</span>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">{plan.subject}</span>
-              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-black uppercase tracking-widest">Cycle {plan.cycle}</span>
-              <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-[10px] font-black uppercase tracking-widest">Week {plan.week_number}</span>
+              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-widest">{plan?.grade_level || (plan as any)?.grade || 'N/A'}</span>
+              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">{plan?.subject || 'N/A'}</span>
+              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-black uppercase tracking-widest">Cycle {plan?.cycle ?? 1}</span>
+              <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-[10px] font-black uppercase tracking-widest">Week {plan?.week_number ?? 1}</span>
             </div>
           </div>
         </div>
@@ -119,7 +119,7 @@ export default function WeeklyPlanDetailView({
               Weekly Big Idea
             </h3>
             <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-50">
-              <p className="text-indigo-900 leading-relaxed italic">"{plan.weekly_big_idea}"</p>
+              <p className="text-indigo-900 leading-relaxed italic">"{plan?.weekly_big_idea || 'N/A'}"</p>
             </div>
           </section>
 
@@ -129,7 +129,7 @@ export default function WeeklyPlanDetailView({
               Skill Progression
             </h3>
             <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-50">
-              <p className="text-emerald-900 text-sm leading-relaxed">{plan.weekly_skill_progression}</p>
+              <p className="text-emerald-900 text-sm leading-relaxed">{plan?.weekly_skill_progression || 'N/A'}</p>
             </div>
           </section>
         </div>
@@ -150,12 +150,12 @@ export default function WeeklyPlanDetailView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {plan.daily_breakdown_table.map((day) => (
-                  <tr key={day.day}>
-                    <td className="py-4 px-4 font-bold text-gray-600">Day {day.day}</td>
-                    <td className="py-4 px-4 font-bold text-gray-900">{day.lessonTitle}</td>
-                    <td className="py-4 px-4 text-sm text-gray-600">{day.focus}</td>
-                    <td className="py-4 px-4 text-sm text-gray-600">{day.mainActivity}</td>
+                {(plan?.daily_breakdown_table || []).map((day, idx) => (
+                  <tr key={day?.day ?? idx}>
+                    <td className="py-4 px-4 font-bold text-gray-600">Day {day?.day ?? idx + 1}</td>
+                    <td className="py-4 px-4 font-bold text-gray-900">{day?.lessonTitle || 'Lesson'}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{day?.focus || 'N/A'}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">{day?.mainActivity || 'N/A'}</td>
                   </tr>
                 ))}
               </tbody>

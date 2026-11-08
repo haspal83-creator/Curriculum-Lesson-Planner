@@ -12,8 +12,22 @@ import {
 } from '../types';
 import { normalizeLearningObjectives } from './learningObjectivesHelper';
 import { enforceLanguageArtsPurityAndQuality, isLanguageArtsSubject } from './languageArtsQualityGate';
+import { 
+  enforceMathematicsPurityAndQuality, 
+  isMathematicsSubject, 
+  buildAuthoritativeMathWorksheet, 
+  buildAuthoritativeMathExitTicket 
+} from './mathQualityGate';
+import { 
+  isScienceSubject, 
+  validateAndRepairScienceLesson,
+  buildAuthoritativeScienceWorksheet,
+  buildAuthoritativeScienceExitTicket
+} from './scienceQualityGate';
+import { getScienceCurriculumPack } from './scienceCurriculumBanks';
 import { parseAndNormalizeWorksheet, formatWorksheetMarkdown } from './worksheetSystem';
 import { getAuthoritativeCurriculumCode, getTopicFocalInquiry, detectCrossSubjectContamination } from '../services/curriculumHierarchyService';
+import { parseMinutes } from './timingValidation';
 
 // ==========================================
 // CONSTANTS & SCHOOL POLICIES
@@ -77,10 +91,25 @@ export function toCleanBullets(items: any): string[] {
           list.push(cleaned);
         }
       });
-    } else if (typeof val === 'object') {
-      const text = val.task || val.name || val.text || val.scaffold || val.rule || val.question || JSON.stringify(val);
-      const cleaned = sanitizeExportText(text);
-      if (cleaned.length > 0) list.push(cleaned);
+    } else if (typeof val === 'object' && val !== null) {
+      if (val.task || val.name || val.text || val.scaffold || val.rule || val.question) {
+        const text = val.task || val.name || val.text || val.scaffold || val.rule || val.question;
+        const cleaned = sanitizeExportText(text);
+        if (cleaned.length > 0) list.push(cleaned);
+      } else {
+        // Formatted structured maps (e.g. inclusionSupport: { dyscalculia, dyslexia, ell, ... })
+        Object.entries(val).forEach(([key, value]) => {
+          if (value && typeof value === 'string' && value.trim()) {
+            const label = key === 'ell' ? 'ELL' : key.charAt(0).toUpperCase() + key.slice(1);
+            const cleaned = sanitizeExportText(value);
+            if (cleaned.length > 0) {
+              list.push(`${label} Support: ${cleaned}`);
+            }
+          } else if (value && typeof value === 'object') {
+            add(value);
+          }
+        });
+      }
     }
   };
 
@@ -520,8 +549,13 @@ export function resolveCompleteLessonResources(
   planInput: LessonPlan, 
   options: { schoolName?: string; teacherName?: string } = {}
 ): ResolvedLessonResources {
+  const isInputSci = isScienceSubject(planInput.subject);
   const plan = isLanguageArtsSubject(planInput.subject) 
     ? enforceLanguageArtsPurityAndQuality(planInput)
+    : isMathematicsSubject(planInput.subject)
+    ? enforceMathematicsPurityAndQuality(planInput)
+    : isInputSci
+    ? validateAndRepairScienceLesson(planInput).plan
     : planInput;
 
   // 1. School Name Resolution
@@ -541,9 +575,10 @@ export function resolveCompleteLessonResources(
   const grade = sanitizeExportText(plan.grade || 'Standard 6');
   const subject = sanitizeExportText(plan.subject || 'Language Arts');
   const isLA = isLanguageArtsSubject(plan.subject || subject);
-  const isMath = Boolean((plan.subject || subject || '').toLowerCase().includes('math'));
+  const isMath = isMathematicsSubject(plan.subject || subject);
+  const isSci = isScienceSubject(plan.subject || subject);
   const duration = sanitizeExportText(plan.duration || ((isLA || isMath) ? '90 Minutes' : '45 Minutes'));
-  const topic = sanitizeExportText(plan.topic || plan.lessonTitle || (isLA ? 'Expository Essay Writing and Thesis Statements' : 'Core Curriculum Topic'));
+  const topic = sanitizeExportText(plan.topic || plan.lessonTitle || (isLA ? 'Expository Essay Writing and Thesis Statements' : isMath ? 'Mathematics Concepts and Problem Solving' : 'Core Curriculum Topic'));
   const subtopic = sanitizeExportText(
     plan.subtopic || getTopicFocalInquiry(subject, topic)
   );
@@ -572,22 +607,30 @@ export function resolveCompleteLessonResources(
     ? `Given a grade-level informational mentor text on the Belize Barrier Reef and an anchor chart of Greek and Latin affixes`
     : (isLA 
         ? `Given an authentic Belizean mentor text, a focused anchor chart on ${topic}, and structured guided practice:`
-        : `Given clear demonstration models, guided practice activities, and primary classroom resources:`)));
+        : (isMath
+            ? `Given concrete manipulatives, step-by-step worked examples, and real-world problem scenarios in Belize:`
+            : `Given clear demonstration models, guided practice activities, and primary classroom resources:`))));
   const cognitive = sanitizeExportText(normObjectives.cognitive || (isBenchmarkTestCase
     ? `Students will dissect multisyllabic academic words into prefixes, base roots, and suffixes with 80% accuracy.`
     : (isLA
         ? `Students will identify, analyze, and explain key elements of ${topic} with at least 80% accuracy in text-dependent questions.`
-        : `Students will identify, explain, and apply core principles of ${topic} with at least 80% accuracy.`)));
+        : (isMath
+            ? `Students will calculate successive terms, apply algorithmic procedures, and formulate mathematical expressions for ${topic} with at least 80% accuracy (e.g. 4 out of 5 core problems correct).`
+            : `Students will identify, explain, and apply core principles of ${topic} with at least 80% accuracy.`))));
   const psychomotor = sanitizeExportText(normObjectives.psychomotor || (isBenchmarkTestCase
     ? `Students will construct and record morphological word trees in their literacy notebooks.`
     : (isLA
         ? `Students will identify textual evidence, organize ideas, and compose grammatically complete written responses demonstrating ${topic} in their literacy workbooks.`
-        : `Students will record systematic observations, organize responses, and complete practice tasks in their exercise books.`)));
+        : (isMath
+            ? `Students will construct accurate mathematical diagrams, stage growth tables, and record step-by-step calculations in their exercise books.`
+            : `Students will record systematic observations, organize responses, and complete practice tasks in their exercise books.`))));
   const affective = sanitizeExportText(normObjectives.affective || (isBenchmarkTestCase
     ? `Students will participate actively in partner discussions demonstrating appreciation for marine conservation.`
     : (isLA
         ? `Students will participate actively in partner discussions, cite textual evidence, and express confidence in their language analysis.`
-        : `Students will participate actively in partner discussions, ask clarifying questions, and demonstrate confidence in their subject inquiry.`)));
+        : (isMath
+            ? `Students will actively articulate mathematical reasoning with learning partners and demonstrate perseverance when tackling challenging non-routine problems.`
+            : `Students will participate actively in partner discussions, ask clarifying questions, and demonstrate confidence in their subject inquiry.`))));
 
   const scItemsRaw = plan.learningObjectivesBoard?.successCriteria && plan.learningObjectivesBoard.successCriteria.length > 0
     ? plan.learningObjectivesBoard.successCriteria
@@ -663,6 +706,15 @@ export function resolveCompleteLessonResources(
       { term: 'Biodiversity', definition: 'The variety of plant and animal life in a particular habitat, such as the Belize Barrier Reef.' },
       { term: 'Unsustainable', definition: 'Not capable of being prolonged or continued without depleting natural resources or causing damage.' }
     ];
+  } else if (isMath) {
+    vocabularyList = [
+      { term: 'Base', definition: 'The repeated factor in a power or exponential expression (e.g., 2 in 2³).' },
+      { term: 'Exponent', definition: 'The number of times the base is multiplied by itself (e.g., 3 in 2³ = 2 × 2 × 2 = 8).' },
+      { term: 'Power', definition: 'An expression representing repeated multiplication of a base by itself.' },
+      { term: 'Initial Value (Stage 0)', definition: 'The starting quantity before any growth or multiplying operations begin.' },
+      { term: 'Growth Factor', definition: 'The constant ratio by which a quantity multiplies from one stage to the next.' },
+      { term: 'Repeated Multiplication', definition: 'Multiplying a number by itself repeatedly, distinctly different from repeated addition.' }
+    ];
   } else {
     vocabularyList = [
       { term: topic, definition: 'Primary instructional focus of the lesson' },
@@ -690,6 +742,13 @@ export function resolveCompleteLessonResources(
       { name: 'Daily Exit Ticket Slips', purpose: 'Diagnostic individual assessment of morphological mastery' },
       { name: 'Literacy Workbooks & Whiteboards', purpose: 'Student active response and partner note-taking' }
     ];
+  } else if (isMath) {
+    materialsList = [
+      { name: 'Concrete Manipulatives (Counters, Grid Tiles, Folding Strips)', purpose: 'Hands-on inquiry and physical pattern exploration' },
+      { name: 'Student Practice Worksheet (8 Solvable Questions, 10 Marks)', purpose: 'Step-by-step mathematical problem solving and calculation' },
+      { name: 'Teacher Visual Chart & Anchor Blueprint', purpose: 'Display of standard algorithmic notation and worked models' },
+      { name: 'Diagnostic Exit Ticket Slips (3 Diagnostic Questions)', purpose: 'Individual assessment of mathematical learning outcome' }
+    ];
   }
 
   const teachingStrategy = sanitizeExportText(
@@ -703,7 +762,7 @@ export function resolveCompleteLessonResources(
     '80% student mastery on core practice worksheet and diagnostic exit ticket'
   );
 
-  // 8. Instructional Stages Procedure (7 Stages for 90-Min Language Arts, 5 Stages for standard subjects)
+  // 8. Instructional Stages Procedure (7 Stages for 90-Min Language Arts & Math, 5 Stages for standard subjects)
   const stageDefs = isLA
     ? [
         { num: 1, name: 'Stage 1: Engage & Prior Knowledge', dur: '8 min' },
@@ -714,6 +773,26 @@ export function resolveCompleteLessonResources(
         { num: 6, name: 'Stage 6: Independent Reading & Writing Application', dur: '15 min' },
         { num: 7, name: 'Stage 7: Exit Assessment & Closure', dur: '12 min' }
       ]
+    : isMath
+    ? [
+        { num: 1, name: 'Stage 1: Mental Math Warm-Up & Diagnostic Hook', dur: '10 min' },
+        { num: 2, name: 'Stage 2: Concrete Exploration & Manipulatives Inquiry', dur: '15 min' },
+        { num: 3, name: 'Stage 3: Explicit Teacher Modeling ("I Do")', dur: '15 min' },
+        { num: 4, name: 'Stage 4: Guided Interactive Practice ("We Do")', dur: '15 min' },
+        { num: 5, name: 'Stage 5: Differentiated Collaborative Problem-Solving', dur: '15 min' },
+        { num: 6, name: 'Stage 6: Independent Exercise Book & Worksheet Practice ("You Do")', dur: '12 min' },
+        { num: 7, name: 'Stage 7: Diagnostic Exit Assessment & Reflection Closure', dur: '8 min' }
+      ]
+    : isSci
+    ? (plan.executionBoard && plan.executionBoard.length === 5
+        ? plan.executionBoard.map((p, idx) => ({ num: idx + 1, name: p.phase, dur: p.timeAllocation }))
+        : [
+            { num: 1, name: 'Phase 1: Engage', dur: '5 min' },
+            { num: 2, name: 'Phase 2: Explore', dur: '15 min' },
+            { num: 3, name: 'Phase 3: Explain', dur: '10 min' },
+            { num: 4, name: 'Phase 4: Elaborate', dur: '10 min' },
+            { num: 5, name: 'Phase 5: Evaluate', dur: '5 min' }
+          ])
     : [
         { num: 1, name: 'Introduction / Warm-Up', dur: '5 min' },
         { num: 2, name: 'Explicit Teaching (I Do)', dur: '10 min' },
@@ -724,9 +803,10 @@ export function resolveCompleteLessonResources(
 
   const stages = stageDefs.map((st, idx) => {
     const exPhase = plan.executionBoard?.[idx];
+    const lagStage = plan.lessonAtAGlance?.[idx];
     const stageDuration = (exPhase?.timeAllocation && exPhase.timeAllocation.trim()) 
       ? exPhase.timeAllocation 
-      : st.dur;
+      : (lagStage?.time && lagStage.time.trim() ? lagStage.time : st.dur);
     let teacherActs: string[] = [];
     let studentActs: string[] = [];
     let questions: string[] = [];
@@ -739,6 +819,13 @@ export function resolveCompleteLessonResources(
       questions = toCleanBullets(exPhase.questionsToAsk || (exPhase as any).questions);
       check = sanitizeExportText(exPhase.checkForUnderstanding || exPhase.assessmentOpportunity || '');
       res = toCleanBullets(exPhase.materialsUsed);
+    }
+
+    if (teacherActs.length === 0 && lagStage?.teacherDoes) {
+      teacherActs = toCleanBullets(lagStage.teacherDoes);
+    }
+    if (studentActs.length === 0 && lagStage?.studentsDo) {
+      studentActs = toCleanBullets(lagStage.studentsDo);
     }
 
     // Fallbacks if empty
@@ -835,6 +922,50 @@ export function resolveCompleteLessonResources(
             ];
           }
         }
+      } else if (isMath) {
+        if (idx === 0) {
+          teacherActs = [
+            `Lead rapid-fire mental math warm-up reviewing powers of 2 and 3 (2¹, 2², 2³, 3¹, 3²).`,
+            `Explicitly highlight that 2³ = 2 × 2 × 2 = 8, NOT 2 × 3 = 6 (repeated multiplication vs addition).`,
+            `State the lesson learning objective with shared condition and observable mastery criteria.`
+          ];
+        } else if (idx === 1) {
+          teacherActs = [
+            `Distribute concrete manipulatives (square grid paper, two-color counters, folding strips).`,
+            `Guide students to model physical folding/doubling and track results in stage tables.`,
+            `Prompt students to observe the constant multiplying factor connecting successive stages.`
+          ];
+        } else if (idx === 2) {
+          teacherActs = [
+            `Explicitly demonstrate transition from concrete models to pictorial tables and algebraic notation.`,
+            `Model Stage 0 (initial value a = 1), Stage 1 (1 × 2 = 2), Stage 2 (4 = 2²), Stage 3 (8 = 2³).`,
+            `Formulate the general model y = a · bⁿ and model inverse checks on worked examples.`
+          ];
+        } else if (idx === 3) {
+          teacherActs = [
+            `Lead paired interactive practice with initial value a = 3 that doubles each stage (P = 3 · 2ⁿ).`,
+            `Pose targeted diagnostic questions: "Why is Month 3 equal to 24 and not 18?"`,
+            `Provide immediate corrective feedback on student whiteboard calculations.`
+          ];
+        } else if (idx === 4) {
+          teacherActs = [
+            `Facilitate differentiated group tasks on tiered Belizean contextual challenges (tilapia hatchery, cacao seedlings).`,
+            `Scaffold struggling groups with concrete tables while challenging advanced groups with linear vs exponential comparisons.`,
+            `Circulate to monitor collaborative justifications and problem-solving strategies.`
+          ];
+        } else if (idx === 5) {
+          teacherActs = [
+            `Administer the 8-question Student Practice Worksheet (Questions 1–8, totaling 10 marks).`,
+            `Circulate for targeted micro-interventions, ensuring step-by-step working, formulas, and units.`,
+            `Maintain teacher guided table for students needing procedural reinforcement.`
+          ];
+        } else {
+          teacherActs = [
+            `Administer the 3-question diagnostic Daily Exit Ticket (5 marks) under independent silent conditions.`,
+            `Synthesize core mathematical principles and explain homework extension link.`,
+            `Collect exit slips to group students against the 80% mastery benchmark (4/5 marks).`
+          ];
+        }
       } else {
         if (idx === 0) {
           teacherActs = toCleanBullets(plan.introduction || 'Introduce lesson hook, activate prior knowledge, and state clear learning goals.');
@@ -869,6 +1000,14 @@ export function resolveCompleteLessonResources(
           else if (idx === 5) studentActs = ['Complete individual practice worksheet tasks accurately and independently.'];
           else studentActs = ['Complete 3-question exit ticket independently and self-evaluate confidence level.'];
         }
+      } else if (isMath) {
+        if (idx === 0) studentActs = ['Solve mental math fluency problems on individual whiteboards, verify with partners, and state success criteria.'];
+        else if (idx === 1) studentActs = ['Manipulate physical counters and paper strips in pairs, track quantitative patterns in observation tables.'];
+        else if (idx === 2) studentActs = ['Track teacher think-aloud, record complete worked examples in exercise books, and annotate formulas.'];
+        else if (idx === 3) studentActs = ['Work paired calculations, explain mathematical reasoning using formal academic terms, and verify partner solutions.'];
+        else if (idx === 4) studentActs = ['Collaborate in small groups to solve contextual Belizean application problems and verify calculations reciprocally.'];
+        else if (idx === 5) studentActs = ['Complete individual practice worksheet independently, showing all step-by-step working, formulas, and units.'];
+        else studentActs = ['Complete 3-question exit ticket independently, self-assess procedural mastery against the 80% benchmark, and submit exit slip.'];
       } else {
         if (idx === 0) studentActs = ['Examine board prompt, participate in choral response, and record lesson goals.'];
         else if (idx === 1) studentActs = ['Listen actively, annotate notes, and track modeled think-aloud examples.'];
@@ -887,6 +1026,14 @@ export function resolveCompleteLessonResources(
         else if (idx === 4) check = 'Group word-building accuracy check on constructed sentences';
         else if (idx === 5) check = 'Accuracy review of individual worksheet Part 1 and Part 2';
         else check = 'Diagnostic scoring of 3-question Daily Exit Ticket';
+      } else if (isMath) {
+        if (idx === 0) check = 'Diagnostic fluency check on prerequisite multiplication and powers';
+        else if (idx === 1) check = 'Observation of physical pattern tracking and ratio recording';
+        else if (idx === 2) check = 'Choral and cold-call checks on the y = a · bⁿ formula and stage index';
+        else if (idx === 3) check = 'Paired whiteboard problem checks with immediate corrective feedback';
+        else if (idx === 4) check = 'Group solution audits and formative error diagnosis';
+        else if (idx === 5) check = 'Individual worksheet monitoring for complete working and correct units';
+        else check = 'Diagnostic scoring of 3-question Daily Exit Ticket against 80% benchmark';
       } else {
         if (idx === 0) check = 'Diagnostic questioning on prior knowledge';
         else if (idx === 1) check = 'Formative thumbs check and white-board responses';
@@ -913,6 +1060,85 @@ export function resolveCompleteLessonResources(
     };
   });
 
+  // 8.5. Enforce strict timing reconciliation across stages:
+  // The sum of stage durations MUST equal the scheduled lesson duration exactly.
+  const is90Min = isLA || isMath;
+  const targetMinutes = is90Min 
+    ? (parseMinutes(duration, 90) || 90) 
+    : (parseMinutes(duration, 45) || 45);
+
+  const initialTotalMinutes = stages.reduce((acc, s) => acc + parseMinutes(s.duration, 0), 0);
+  if (initialTotalMinutes !== targetMinutes || stages.some(s => parseMinutes(s.duration, 0) <= 0)) {
+    const count = stages.length;
+    let distributed: number[] = [];
+
+    if (isMath && count === 7) {
+      if (targetMinutes === 90) {
+        distributed = [10, 15, 15, 15, 15, 12, 8];
+      } else if (targetMinutes === 45) {
+        distributed = [5, 8, 8, 8, 8, 5, 3];
+      } else {
+        const ratios = [10/90, 15/90, 15/90, 15/90, 15/90, 12/90, 8/90];
+        distributed = ratios.map(r => Math.max(2, Math.round(targetMinutes * r)));
+      }
+    } else if (isLA && count === 7) {
+      if (targetMinutes === 90) {
+        distributed = [8, 15, 15, 15, 10, 15, 12];
+      } else if (targetMinutes === 45) {
+        distributed = [4, 8, 8, 8, 5, 8, 4];
+      } else {
+        const ratios = [8/90, 15/90, 15/90, 15/90, 10/90, 15/90, 12/90];
+        distributed = ratios.map(r => Math.max(2, Math.round(targetMinutes * r)));
+      }
+    } else if (count === 5 && targetMinutes === 90) {
+      distributed = [10, 25, 25, 20, 10];
+    } else if (count === 5 && targetMinutes === 45) {
+      distributed = [5, 12, 12, 11, 5];
+    } else if (count === 5) {
+      const ratios = [0.12, 0.33, 0.27, 0.18, 0.10];
+      distributed = ratios.map(r => Math.max(2, Math.round(targetMinutes * r)));
+    } else {
+      const base = Math.floor(targetMinutes / count);
+      distributed = Array(count).fill(base);
+    }
+
+    let diff = targetMinutes - distributed.reduce((a, b) => a + b, 0);
+    let adjIdx = count >= 2 ? 1 : 0;
+    while (diff !== 0) {
+      if (diff > 0) {
+        distributed[adjIdx] += 1;
+        diff -= 1;
+      } else {
+        if (distributed[adjIdx] > 2) {
+          distributed[adjIdx] -= 1;
+          diff += 1;
+        }
+      }
+      adjIdx = (adjIdx + 1) % count;
+    }
+
+    let cum = 0;
+    stages.forEach((st, idx) => {
+      const mins = distributed[idx];
+      const start = cum;
+      const end = cum + mins;
+      cum += mins;
+      st.duration = `${mins} mins (${start}:00 - ${end}:00)`;
+    });
+  } else {
+    // Standardize interval notation if already matching targetMinutes
+    let cum = 0;
+    stages.forEach((st) => {
+      const mins = parseMinutes(st.duration, 10);
+      if (!st.duration.includes('(')) {
+        const start = cum;
+        const end = cum + mins;
+        st.duration = `${mins} mins (${start}:00 - ${end}:00)`;
+      }
+      cum += mins;
+    });
+  }
+
   // 9. Questioning Strategies
   const qList: string[] = (
     plan.structured_json?.questions || 
@@ -925,31 +1151,41 @@ export function resolveCompleteLessonResources(
       level: "Remember / Identify", 
       question: qList[0] || (isBenchmarkTestCase 
         ? "What is a prefix, and where does it attach to a base root word?" 
-        : `What is the core term or rule we used today in our study of ${topic}?`) 
+        : (isMath
+            ? "What is the mathematical definition of a base, exponent, and initial quantity? What is 2³?"
+            : `What is the core term or rule we used today in our study of ${topic}?`)) 
     },
     { 
       level: "Understand", 
       question: qList[1] || (isBenchmarkTestCase 
         ? "How does adding the prefix 'inter-' change the meaning of the word 'national'?" 
-        : `How would you explain this concept in your own words to a classmate?`) 
+        : (isMath
+            ? "How does repeated multiplication differ from repeated addition? Explain why 2³ is equal to 8 and NOT 6."
+            : `How would you explain this concept in your own words to a classmate?`)) 
     },
     { 
       level: "Apply", 
       question: qList[2] || (isBenchmarkTestCase 
         ? "How can you use your knowledge of the suffix '-able' to deduce the meaning of 'sustainable'?" 
-        : `How can we apply this method to solve a new problem accurately?`) 
+        : (isMath
+            ? "If a tilapia population starts at 2 and doubles each month (y = 2 · 2ⁿ), how many fish are there at Month 3 and Month 4?"
+            : `How can we apply this method to solve a new problem accurately?`)) 
     },
     { 
       level: "Analyze", 
       question: qList[3] || (isBenchmarkTestCase 
         ? "What patterns do you notice in how prefixes adjust word direction or negation versus how suffixes adjust part of speech?" 
-        : `What patterns, relationships, or differences do you notice in these examples?`) 
+        : (isMath
+            ? "Compare the sequence 3, 6, 12, 24 with 3, 6, 9, 12. What accounts for the dramatic rate of growth in the doubling sequence?"
+            : `What patterns, relationships, or differences do you notice in these examples?`)) 
     },
     { 
       level: "Evaluate / Create", 
       question: qList[4] || (isBenchmarkTestCase 
         ? "Can you construct an authentic sentence situated in Belize using a word that contains both a prefix and a suffix?" 
-        : `Can you justify your solution or formulate a challenging problem for your peers?`) 
+        : (isMath
+            ? "Error Analysis: A student claims 1 cell doubling for 5 hours produces 10 cells because 1 × 2 × 5 = 10. Diagnose the misconception and prove the true result."
+            : `Can you justify your solution or formulate a challenging problem for your peers?`)) 
     }
   ];
 
@@ -1077,15 +1313,75 @@ export function resolveCompleteLessonResources(
   // 13. Student Practice Worksheet
   let worksheetData: any = null;
   const foundWorksheetMaterial = plan.studentMaterials?.find(m => m.type === 'worksheet');
-  if (foundWorksheetMaterial && foundWorksheetMaterial.content) {
+  if (isSci) {
+    const pack = getScienceCurriculumPack(topic, subtopic, learningOutcome);
+    const authWs = buildAuthoritativeScienceWorksheet(pack, grade);
+    const questions = pack.worksheetQuestions;
+    const totalMarks = questions.reduce((sum, q) => sum + q.points, 0);
+    
+    worksheetData = {
+      hasWorksheet: true,
+      title: authWs.title,
+      schoolName: school,
+      grade,
+      subject: 'Science and Technology',
+      topic: pack.topicTitle,
+      instructions: `Complete all 8 investigation questions. Record empirical evidence and justify answers with scientific principles. (${totalMarks} Marks Total)`,
+      totalPoints: totalMarks,
+      totalQuestions: questions.length,
+      sections: [
+        {
+          sectionLetter: "A",
+          sectionTitle: "Empirical Investigation & Component Classification",
+          instructions: "Answer the foundational inquiry and classification items.",
+          questions: questions.slice(0, 4).map((q, idx) => ({
+            number: idx + 1,
+            prompt: q.options ? `${q.questionText}\n${q.options.join('\n')}` : q.questionText,
+            lines: 3
+          }))
+        },
+        {
+          sectionLetter: "B",
+          sectionTitle: "Causal Analysis & Real-World Application",
+          instructions: "Analyze abiotic constraints, gas exchange, and environmental connections.",
+          questions: questions.slice(4).map((q, idx) => ({
+            number: idx + 5,
+            prompt: q.questionText,
+            lines: 4
+          }))
+        }
+      ],
+      answerKey: [
+        {
+          sectionLetter: "A",
+          sectionTitle: "Part A Answer Key",
+          answers: questions.slice(0, 4).map((q, idx) => ({
+            number: idx + 1,
+            solution: q.expectedAnswer,
+            criteria: q.markingGuide
+          }))
+        },
+        {
+          sectionLetter: "B",
+          sectionTitle: "Part B Answer Key",
+          answers: questions.slice(4).map((q, idx) => ({
+            number: idx + 5,
+            solution: q.expectedAnswer,
+            criteria: q.markingGuide
+          }))
+        }
+      ]
+    };
+  } else if (foundWorksheetMaterial && foundWorksheetMaterial.content && !foundWorksheetMaterial.content.includes('[Foundational Practice Problem]')) {
     const combinedContent = foundWorksheetMaterial.answerKey
       ? `${foundWorksheetMaterial.content}\n\n### TEACHER ANSWER KEY & SCORING GUIDE\n${foundWorksheetMaterial.answerKey}`
       : foundWorksheetMaterial.content;
     const normalized = parseAndNormalizeWorksheet(combinedContent, {
       schoolName: school,
       grade: plan.grade || 'Standard 6',
-      subject: plan.subject || 'English Language',
+      subject: plan.subject || (isMath ? 'Mathematics' : 'English Language'),
       topic,
+      learningOutcome,
       title: sanitizeExportText(foundWorksheetMaterial.title || `Student Practice Worksheet: ${topic}`)
     });
     worksheetData = {
@@ -1097,11 +1393,14 @@ export function resolveCompleteLessonResources(
       topic: normalized.topic,
       instructions: normalized.instructions,
       totalPoints: normalized.totalPoints,
-      totalQuestions: normalized.totalPoints,
+      totalQuestions: normalized.sections.reduce((sum, s) => sum + s.tasks.length, 0),
       sections: normalized.sections.map(s => ({
+        letter: s.letter,
         sectionLetter: s.letter,
+        title: s.title,
         sectionTitle: s.title,
         instructions: s.instructions,
+        tasks: s.tasks,
         questions: s.tasks.map(t => ({
           number: t.number,
           prompt: t.prompt,
@@ -1110,7 +1409,9 @@ export function resolveCompleteLessonResources(
         }))
       })),
       answerKey: normalized.answerKey.map(ak => ({
+        letter: ak.sectionLetter,
         sectionLetter: ak.sectionLetter,
+        title: ak.sectionTitle,
         sectionTitle: ak.sectionTitle,
         answers: ak.answers.map(a => ({
           number: a.number,
@@ -1132,6 +1433,80 @@ export function resolveCompleteLessonResources(
       totalQuestions: TEST_CASE_WORKSHEET.totalQuestions,
       sections: TEST_CASE_WORKSHEET.sections,
       answerKey: TEST_CASE_WORKSHEET.answerKey
+    };
+  } else if (isMath) {
+    const authWs = buildAuthoritativeMathWorksheet(topic, subtopic, learningOutcome, grade);
+    worksheetData = {
+      hasWorksheet: true,
+      title: authWs.title,
+      schoolName: school,
+      grade,
+      subject: 'Mathematics',
+      topic,
+      instructions: authWs.instructions,
+      totalPoints: authWs.totalPoints,
+      totalQuestions: authWs.questions.length,
+      sections: [
+        {
+          sectionLetter: "A",
+          sectionTitle: "Concept Foundation & Numerical Evaluation",
+          instructions: "Complete the foundational problems below. Write all intermediate steps.",
+          questions: authWs.questions.filter(q => q.section === 'A').map(q => ({
+            number: q.number,
+            prompt: q.prompt,
+            lines: 3
+          }))
+        },
+        {
+          sectionLetter: "B",
+          sectionTitle: "Applied Problem Solving & Belizean Contexts",
+          instructions: "Solve each contextual problem. Include unit labels in your final answers.",
+          questions: authWs.questions.filter(q => q.section === 'B').map(q => ({
+            number: q.number,
+            prompt: q.prompt,
+            lines: 3
+          }))
+        },
+        {
+          sectionLetter: "C",
+          sectionTitle: "Multi-Step Reasoning & Error Analysis",
+          instructions: "Analyze each problem carefully and justify your mathematical reasoning.",
+          questions: authWs.questions.filter(q => q.section === 'C').map(q => ({
+            number: q.number,
+            prompt: q.prompt,
+            lines: 4
+          }))
+        }
+      ],
+      answerKey: [
+        {
+          sectionLetter: "A",
+          sectionTitle: "Concept Foundation Answer Key",
+          answers: authWs.questions.filter(q => q.section === 'A').map(q => ({
+            number: q.number,
+            solution: q.solution,
+            criteria: q.criteria
+          }))
+        },
+        {
+          sectionLetter: "B",
+          sectionTitle: "Applied Problem Solving Answer Key",
+          answers: authWs.questions.filter(q => q.section === 'B').map(q => ({
+            number: q.number,
+            solution: q.solution,
+            criteria: q.criteria
+          }))
+        },
+        {
+          sectionLetter: "C",
+          sectionTitle: "Multi-Step Reasoning Answer Key",
+          answers: authWs.questions.filter(q => q.section === 'C').map(q => ({
+            number: q.number,
+            solution: q.solution,
+            criteria: q.criteria
+          }))
+        }
+      ]
     };
   } else {
     // Generate standard worksheet from independent practice tasks using the global standard
@@ -1197,7 +1572,7 @@ export function resolveCompleteLessonResources(
 
   // 15. Exit Ticket
   let exitTicketData: any = null;
-  if (plan.exitTicketPackage && plan.exitTicketPackage.questions && plan.exitTicketPackage.questions.length > 0) {
+  if (plan.exitTicketPackage && plan.exitTicketPackage.questions && plan.exitTicketPackage.questions.length >= 3 && !plan.exitTicketPackage.questions[0]?.question?.includes('[Target')) {
     const rawET = plan.exitTicketPackage;
     exitTicketData = {
       hasTicket: true,
@@ -1209,12 +1584,49 @@ export function resolveCompleteLessonResources(
         points: q.points || 1,
         answerKey: sanitizeExportText(q.answerKey)
       })),
-      scoringGuidance: sanitizeExportText(rawET.scoringGuidance || `Total Points: ${rawET.questions.length}`),
+      scoringGuidance: sanitizeExportText(rawET.scoringGuidance || `Total Points: ${rawET.questions.reduce((sum: number, q: any) => sum + (q.points || 1), 0)}`),
       masteryThreshold: sanitizeExportText(rawET.masteryThreshold || "80% Mastery Benchmark"),
       groupingRuleTomorrow: sanitizeExportText(rawET.groupingRuleTomorrow || "Students achieving 80% proceed to extension; students needing support attend guided table.")
     };
   } else if (isBenchmarkTestCase) {
     exitTicketData = TEST_CASE_EXIT_TICKET;
+  } else if (isMath) {
+    const authEt = buildAuthoritativeMathExitTicket(topic, subtopic, learningOutcome);
+    exitTicketData = {
+      hasTicket: true,
+      title: authEt.title,
+      prompt: authEt.prompt,
+      questions: authEt.questions.map(q => ({
+        number: q.number,
+        question: q.question,
+        points: q.points,
+        answerKey: q.answerKey
+      })),
+      scoringGuidance: authEt.scoringGuidance,
+      masteryThreshold: authEt.masteryThreshold,
+      groupingRuleTomorrow: "Students achieving 80% (4/5 marks) advance to independent extension; students below 80% attend guided teacher station for concrete review."
+    };
+  } else if (isSci) {
+    const pack = getScienceCurriculumPack(topic, subtopic, learningOutcome);
+    const authEt = buildAuthoritativeScienceExitTicket(pack, grade);
+    const questions = pack.exitTicketQuestions;
+    const totalMarks = questions.reduce((sum, q) => sum + q.points, 0);
+    const benchmark = Math.ceil(totalMarks * 0.8);
+    
+    exitTicketData = {
+      hasTicket: true,
+      title: authEt.title,
+      prompt: `Complete this 5-point daily exit check independently. Mastery standard is at least 80% (${benchmark}/${totalMarks} marks).`,
+      questions: questions.map((q, idx) => ({
+        number: idx + 1,
+        question: q.options ? `${q.questionText}\n${q.options.join('\n')}` : q.questionText,
+        points: q.points,
+        answerKey: `Expected: ${q.expectedAnswer} | Marking Criteria: ${q.markingGuide}`
+      })),
+      scoringGuidance: `Total Marks: ${totalMarks} Marks. Each item measures a specific curriculum domain.`,
+      masteryThreshold: `80% Mastery Benchmark (${benchmark} of ${totalMarks} marks)`,
+      groupingRuleTomorrow: "Students achieving 80% (4/5 marks) advance to independent extension; students below 80% attend guided teacher station for concrete review."
+    };
   } else {
     const exitQ = sanitizeExportText(plan.closurePanel?.exitQuestion || (plan.closure && plan.closure[0]) || `Demonstrate mastery of ${topic} through a targeted single-question exit slip.`);
     exitTicketData = {

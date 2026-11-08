@@ -119,22 +119,49 @@ export function getAuthoritativeCurriculumCode(params: {
   subject: string;
   grade: string;
   cycle: number;
+  week?: number;
   topic: string;
+  subtopic?: string;
   curriculum?: CurriculumEntry[];
 }): string {
   const normGrade = normalizeGrade(params.grade);
   const normSubj = normalizeSubject(params.subject);
   const normCyc = normalizeCycle(params.cycle);
   const targetTopic = params.topic.trim().toLowerCase();
+  const targetSubtopic = (params.subtopic || '').trim().toLowerCase();
+  const combined = `${targetTopic} ${targetSubtopic}`.toLowerCase();
 
   // 1. Look up in active curriculum entries
   const list = params.curriculum && params.curriculum.length > 0 ? params.curriculum : BELIZE_NATIONAL_CURRICULUM;
-  const match = list.find(e => 
+  let match = list.find(e => 
     normalizeGrade(e.grade) === normGrade &&
     normalizeSubject(e.subject) === normSubj &&
     normalizeCycle(e.cycle) === normCyc &&
     (e.topic || '').trim().toLowerCase() === targetTopic
   );
+
+  if (!match) {
+    // 1b. Semantic / partial / strand matching for curriculum units (e.g., "Algebraic Foundations" -> "Algebraic Expressions and Variables")
+    match = list.find(e => {
+      if (normalizeGrade(e.grade) !== normGrade || normalizeSubject(e.subject) !== normSubj || normalizeCycle(e.cycle) !== normCyc) {
+        return false;
+      }
+      const eTopic = (e.topic || '').trim().toLowerCase();
+      const eStrand = (e.strand || '').trim().toLowerCase();
+      const eSubtopic = (e.subtopic || '').trim().toLowerCase();
+
+      if (combined.includes('algebra') && (eTopic.includes('algebra') || eStrand.includes('algebra') || eSubtopic.includes('algebra'))) {
+        return true;
+      }
+      if (combined.includes('binary') && (eTopic.includes('binary') || eTopic.includes('number system') || eSubtopic.includes('base-2'))) {
+        return true;
+      }
+      if (combined.includes('fraction') && (eTopic.includes('fraction') || eSubtopic.includes('fraction'))) {
+        return true;
+      }
+      return eTopic.includes(targetTopic) || targetTopic.includes(eTopic);
+    });
+  }
 
   if (match?.curriculumCode && match.curriculumCode.trim()) {
     return match.curriculumCode.trim();
@@ -182,33 +209,67 @@ export function getTopicFocalInquiry(subject: string, topic: string, existingSub
 
   // Science & Technology Focal Inquiries
   if (normSubj === 'Science and Technology') {
-    if (topicLower.includes('plant') || topicLower.includes('root') || topicLower.includes('stem') || topicLower.includes('leaf') || topicLower.includes('photosynthesis')) {
-      return 'Plant Anatomy, Water Absorption via Xylem, and Photosynthesis Basics';
+    const combinedContext = `${topic} ${existingSubtopic || ''}`.toLowerCase();
+    
+    // Check Ecosystems FIRST before generic plant or earth keywords
+    if (
+      combinedContext.includes('terrestrial') ||
+      combinedContext.includes('aquatic') ||
+      combinedContext.includes('ecosystem') ||
+      combinedContext.includes('sc 3.15') ||
+      combinedContext.includes('sc3.15') ||
+      combinedContext.includes('biotic') ||
+      combinedContext.includes('abiotic') ||
+      combinedContext.includes('barrier reef') ||
+      combinedContext.includes('pine ridge') ||
+      combinedContext.includes('food web')
+    ) {
+      return 'Roles and Components of Terrestrial and Aquatic Ecosystems, Biotic and Abiotic Factors, and Belize Ecological Systems';
     }
-    if (topicLower.includes('matter') || topicLower.includes('water cycle') || topicLower.includes('state') || topicLower.includes('solid') || topicLower.includes('liquid') || topicLower.includes('gas')) {
-      return 'States of Matter, Thermal Energy Transfer, Evaporation, and Condensation in Belize';
+
+    if (combinedContext.includes('living and non-living') || combinedContext.includes('living things') || combinedContext.includes('non-living')) {
+      return 'Characteristics of Living Things (Growth, Nutrition, Movement, Reproduction) vs Non-Living Objects';
     }
-    if (topicLower.includes('energy conversion') || topicLower.includes('energy transformation') || topicLower.includes('form of energy')) {
-      return 'Forms of Energy, Energy Transformations, and Conservation of Energy in Everyday Devices';
-    }
-    if (topicLower.includes('circuit') || topicLower.includes('electricity') || topicLower.includes('electrical')) {
-      return 'Closed Circuits, Conductors and Insulators, and Electrical Safety';
-    }
-    if (topicLower.includes('body') || topicLower.includes('circulation') || topicLower.includes('heart') || topicLower.includes('respiratory')) {
-      return 'Circulatory and Respiratory Functions and Cardiorespiratory Health';
-    }
-    if (topicLower.includes('ecosystem') || topicLower.includes('biodiversity') || topicLower.includes('reef') || topicLower.includes('mangrove') || topicLower.includes('food web') || topicLower.includes('pine ridge')) {
-      return 'Food Webs, Species Interdependence, and Marine/Forest Conservation in Belize';
-    }
-    if (topicLower.includes('adaptation') || topicLower.includes('habitat') || topicLower.includes('animal')) {
+
+    if (combinedContext.includes('adaptation') || combinedContext.includes('habitat') || combinedContext.includes('animal')) {
       return 'Animal Structural Adaptations, Wetland/Forest Habitats, and Environmental Survival';
     }
-    if (topicLower.includes('weather') || topicLower.includes('climate') || topicLower.includes('hurricane') || topicLower.includes('cyclone') || topicLower.includes('earth') || topicLower.includes('atmosphere')) {
-      return 'Atmospheric Systems, Weather Tracking, and Coastal Resilience';
+
+    if (
+      combinedContext.includes('xylem') || 
+      combinedContext.includes('phloem') || 
+      combinedContext.includes('stem transport') ||
+      combinedContext.includes('plant structure') || 
+      combinedContext.includes('plant organ') ||
+      combinedContext.includes('photosynthesis')
+    ) {
+      return 'Plant Anatomy, Water Absorption via Xylem, and Photosynthesis Basics';
     }
-    if (topicLower.includes('force') || topicLower.includes('machine') || topicLower.includes('friction') || topicLower.includes('motion')) {
+
+    if (combinedContext.includes('matter') || combinedContext.includes('state of matter') || combinedContext.includes('solid') || combinedContext.includes('liquid') || combinedContext.includes('gas')) {
+      return 'States of Matter, Thermal Energy Transfer, Evaporation, and Condensation in Belize';
+    }
+
+    if (combinedContext.includes('force') || combinedContext.includes('machine') || combinedContext.includes('lever') || combinedContext.includes('pulley') || combinedContext.includes('inclined plane') || combinedContext.includes('friction')) {
       return 'Forces, Friction, Simple Machines, and Mechanical Advantage in Everyday Tasks';
     }
+
+    if (combinedContext.includes('circuit') || combinedContext.includes('electricity') || combinedContext.includes('conductor') || combinedContext.includes('insulator')) {
+      return 'Closed Circuits, Conductors and Insulators, and Electrical Safety';
+    }
+
+    if (combinedContext.includes('body') || combinedContext.includes('circulation') || combinedContext.includes('heart') || combinedContext.includes('pulse') || combinedContext.includes('respiratory')) {
+      return 'Circulatory and Respiratory Functions and Cardiorespiratory Health';
+    }
+
+    if (combinedContext.includes('water cycle') || combinedContext.includes('watershed') || combinedContext.includes('groundwater')) {
+      return 'The Hydrological Cycle, Watershed Protection, and Water Conservation in Belize';
+    }
+
+    if (combinedContext.includes('weather') || combinedContext.includes('climate') || combinedContext.includes('hurricane') || combinedContext.includes('cyclone') || combinedContext.includes('atmosphere')) {
+      return 'Atmospheric Systems, Weather Tracking, and Coastal Resilience';
+    }
+
     return `Scientific Inquiry, Empirical Evidence, and Practical Investigations in ${topic}`;
   }
 
@@ -582,9 +643,16 @@ export function rebalanceLessonStageTiming(lesson: any, targetDuration: string):
     const count = phases.length;
     let distributed: number[] = [];
 
-    if (lesson.subject === 'Language Arts' && targetMinutes === 90 && count === 7) {
+    const isMath = lesson.subject === 'Mathematics' || (typeof lesson.subject === 'string' && lesson.subject.toLowerCase().includes('math'));
+    const isLA = lesson.subject === 'Language Arts' || (typeof lesson.subject === 'string' && (lesson.subject.toLowerCase().includes('language') || lesson.subject.toLowerCase().includes('english')));
+
+    if (isLA && targetMinutes === 90 && count === 7) {
       distributed = [8, 15, 15, 15, 10, 15, 12];
-    } else if (lesson.subject === 'Language Arts' && targetMinutes === 90 && count === 5) {
+    } else if (isMath && targetMinutes === 90 && count === 7) {
+      distributed = [10, 15, 15, 15, 15, 12, 8];
+    } else if (isMath && targetMinutes === 45 && count === 7) {
+      distributed = [5, 8, 8, 8, 8, 5, 3];
+    } else if ((isLA || isMath) && targetMinutes === 90 && count === 5) {
       distributed = [10, 25, 25, 20, 10];
     } else if (targetMinutes === 45 && count === 5) {
       // 5-phase 45-minute lesson: 5 + 10 + 10 + 15 + 5 = 45
@@ -610,8 +678,17 @@ export function rebalanceLessonStageTiming(lesson: any, targetDuration: string):
     const count = rows.length;
     let distributed: number[] = [];
 
-    if (lesson.subject === 'Language Arts' && targetMinutes === 90 && count === 7) {
+    const isMath = lesson.subject === 'Mathematics' || (typeof lesson.subject === 'string' && lesson.subject.toLowerCase().includes('math'));
+    const isLA = lesson.subject === 'Language Arts' || (typeof lesson.subject === 'string' && (lesson.subject.toLowerCase().includes('language') || lesson.subject.toLowerCase().includes('english')));
+
+    if (isLA && targetMinutes === 90 && count === 7) {
       distributed = [8, 15, 15, 15, 10, 15, 12];
+    } else if (isMath && targetMinutes === 90 && count === 7) {
+      distributed = [10, 15, 15, 15, 15, 12, 8];
+    } else if (isMath && targetMinutes === 45 && count === 7) {
+      distributed = [5, 8, 8, 8, 8, 5, 3];
+    } else if ((isLA || isMath) && targetMinutes === 90 && count === 5) {
+      distributed = [10, 25, 25, 20, 10];
     } else if (targetMinutes === 45 && count === 5) {
       distributed = [5, 10, 10, 15, 5];
     } else {

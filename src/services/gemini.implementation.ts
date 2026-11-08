@@ -66,6 +66,7 @@ import {
   buildAuthoritativeMathWorksheet, 
   buildAuthoritativeMathExitTicket 
 } from "../lib/mathQualityGate";
+import { getAuthoritativeInstructionalDatesForWeek } from "../lib/mathDateScheduler";
 import { getScienceInquiryPromptGuidance } from "../lib/scienceInquiryEngine";
 import { 
   buildCleanGenerationContext, 
@@ -711,11 +712,14 @@ export const generateLessonPlan = async (params: {
     // Filtered payload: ONLY the isolated records for this specific class, subject, cycle, and topic
     const payload = filterCurriculumPayload(cleanContext);
     const isLA = isLanguageArtsSubject(cleanContext.subject);
-    const isHFLE = cleanContext.subject === 'HFLE' || cleanContext.subject.toLowerCase().includes('health');
-    const isScience = cleanContext.subject === 'Science and Technology' || cleanContext.subject.toLowerCase().includes('science');
-    const isMath = cleanContext.subject === 'Mathematics' || cleanContext.subject.toLowerCase().includes('math');
+    const isHFLE = cleanContext.subject === 'HFLE' || cleanContext.subject?.toLowerCase().includes('health');
+    const isScience = cleanContext.subject === 'Science and Technology' || cleanContext.subject?.toLowerCase().includes('science');
+    const isMath = cleanContext.subject === 'Mathematics' || cleanContext.subject?.toLowerCase().includes('math');
     const is90Min = isLA || isMath;
-    const actualDuration = teachingDay?.type === 'Half Day' ? '45 minutes' : (is90Min ? '90 minutes' : cleanContext.duration);
+    const requestedDuration = params.duration || cleanContext.duration;
+    const actualDuration = teachingDay?.type === 'Half Day' 
+      ? '45 minutes' 
+      : (requestedDuration && requestedDuration.trim() ? requestedDuration : (is90Min ? '90 minutes' : '45 minutes'));
 
     let subjectPacingGuidance = '';
     let subjectPurityRules = '';
@@ -781,7 +785,28 @@ CRITICAL SCIENCE AND TECHNOLOGY REQUIREMENTS:
 3. Measurable Student Work:
    - Provide complete printable science investigation worksheets with data observation tables, CER frameworks, and exit tickets tied directly to the curriculum action verb. NO generic placeholders.`;
     } else if (isMath) {
-      subjectPacingGuidance = `
+      const mathDurationMins = parseInt(actualDuration, 10) || 90;
+      subjectPacingGuidance = mathDurationMins <= 45 ? `
+### MANDATORY 45-MINUTE MATHEMATICS CPA PACING & INSTRUCTIONAL CASCADE
+Build this lesson following Concrete → Pictorial → Abstract (CPA) scaffolding as a 45-minute Mathematics block:
+1. Mental Math Warm-Up & Diagnostic Hook (Fluency & Prerequisite Review) — 5 minutes (0:00 - 0:05)
+2. Concrete Exploration & Manipulatives Inquiry (Hands-on "Explore" with physical models/folding/counters) — 8 minutes (0:05 - 0:13)
+3. Explicit Teacher Modeling ("I Do" — Step-by-Step Think-Aloud, Pictorial to Abstract Demonstration) — 8 minutes (0:13 - 0:21)
+4. Guided Interactive Practice ("We Do" — Paired Problem-Solving & Checks for Understanding) — 8 minutes (0:21 - 0:29)
+5. Differentiated Small-Group & Collaborative Problem Solving (Tiered Belizean Context Challenges) — 8 minutes (0:29 - 0:37)
+6. Independent Problem-Solving & Exercise Book Practice ("You Do" — Solvable Worksheet) — 5 minutes (0:37 - 0:42)
+7. Exit Ticket Diagnostic Mastery Assessment & Reflection Closure — 3 minutes (0:42 - 0:45)
+TOTAL MUST EQUAL EXACTLY 45 MINUTES.` : mathDurationMins <= 60 ? `
+### MANDATORY 60-MINUTE MATHEMATICS CPA PACING & INSTRUCTIONAL CASCADE
+Build this lesson following Concrete → Pictorial → Abstract (CPA) scaffolding as a 60-minute Mathematics block:
+1. Mental Math Warm-Up & Diagnostic Hook (Fluency & Prerequisite Review) — 8 minutes (0:00 - 0:08)
+2. Concrete Exploration & Manipulatives Inquiry (Hands-on "Explore" with physical models/counters/grids) — 10 minutes (0:08 - 0:18)
+3. Explicit Teacher Modeling ("I Do" — Step-by-Step Think-Aloud, Pictorial to Abstract Demonstration) — 10 minutes (0:18 - 0:28)
+4. Guided Interactive Practice ("We Do" — Paired Problem-Solving & Checks for Understanding) — 10 minutes (0:28 - 0:38)
+5. Differentiated Small-Group & Collaborative Problem Solving (Tiered Belizean Context Challenges) — 10 minutes (0:38 - 0:48)
+6. Independent Problem-Solving & Exercise Book Practice ("You Do" — Solvable Worksheet) — 8 minutes (0:48 - 0:56)
+7. Exit Ticket Diagnostic Mastery Assessment & Reflection Closure — 4 minutes (0:56 - 1:00)
+TOTAL MUST EQUAL EXACTLY 60 MINUTES.` : `
 ### MANDATORY 90-MINUTE MATHEMATICS CPA PACING & INSTRUCTIONAL CASCADE
 Build this lesson following Concrete → Pictorial → Abstract (CPA) scaffolding as a comprehensive 90-minute Mathematics block:
 1. Mental Math Warm-Up & Diagnostic Hook (Fluency & Prerequisite Review) — 10 minutes (0:00 - 0:10)
@@ -795,21 +820,20 @@ TOTAL MUST EQUAL EXACTLY 90 MINUTES.`;
 
       subjectPurityRules = `
 CRITICAL MATHEMATICS REQUIREMENTS:
-1. Strict Single-Outcome Curriculum Alignment:
+1. Strict Single-Outcome Curriculum Alignment for ${payload.selectedClass}:
    - Focus exclusively on the selected curriculum outcome: "${payload.selectedCurriculumOutcome}".
-   - Include ONLY content necessary for this selected outcome.
-   - NEVER combine exponent rules, prime factorization, GCD/LCM, and exponential growth simply because they appear in a broad unit title! If the outcome is exponential growth patterns, focus strictly on formulating exponential growth expressions and sequences; do NOT include prime factorization trees, GCD, or LCM.
+   - Include ONLY content appropriate for ${payload.selectedClass} in the strand "${payload.selectedStrand || 'Mathematics'}".
+   - Early Primary (Infant 1 - Infant 3): Use concrete ten-frames, counters, number bonds, and visual arrays. Do NOT use upper-grade algebra, percentages, or multi-digit column division.
+   - Middle Primary (Standard 1 - Standard 3): Focus on place value, standard addition/subtraction with regrouping, equal groups/arrays, and unit fractions.
+   - Upper Primary (Standard 4 - Standard 6): Focus on multi-digit operations, long division, unlike fractions, percentages, or advanced algebra and PEMDAS when officially specified for the grade.
 2. Mathematical Accuracy & Precision:
-   - Check every calculation, sequence, definition, formula, and step.
-   - Clearly distinguish repeated multiplication (2 × 2 × 2 = 2³ = 8) from repeated addition (2 + 2 + 2 = 2 × 3 = 6).
-   - Distinguish the repeated multiplication represented by a power from the number of doublings after an initial quantity.
-   - When modelling a growth/doubling pattern, explicitly define the starting quantity (Stage 0: a) and stage numbering (n), so after n doublings the quantity is y = a · 2ⁿ.
-   - Address common Standard 6 misconceptions: e.g. 2³ = 6 (confusing power with multiplication) and confusing stage index with exponent. Include corrective teacher feedback.
-   - Do NOT introduce negative bases, fractional exponents, or unrequested advanced material.
+   - Check every calculation, sequence, definition, formula, and step deterministically.
+   - Use concrete manipulatives that match the concept (ten-frames for teen numbers/bonds, base-ten blocks for place value, fraction strips for fractions, algebra tiles/cards for algebra).
+   - Address common grade-level misconceptions with corrective teacher feedback.
 3. Learning Objectives:
    - Shared condition starting with "Given..." based on actual materials and problem context.
    - Distinct, non-duplicated Cognitive, Psychomotor/Skills, and Affective objectives.
-   - 80% mastery criterion calculated against clearly stated assessable points (e.g. 8 out of 10 marks).
+   - 80% mastery criterion calculated against clearly stated assessable points (e.g. 4 out of 5 marks).
 4. Fully Developed 8-Question Worksheet (Zero Placeholders):
    - Under studentMaterials, generate an 8-question solvable worksheet (Questions 1 through 8):
      * Section A: Concept Foundation & Direct Evaluation (Questions 1–3)
@@ -2437,6 +2461,7 @@ Output the content in Markdown format.`;
           subject,
           topic,
           subtopic,
+          learningOutcome: generalObjective,
           title: type.toLowerCase() === 'quiz' ? `Assessment Quiz: ${topic}` : `Student Practice Worksheet: ${topic}`
         });
         return `${formatWorksheetMarkdown(normalized)}\n\n${formatAnswerKeyMarkdown(normalized)}`;
@@ -2449,6 +2474,10 @@ Output the content in Markdown format.`;
 
   // Graceful fallback markdown so the endpoint never returns undefined or causes an empty 200 response
   if (isWorksheetType) {
+    if (isMathematicsSubject(subject)) {
+      const mathWs = buildAuthoritativeMathWorksheet(topic, subtopic, generalObjective, grade);
+      return `${mathWs.worksheetContentText}\n\n---\n\n${mathWs.answerKeyText}`;
+    }
     const fallbackWs = parseAndNormalizeWorksheet('', {
       schoolName: DEFAULT_SCHOOL_NAME,
       grade,
@@ -2458,6 +2487,11 @@ Output the content in Markdown format.`;
       title: type.toLowerCase() === 'quiz' ? `Assessment Quiz: ${topic}` : `Student Practice Worksheet: ${topic}`
     });
     return `${formatWorksheetMarkdown(fallbackWs)}\n\n${formatAnswerKeyMarkdown(fallbackWs)}`;
+  }
+
+  if (isMathematicsSubject(subject) && (type === 'Exit Ticket' || type === 'exit_ticket' || type.toLowerCase().includes('exit'))) {
+    const mathEt = buildAuthoritativeMathExitTicket(topic, subtopic, generalObjective);
+    return `${mathEt.contentText}\n\n---\n\n${mathEt.answerKeyText}`;
   }
 
   const cleanTypeTitle = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -3189,6 +3223,14 @@ export const generateWeeklyLessonPlan = async (params: {
   validateGeminiConfig();
   const { grade, subject, topic, cycle, week, teachingModel, style = 'Standard Teacher', includeTeacherScript = false, includeDifferentiation = true, calendarDays = [] } = params;
   const isScienceWeekly = subject === 'Science and Technology' || subject.toLowerCase().includes('science');
+  const isMathWeekly = subject === 'Mathematics' || subject.toLowerCase().includes('math');
+
+  const authoritativeDays = getAuthoritativeInstructionalDatesForWeek(
+    cycle,
+    week,
+    (params as any).academicYear || '2026-2027',
+    calendarDays
+  );
 
   const progressionRules = isScienceWeekly
     ? `### SCIENCE INQUIRY 5-DAY PROGRESSION ARC:
@@ -3197,6 +3239,27 @@ export const generateWeeklyLessonPlan = async (params: {
   - Wednesday: Data Analysis, Pattern Recognition & Scientific Explanation (Claim + Evidence + Reasoning).
   - Thursday: Belizean Real-World Application & Misconception Revision (Ecosystems/Technology).
   - Friday: Science Inquiry Assessment, Question Revisit & Student Empirical Demonstrations.`
+    : isMathWeekly
+    ? `### BELIZE PRIMARY MATHEMATICS 5-DAY PROGRESSION ARC:
+  ${topic.toLowerCase().includes('algebra') || topic.toLowerCase().includes('variable')
+    ? `- Day 1 (Monday) — Translating Verbal Phrases into Algebraic Expressions: Introduce variables as unknown quantities and numerical constants. Distinguish between an expression and an equation. Translate verbal phrases into algebraic expressions with variables without equals signs (e.g., "five more than a number" -> n + 5; "six less than twice y" -> 2y - 6; note that "less than" reverses the terms). Emphasize proper notation (3x, not 3*x). Do NOT jump into equations, balance scales, or inverse operations.
+  - Day 2 (Tuesday) — Numerical Substitution & Order of Operations: Substitute assigned whole-number values into algebraic expressions using parentheses around substituted values (e.g., 4(5) + 3). Evaluate expressions accurately following the order of operations (PEMDAS - parentheses, exponents, multiplication/division, addition/subtraction). Show complete step-by-step arithmetic.
+  - Day 3 (Wednesday) — Diagnosing & Correcting Algebraic Errors: Deep-dive error analysis and mathematical reasoning. Analyze incorrect expressions or student evaluation attempts, identify the exact mathematical rule violated (e.g. concatenation error 5x with x=6 written as 56 instead of 30; exponent priority 3x² with x=2 evaluated as 6²=36 instead of 3(4)=12; reversed subtraction 10-3z instead of 3z-10), and demonstrate the valid correction.
+  - Day 4 (Thursday) — Formulating Expressions for Practical Belizean Scenarios: Translate realistic Belizean community, agricultural, and transportation situations into expressions with defined variables and evaluate them when quantities are provided (e.g. citrus harvests in Stann Creek, water taxi luggage in San Pedro, market produce in San Ignacio).
+  - Day 5 (Friday) — Weekly Consolidation & 5-Question Cumulative Assessment: Synthesize the week's learning across variable identification, verbal translation, substitution, and error analysis. Administer an independent 5-question cumulative evaluation with an explicit 80% (4 out of 5 marks/questions) mastery benchmark.`
+    : `- Day 1 (Monday) — Establish Understanding: Activate prerequisite knowledge, hook learners, diagnose entry misconceptions, introduce concrete/visual representations of ${topic}, establish core definitions and place-value/conceptual principles.
+  - Day 2 (Tuesday) — Develop Procedures: Model the mathematical process through explicit teacher think-alouds with at least two complete worked examples, visual notation, guided practice, and common error isolation.
+  - Day 3 (Wednesday) — Apply and Explain: Scaffold from guided practice to independent application, error analysis of typical student slips, and student justification of mathematical reasoning.
+  - Day 4 (Thursday) — Extend and Solve Problems: Apply concepts to unfamiliar non-routine problems, multi-step word scenarios in a Belizean context, and differentiated challenges.
+  - Day 5 (Friday) — Demonstrate Mastery: Comprehensive review of essential weekly concepts, address residual misconceptions, independent mastery assessment/exit ticket, and targeted remediation/extension.`}
+
+  STRICT MATHEMATICS PURITY & RELEVANCE RULES:
+  - All 5 days must focus strictly and exclusively on the selected topic: "${topic}".
+  - ABSOLUTE PROHIBITION: Do NOT introduce exponential growth, growth factors, doubling models, bacteria or tilapia populations, or y = a · bⁿ UNLESS the topic is explicitly on exponential growth.
+  - Do NOT teach solving equations using inverse operations before students have mastered the meaning of a variable, expression translation, and numerical substitution.
+  - If the topic is "Advanced Number Systems", Base-10 / Base-2 Number Systems, or Binary Conversion, ALL five days must teach base-10/base-2 place values, bit representation, and binary/decimal conversions without any extraneous topics.
+  - Every daily lesson must include 7 distinct CPA stages totaling 90 minutes.
+  - Include at least two fully worked step-by-step examples with intermediate arithmetic and common misconceptions.`
     : `### PROGRESSION RULES:
   - Monday: Introduction - Hook students and introduce core concepts.
   - Tuesday: Concept Development - Deepen understanding through explanation and modeling.
@@ -3463,15 +3526,29 @@ export const generateWeeklyLessonPlan = async (params: {
 
     const result = JSON.parse(cleanJson((response as any).text));
     
-    // Post-process to ensure daily lessons have basic metadata and normalized objectives
-    const processedDays = result.week.days.map((d: any) => {
-      const norm = normalizeLearningObjectives(d.lesson, { 
-        topic: d.lesson?.topic || topic, 
-        materials: d.lesson?.materialsBoard?.map((m: any) => m.name) || d.lesson?.materials 
-      });
-      return {
-        ...d,
-        lesson: {
+    // Post-process to ensure daily lessons have basic metadata, authoritative dates, and normalized objectives
+    const processedDays = result.week.days.map((d: any, idx: number) => {
+      const assignedDate = authoritativeDays[idx]?.dateStr || d.lesson?.date;
+      let dayLesson = d.lesson;
+
+      if (isMathWeekly) {
+        dayLesson = enrichAndGuaranteeTeachReady(d.lesson, {
+          grade,
+          subject,
+          cycle,
+          week,
+          day: idx + 1,
+          topic,
+          subtopic: d.lesson?.subtopic || d.lesson?.lessonTitle || `Day ${idx + 1}`,
+          date: assignedDate,
+          duration: '90 minutes'
+        });
+      } else {
+        const norm = normalizeLearningObjectives(d.lesson, { 
+          topic: d.lesson?.topic || topic, 
+          materials: d.lesson?.materialsBoard?.map((m: any) => m.name) || d.lesson?.materials 
+        });
+        dayLesson = {
           ...d.lesson,
           learningObjectives: norm,
           learningObjectivesBoard: {
@@ -3494,6 +3571,21 @@ export const generateWeeklyLessonPlan = async (params: {
           topic,
           createdAt: new Date().toISOString(),
           structured_json: d.lesson
+        };
+      }
+
+      return {
+        ...d,
+        lesson: {
+          ...dayLesson,
+          date: assignedDate,
+          grade,
+          subject,
+          cycle,
+          week,
+          topic,
+          createdAt: new Date().toISOString(),
+          structured_json: dayLesson
         }
       };
     });
@@ -3514,12 +3606,46 @@ export const generateWeeklyLessonPlan = async (params: {
       'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'
     ];
     const isScienceWeeklyFallback = subject === 'Science and Technology' || subject.toLowerCase().includes('science');
+    const isMathWeeklyFallback = subject === 'Mathematics' || subject.toLowerCase().includes('math');
+    const isBinaryTopicFallback = isMathWeeklyFallback && (
+      topic.toLowerCase().includes('binary') ||
+      topic.toLowerCase().includes('base-2') ||
+      topic.toLowerCase().includes('base 2') ||
+      topic.toLowerCase().includes('advanced number') ||
+      topic.toLowerCase().includes('number system') ||
+      (topic.toLowerCase().includes('base') && (topic.toLowerCase().includes('ten') || topic.toLowerCase().includes('10')))
+    );
+
+    const isAlgebraTopicFallback = isMathWeeklyFallback && (
+      topic.toLowerCase().includes('algebra') ||
+      topic.toLowerCase().includes('variable') ||
+      topic.toLowerCase().includes('expression')
+    );
+
     const dayThemes = isScienceWeeklyFallback ? [
       { subtopic: 'Phenomenon & Scientific Question', focus: 'Observable Phenomenon Hook, Driving Inquiry Question, and Prior Knowledge Diagnostic' },
       { subtopic: 'Prediction & Hands-on Investigation', focus: 'Student Predictions ("I predict... because..."), Variable Control, and Empirical Data Collection' },
       { subtopic: 'Data Analysis & Scientific Explanation (CER)', focus: 'Pattern Analysis, Scientific Vocabulary in Context, and Claim + Evidence + Reasoning' },
       { subtopic: 'Belizean Application & Misconception Revision', focus: 'Real-World Systems in Belize, Confronting Misconceptions with Evidence, and Applied Challenge' },
       { subtopic: 'Inquiry Assessment & Evidence Synthesis', focus: 'Curriculum Outcome Mastery, Question Revisit, and Formative Exit Demonstration' }
+    ] : isBinaryTopicFallback ? [
+      { subtopic: 'Foundation of Base-10 vs Base-2 Place-Value Systems', focus: 'Prerequisite Activation, Concrete Flip Cards, and Conceptual Foundations' },
+      { subtopic: 'Systematic Algorithm for Binary-to-Decimal Conversion', focus: 'Explicit Teacher Modeling, Place-Value Expansion, and Worked Examples' },
+      { subtopic: 'Converting Decimal Numbers to Binary Form via Subtraction', focus: 'Greatest Power-of-Two Subtraction, Zero Placeholders, and Inverse Verification' },
+      { subtopic: 'Applied Multi-Bit Problem Solving & Tech Applications', focus: 'Belizean Computer Workstation Codes, Registers, and Binary Addition' },
+      { subtopic: 'Comprehensive Weekly Review, Parity Proofs & Mastery Assessment', focus: 'Cumulative Review, Parity Proofs, and Summative Mastery Assessment' }
+    ] : isAlgebraTopicFallback ? [
+      { subtopic: 'Translating Verbal Phrases into Algebraic Expressions', focus: 'Variables as unknowns, distinguishing variable vs constant, operation keywords, translating phrases without equals signs' },
+      { subtopic: 'Numerical Substitution & Order of Operations', focus: 'Replacing variables with assigned values, parentheses notation, evaluating expressions following PEMDAS' },
+      { subtopic: 'Diagnosing and Correcting Algebraic Errors', focus: 'Error analysis: isolating concatenation mistakes, order of operations slips, and reversed subtraction order' },
+      { subtopic: 'Formulating Expressions for Belizean Scenarios', focus: 'Translating realistic Belizean community, agricultural, and transportation situations into expressions and evaluating them' },
+      { subtopic: 'Weekly Mastery Synthesis & 5-Question Assessment', focus: 'Comprehensive review across all skills, 5-question cumulative evaluation with 80% (4 out of 5) benchmark' }
+    ] : isMathWeeklyFallback ? [
+      { subtopic: `Foundations of ${topic} & Conceptual Modeling`, focus: `Prerequisite activation, diagnostic entry check, concrete and visual representations of ${topic}` },
+      { subtopic: `Procedural Modeling & Worked Examples in ${topic}`, focus: `Explicit teacher think-aloud, algorithmic step-by-step modeling, guided practice, and common error isolation` },
+      { subtopic: `Independent Application & Mathematical Reasoning in ${topic}`, focus: `Independent practice, reasoning justification, error analysis, and paired explanation` },
+      { subtopic: `Contextual Problem Solving & Differentiation in ${topic}`, focus: `Multi-step Belizean real-world problems, non-routine application, and leveled differentiation` },
+      { subtopic: `Weekly Review, Consolidation & Mastery Demonstration in ${topic}`, focus: `Comprehensive review, targeted remediation, mastery exit ticket, and extension tasks` }
     ] : [
       { subtopic: 'Introduction & Core Concepts', focus: 'Engagement, Prior Knowledge Activation, and Conceptual Modeling' },
       { subtopic: 'Concept Development & Guided Modeling', focus: 'Explicit Teacher Modeling, Structural Breakdown, and Worked Examples' },
@@ -3530,6 +3656,7 @@ export const generateWeeklyLessonPlan = async (params: {
 
     const processedDays = dayNames.map((dayName, idx) => {
       const theme = dayThemes[idx];
+      const assignedDate = authoritativeDays[idx]?.dateStr;
       const dayLesson = enrichAndGuaranteeTeachReady({
         lessonTitle: `${topic}: ${theme.subtopic}`,
         grade,
@@ -3539,6 +3666,7 @@ export const generateWeeklyLessonPlan = async (params: {
         day: idx + 1,
         topic,
         subtopic: theme.subtopic,
+        date: assignedDate,
         learningOutcome: `Master ${theme.subtopic.toLowerCase()} within the primary study of ${topic}.`,
         duration: (subject === 'Language Arts' || subject === 'Mathematics' || isLanguageArtsSubject(subject) || subject.toLowerCase().includes('math')) ? '90 minutes' : '45 minutes',
         teachingModel,
@@ -3551,6 +3679,7 @@ export const generateWeeklyLessonPlan = async (params: {
         day: idx + 1,
         topic,
         subtopic: theme.subtopic,
+        date: assignedDate,
         learningOutcome: `Master ${theme.subtopic.toLowerCase()} within the primary study of ${topic}.`,
         duration: (subject === 'Language Arts' || subject === 'Mathematics' || isLanguageArtsSubject(subject) || subject.toLowerCase().includes('math')) ? '90 minutes' : '45 minutes'
       });
@@ -3559,6 +3688,7 @@ export const generateWeeklyLessonPlan = async (params: {
         day: dayName,
         lesson: {
           ...dayLesson,
+          date: assignedDate,
           structured_json: dayLesson,
           grade,
           subject,

@@ -12,6 +12,7 @@ import {
   HeadingLevel,
   PageBreak
 } from 'docx';
+import { isMathematicsSubject, buildAuthoritativeMathWorksheet, generateMathFallbackSolution } from './mathQualityGate';
 
 // ============================================================================
 // GLOBAL WORKSHEET SYSTEM: INTERFACES & DATA MODELS
@@ -205,14 +206,27 @@ export function parseAndNormalizeWorksheet(
       continue;
     }
 
-    // Filter out metadata lines that shouldn't be questions
-    if (/^(?:\d+[\.\)]\s*)?(?:Name|Date|Grade|Standard|Class|Subject|Topic|Subtopic|Teacher|Score|Total Points|Points)\s*:/i.test(line)) {
+    const cleanLine = line.replace(/\*/g, '').trim();
+
+    // Filter out metadata lines that shouldn't be questions (even if styled with bold or numbering)
+    if (/^(?:\d+[\.\)]\s*)?(?:Name|Date|Grade|Standard|Class|Subject|Topic|Subtopic|Teacher|Score|Total\s+Points?|Points?)\s*:/i.test(cleanLine)) {
+      continue;
+    }
+    if (/^[-*•_]{3,}$/.test(line)) {
+      continue;
+    }
+    // Filter out student answer/working lines
+    if (/^(?:Working|Answer|Solution|Explanation|Work|Steps?)\s*[:\-]?/i.test(cleanLine)) {
+      continue;
+    }
+    // Filter out school headers and sheet titles
+    if (/^(?:SAN JUAN BOSCO|Student Practice Worksheet|Assessment Quiz)/i.test(cleanLine)) {
       continue;
     }
 
     // Check for global or section instructions
-    if (/^(?:\d+[\.\)]\s*)?(?:#{1,4}\s*)?(?:Instructions|Directions)\s*[:\-]?\s*(.*)$/i.test(line)) {
-      const match = line.match(/^(?:\d+[\.\)]\s*)?(?:#{1,4}\s*)?(?:Instructions|Directions)\s*[:\-]?\s*(.*)$/i);
+    if (/^(?:\d+[\.\)]\s*)?(?:#{1,4}\s*)?(?:Instructions|Directions)\s*[:\-]?\s*(.*)$/i.test(cleanLine) || /^#+\s+Instructions/i.test(line)) {
+      const match = cleanLine.match(/^(?:\d+[\.\)]\s*)?(?:#{1,4}\s*)?(?:Instructions|Directions)\s*[:\-]?\s*(.*)$/i);
       const inst = match ? match[1].trim() : '';
       if (parsedSections.length === 0 && currentSection.rawQuestions.length === 0) {
         if (inst) globalInstructions = inst;
@@ -237,13 +251,12 @@ export function parseAndNormalizeWorksheet(
       continue;
     }
 
-    // Check for question prompt (starts with number, bullet, or letter)
-    const qMatch = line.match(/^(?:(?:\d+[\.\)]|Q\d+[:\.]?|[-*•])\s+)(.+)$/i);
-    if (qMatch) {
-      const questionText = qMatch[1].trim();
-      // Ensure it's not metadata that was numbered
-      if (!/^(?:Name|Date|Grade|Standard|Class|Subject|Topic|Teacher|Score|Instructions|Section|Part)\b/i.test(questionText)) {
-        currentSection.rawQuestions.push(cleanPromptText(questionText));
+    // Check for explicit numbered question prompt (e.g. "1. ...", "**1.** ...", "Q1: ...")
+    const numberedQMatch = line.match(/^(?:(?:\*{0,2}(\d+)[\.\)]\*{0,2}|Q(\d+)[:\.]?)\s*)(.+)$/i);
+    if (numberedQMatch) {
+      const qText = numberedQMatch[3].trim();
+      if (!/^(?:Name|Date|Grade|Standard|Class|Subject|Topic|Teacher|Score|Instructions|Section|Part)\b/i.test(qText.replace(/\*/g, ''))) {
+        currentSection.rawQuestions.push(cleanPromptText(qText));
       }
       continue;
     }
@@ -257,6 +270,13 @@ export function parseAndNormalizeWorksheet(
       continue;
     }
 
+    // Continuation of an active question (sub-bullets, tables, or continuation sentences)
+    if (currentSection.rawQuestions.length > 0) {
+      const lastIdx = currentSection.rawQuestions.length - 1;
+      currentSection.rawQuestions[lastIdx] += `\n${line}`;
+      continue;
+    }
+
     // Standalone question without leading bullet if it ends in '?' or ':'
     if (line.length > 15 && (line.endsWith('?') || line.includes('______') || line.toLowerCase().startsWith('explain') || line.toLowerCase().startsWith('describe') || line.toLowerCase().startsWith('calculate') || line.toLowerCase().startsWith('solve'))) {
       currentSection.rawQuestions.push(cleanPromptText(line));
@@ -265,21 +285,6 @@ export function parseAndNormalizeWorksheet(
 
   if (currentSection.rawQuestions.length > 0) {
     parsedSections.push(currentSection);
-  }
-
-  // If no questions found from regex, fallback to splitting raw text into questions
-  if (parsedSections.length === 0 || parsedSections.every(s => s.rawQuestions.length === 0)) {
-    const fallbackTasks = [
-      `Explain the key concept of ${topic} and how it connects to daily life in Belize.`,
-      `Apply the foundational rules of ${topic} to complete the assigned practice problem.`,
-      `Analyze an example related to ${topic} and justify your step-by-step reasoning.`,
-      `Solve the contextual challenge question and explain your strategy.`
-    ];
-    parsedSections.push({
-      title: 'Practice & Application',
-      instructions: 'Work through each task carefully.',
-      rawQuestions: fallbackTasks
-    });
   }
 
   // Parse answer key lines if available
@@ -301,6 +306,47 @@ export function parseAndNormalizeWorksheet(
     }
   }
 
+  // If no questions found from regex, or if input is empty/generic
+  if (parsedSections.length === 0 || parsedSections.every(s => s.rawQuestions.length === 0)) {
+    if (isMathematicsSubject(subject)) {
+      const reqCount = (context as any)?.requestedQuestionCount || (context as any)?.numQuestions || 8;
+      const auth = buildAuthoritativeMathWorksheet(topic, subtopic || '', context?.learningOutcome || '', grade, reqCount);
+      parsedSections.push(
+        {
+          title: 'CONCEPT FOUNDATION & NUMERICAL EVALUATION',
+          instructions: 'Complete the foundational problems below. Write all intermediate steps.',
+          rawQuestions: auth.questions.filter(q => q.section === 'A').map(q => q.prompt)
+        },
+        {
+          title: 'APPLIED PROBLEM SOLVING & BELIZEAN CONTEXTS',
+          instructions: 'Solve each contextual problem. Include unit labels in your final answers.',
+          rawQuestions: auth.questions.filter(q => q.section === 'B').map(q => q.prompt)
+        },
+        {
+          title: 'MULTI-STEP REASONING & ERROR ANALYSIS',
+          instructions: 'Analyze each problem carefully and justify your mathematical reasoning.',
+          rawQuestions: auth.questions.filter(q => q.section === 'C').map(q => q.prompt)
+        }
+      );
+      // Populate answerKeyMap from authoritative solutions
+      auth.questions.forEach(q => {
+        answerKeyMap.set(q.number, `${q.solution} [${q.criteria}]`);
+      });
+    } else {
+      const fallbackTasks = [
+        `Explain the key concept of ${topic} and how it connects to daily life in Belize.`,
+        `Apply the foundational rules of ${topic} to complete the assigned practice problem.`,
+        `Analyze an example related to ${topic} and justify your step-by-step reasoning.`,
+        `Solve the contextual challenge question and explain your strategy.`
+      ];
+      parsedSections.push({
+        title: 'Practice & Application',
+        instructions: 'Work through each task carefully.',
+        rawQuestions: fallbackTasks
+      });
+    }
+  }
+
   // Build final structured sections with STRICT SEQUENTIAL NUMBERING across the whole document
   let globalQNum = 1;
   const sections: WorksheetSection[] = parsedSections.map((sec, idx) => {
@@ -314,15 +360,24 @@ export function parseAndNormalizeWorksheet(
       const mainPrompt = qParts[0];
       const options = qParts.slice(1).filter(p => /^[A-D][\.\)]/i.test(p.trim())).map(o => o.trim());
 
+      const mathAuthQuestions = isMathematicsSubject(subject)
+        ? buildAuthoritativeMathWorksheet(topic, subtopic || '', context?.learningOutcome || '', grade, 20).questions
+        : [];
+      const mathMatch = mathAuthQuestions.find(q => q.number === qNum);
+
       return {
         number: qNum,
         prompt: mainPrompt,
         options: options.length > 0 ? options : undefined,
         type: options.length > 0 ? 'multiple_choice' : 'short_answer',
-        points: 1,
+        points: (isMathematicsSubject(subject) && (qNum === 7 || qNum === 8 || qNum === 13 || qNum === 17 || qNum === 19 || qNum === 20)) ? 2 : 1,
         lines: options.length > 0 ? 0 : 2,
-        answer: ans || `Accurate model solution demonstrating mastery of ${topic}.`,
-        criteria: 'Full marks awarded for correct answer with procedural clarity.'
+        answer: ans || (isMathematicsSubject(subject) 
+          ? (mathMatch?.solution || generateMathFallbackSolution(mainPrompt, qNum, topic))
+          : `Accurate model solution demonstrating mastery of ${topic}.`),
+        criteria: isMathematicsSubject(subject)
+          ? (mathMatch?.criteria || '[1 mark] Full credit awarded for complete mathematical working and correct numerical solution with units.')
+          : 'Full marks awarded for correct answer with procedural clarity.'
       };
     });
 
@@ -334,18 +389,27 @@ export function parseAndNormalizeWorksheet(
     };
   });
 
-  const totalPoints = globalQNum - 1;
+  const totalPoints = sections.reduce((sum, s) => sum + s.tasks.reduce((tSum, t) => tSum + (t.points || 1), 0), 0) || (globalQNum - 1);
 
   // Build Teacher Answer Key
   const answerKey = sections.map(s => ({
     sectionLetter: s.letter,
     sectionTitle: s.title,
-    answers: s.tasks.map(t => ({
-      number: t.number,
-      solution: t.answer || `Model response demonstrating mastery of ${topic}.`,
-      criteria: t.criteria || 'Full credit awarded for complete and accurate answers.',
-      points: t.points || 1
-    }))
+    answers: s.tasks.map(t => {
+      const mathAuthQuestions = isMathematicsSubject(subject)
+        ? buildAuthoritativeMathWorksheet(topic, subtopic || '', context?.learningOutcome || '', grade, 20).questions
+        : [];
+      const mathMatch = mathAuthQuestions.find(q => q.number === t.number);
+
+      return {
+        number: t.number,
+        solution: t.answer || (isMathematicsSubject(subject)
+          ? (mathMatch?.solution || generateMathFallbackSolution(t.prompt, t.number, topic))
+          : `Model response demonstrating mastery of ${topic}.`),
+        criteria: t.criteria || 'Full credit awarded for complete and accurate answers.',
+        points: t.points || 1
+      };
+    })
   }));
 
   return {
@@ -490,7 +554,7 @@ export function formatAnswerKeyMarkdown(ws: StructuredWorksheet): string {
 export async function exportStructuredWorksheetToDocx(
   ws: StructuredWorksheet,
   options: { includeAnswerKey?: boolean; answerKeyOnly?: boolean } = { includeAnswerKey: true }
-): Promise<void> {
+): Promise<any> {
   const children: (Paragraph | Table)[] = [];
 
   if (!options.answerKeyOnly) {
@@ -629,6 +693,10 @@ export async function exportStructuredWorksheetToDocx(
 
     // 7. Sections & Sequential Questions
     ws.sections.forEach(sec => {
+      const secLetter = (sec as any).letter || (sec as any).sectionLetter || '';
+      const secTitle = String((sec as any).title || (sec as any).sectionTitle || 'Section').toUpperCase();
+      const secTasks: any[] = (sec as any).tasks || (sec as any).questions || [];
+
       // Section Heading (e.g. SECTION A: UNDERSTANDING THE CONCEPT)
       children.push(
         new Paragraph({
@@ -636,7 +704,7 @@ export async function exportStructuredWorksheetToDocx(
           spacing: { before: 180, after: 40 },
           children: [
             new TextRun({
-              text: `SECTION ${sec.letter}: ${sec.title.toUpperCase()}`,
+              text: `SECTION ${secLetter}: ${secTitle}`,
               bold: true,
               size: 22,
               color: PRIMARY_NAVY
@@ -663,7 +731,7 @@ export async function exportStructuredWorksheetToDocx(
       }
 
       // Questions
-      sec.tasks.forEach(task => {
+      secTasks.forEach(task => {
         children.push(
           new Paragraph({
             spacing: { before: 60, after: 40 },
@@ -736,14 +804,18 @@ export async function exportStructuredWorksheetToDocx(
       })
     );
 
-    ws.answerKey.forEach(sec => {
+    (ws.answerKey || []).forEach(sec => {
+      const akLetter = (sec as any).sectionLetter || (sec as any).letter || '';
+      const akTitle = String((sec as any).sectionTitle || (sec as any).title || 'Section').toUpperCase();
+      const akAnswers: any[] = (sec as any).answers || [];
+
       children.push(
         new Paragraph({
           heading: HeadingLevel.HEADING_3,
           spacing: { before: 140, after: 60 },
           children: [
             new TextRun({
-              text: `SECTION ${sec.sectionLetter}: ${sec.sectionTitle.toUpperCase()}`,
+              text: `SECTION ${akLetter}: ${akTitle}`,
               bold: true,
               size: 21,
               color: PRIMARY_NAVY
@@ -752,7 +824,7 @@ export async function exportStructuredWorksheetToDocx(
         })
       );
 
-      sec.answers.forEach(ans => {
+      akAnswers.forEach(ans => {
         children.push(
           new Paragraph({
             spacing: { before: 40, after: 40 },
@@ -782,14 +854,17 @@ export async function exportStructuredWorksheetToDocx(
 
   const fileName = `${ws.title.replace(/[\s/\\?%*:|"<>]+/g, '_')}${options.answerKeyOnly ? '_AnswerKey' : ''}.docx`;
   const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  if (typeof document !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+  return blob;
 }
 
 // ============================================================================

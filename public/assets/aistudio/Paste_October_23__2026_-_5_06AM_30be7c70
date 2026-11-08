@@ -1,0 +1,820 @@
+PROJECT: EduPlan Builder
+TASK: COMPREHENSIVE MATHEMATICS LESSON-PLANNING ENGINE CORRECTION
+PRIORITY: CRITICAL
+SCOPE: MATHEMATICS ONLY
+
+You are acting as a senior educational software engineer, Mathematics curriculum specialist, instructional designer, assessment developer, and quality-assurance engineer.
+
+Your task is to inspect the existing codebase and correct the Mathematics lesson-planning engine so it consistently generates accurate, coherent, practical, professionally formatted Mathematics lessons for Belizean primary-school teachers.
+
+The current generated Standard 6 Mathematics lesson plan contains instructional weaknesses, mathematical notation errors, inconsistent time allocations, incomplete worked examples, misaligned assessments, repetitive resources, generic differentiation, and reflections that are written before the lesson is taught.
+
+Do not simply rewrite or reformat the sample lesson. Correct the underlying generation logic, templates, validation, assessment generation, and resource-generation processes responsible for these problems.
+
+========================================================
+1. STRICT SCOPE PROTECTION
+========================================================
+
+Modify ONLY the Mathematics lesson-planning engine and the components specifically responsible for generating Mathematics lesson plans and their associated Mathematics resources.
+
+Before making changes:
+
+1. Inspect the project structure.
+2. Identify the Mathematics generation service, prompts, templates, schemas, validation functions, worksheet generator, assessment generator, and export components.
+3. Determine which components are shared with other subjects.
+4. Trace how curriculum information, objectives, lesson procedures, worked examples, worksheets, and assessments move through the system.
+5. Identify the actual causes of the defects before editing code.
+
+Preserve:
+- All non-Mathematics lesson-planning engines.
+- Existing Science, Language Arts, Belizean Studies, Health, Spanish, and other subject-specific generation logic.
+- Authentication and authorization.
+- Firebase configuration and Firestore security rules.
+- User accounts and saved lesson plans.
+- Curriculum uploads and mappings.
+- Existing navigation and application layout unless a Mathematics-specific display defect requires correction.
+- Existing export functionality, except where a Mathematics-specific export defect must be corrected.
+- Existing APIs and data structures wherever possible.
+
+Do not rebuild the entire application.
+Do not replace functioning systems unnecessarily.
+Do not introduce duplicate generation services.
+Do not remove existing features.
+Do not invent curriculum outcomes or codes.
+Do not modify other subjects to make the Mathematics implementation easier.
+
+If a shared component must be modified, preserve its existing behavior for every non-Mathematics subject. Use subject-specific configuration, adapters, or conditional logic where appropriate.
+
+========================================================
+2. CORRECT THE MATHEMATICS LESSON'S SCOPE
+========================================================
+
+The current sample lesson uses a broad topic description:
+
+"Consolidation of Number Sense, Exponents, PEMDAS, Financial Math, and Ratios."
+
+However, many activities focus primarily on order of operations and nested expressions.
+
+The generator must prevent this mismatch.
+
+For every Mathematics lesson:
+
+A. Read the selected class, curriculum, cycle, week, topic, subtopic, and learning outcomes.
+
+B. Identify the actual mathematical knowledge and skills required by those outcomes.
+
+C. Build the lesson around those requirements.
+
+D. Ensure that the objectives, explanations, examples, activities, practice questions, worksheets, and assessments address the same intended learning.
+
+E. If the selected topic contains several major concepts, allocate sufficient teaching and practice time to each concept or divide the content into separate lessons when the planning system permits.
+
+F. Do not list percentages, financial mathematics, ratios, exponents, or number sense as lesson content unless the lesson actually teaches and assesses the relevant skills.
+
+G. If the lesson is a revision or consolidation lesson, identify the specific skills being consolidated and provide practice for each one.
+
+H. Preserve the original selected curriculum outcomes. Do not silently substitute easier outcomes or generate unrelated topics.
+
+I. When the uploaded curriculum does not provide enough information to verify an outcome or curriculum code, flag it for verification instead of inventing an official reference.
+
+The final lesson must have one clear instructional purpose and a logical sequence of learning activities.
+
+========================================================
+3. MATHEMATICAL ACCURACY AND NOTATION VALIDATION
+========================================================
+
+Implement a Mathematics-specific validation stage that checks every mathematical expression and every numerical answer before a lesson or resource is presented as complete.
+
+The current output contains expressions with missing multiplication symbols, including examples resembling:
+
+45 + 5 2³
+
+5 [2 (3² + 1)] 4
+
+6 + 12 ÷ 3 + 2 4
+
+These expressions are ambiguous or incorrectly formatted.
+
+The system must never silently generate malformed mathematical notation.
+
+Required behavior:
+
+1. Display multiplication consistently using × or an unambiguous mathematical representation.
+2. Display division using ÷ or a clearly formatted fraction.
+3. Format exponents correctly, such as 2³ and 5².
+4. Use balanced parentheses, brackets, and braces.
+5. Distinguish multiplication from addition and subtraction.
+6. Prevent accidental concatenation of numbers and variables.
+7. Preserve mathematical meaning during HTML rendering, Word export, PDF export, and PowerPoint generation.
+8. Ensure that the expression displayed in a solution is identical in meaning to the expression in the question.
+9. Ensure that answer keys correspond to the actual questions generated.
+10. Never change a mathematical expression merely to make its answer match an expected answer.
+
+For every numerical question, independently calculate the answer using a reliable evaluation method or a carefully verified solution process.
+
+Where feasible, use a deterministic mathematical evaluator for supported arithmetic expressions instead of relying exclusively on language-model reasoning.
+
+The evaluator must:
+- Respect operator precedence.
+- Respect parentheses and nested grouping symbols.
+- Evaluate multiplication and division from left to right when they have equal precedence.
+- Evaluate addition and subtraction from left to right when they have equal precedence.
+- Handle exponents correctly.
+- Reject malformed or unsupported expressions.
+- Avoid unsafe execution of arbitrary generated code.
+
+If an expression cannot be evaluated safely, flag it for correction rather than pretending it has been verified.
+
+Do not mark a lesson as mathematically validated if its expressions or answers remain unchecked.
+
+========================================================
+4. TEACH ORDER OF OPERATIONS CORRECTLY
+========================================================
+
+When a lesson teaches PEMDAS or order of operations, the instructional explanation must accurately communicate the hierarchy.
+
+Use this sequence:
+
+1. Grouping symbols: work from the innermost grouping outward.
+2. Exponents.
+3. Multiplication and division, working from left to right.
+4. Addition and subtraction, working from left to right.
+
+Explicitly teach that multiplication does not automatically come before division, and addition does not automatically come before subtraction.
+
+When appropriate, use the term PEMDAS, but explain its meaning accurately.
+
+Do not present a misleading rule that encourages students to perform all multiplication before division or all addition before subtraction.
+
+Every worked example must demonstrate the correct hierarchy.
+
+Include explanations of why each operation is performed at that stage.
+
+========================================================
+5. REMOVE GENERIC PLACEHOLDERS AND INCOMPLETE EXAMPLES
+========================================================
+
+The existing output contains generic instructional placeholders such as:
+
+"Problem: Solve and justify: Calculate the exact result for Consolidation of Number Sense, Exponents, PEMDAS, Financial Math, and Ratios step-by-step."
+
+This is not an acceptable worked example.
+
+Every worked example must contain:
+
+A. A complete mathematical problem.
+B. A clearly identified first step.
+C. All intermediate calculations.
+D. The reason for each operation.
+E. A correct final answer.
+F. A suitable explanation of the mathematical principle being demonstrated.
+G. A common misconception or likely error when pedagogically appropriate.
+
+Example of acceptable order-of-operations modeling:
+
+Evaluate:
+
+3 × [250 − (4² × 10)] + (2³ × 15)
+
+Step 1: Evaluate the exponents.
+
+4² = 16
+2³ = 8
+
+Step 2: Evaluate the multiplication inside the brackets.
+
+16 × 10 = 160
+
+Step 3: Complete the subtraction inside the brackets.
+
+250 − 160 = 90
+
+Step 4: Evaluate the remaining multiplication.
+
+3 × 90 = 270
+8 × 15 = 120
+
+Step 5: Add the results.
+
+270 + 120 = 390
+
+Final answer: 390.
+
+Teacher explanation:
+Evaluate the grouping symbols and exponents before completing the remaining operations. Multiplication and division have equal precedence, as do addition and subtraction.
+
+Use this as a demonstration of the required level of completeness, not as a fixed example that must appear in every generated lesson.
+
+Generate examples appropriate to the actual selected topic, grade, and learning outcomes.
+
+Never leave instructional placeholders in a completed lesson.
+
+========================================================
+6. REBUILD THE LESSON DEVELOPMENT SEQUENCE
+========================================================
+
+The lesson-development section must describe actual teaching and learning, not merely list broad activities.
+
+Use a practical gradual-release structure:
+
+PHASE 1: INTRODUCTION AND DIAGNOSTIC CHECK
+
+Include:
+- A brief, relevant starter.
+- A short assessment of prerequisite knowledge.
+- Specific questions the teacher can ask.
+- Expected answers or likely responses.
+- An explanation of how the starter connects to the lesson.
+- A clear transition to the lesson objective.
+
+PHASE 2: EXPLICIT TEACHING — I DO
+
+Include:
+- The exact concept being introduced.
+- Clear teacher modeling.
+- At least one complete worked example.
+- Step-by-step calculations where appropriate.
+- Questions that check understanding during the explanation.
+- Likely student misconceptions.
+- Corrections for common errors.
+- Appropriate board work or visual support.
+
+PHASE 3: GUIDED PRACTICE — WE DO
+
+Include:
+- Questions that the teacher and students solve together.
+- Specific prompts for each important step.
+- Opportunities for students to explain their reasoning.
+- Expected answers.
+- Immediate feedback and corrective teaching.
+- A clear indication of when students are ready to continue.
+
+PHASE 4: COLLABORATIVE PRACTICE — YOU DO TOGETHER
+
+Include:
+- A defined pair or group task.
+- Actual mathematical problems.
+- Clear instructions and expected products.
+- Student roles where useful.
+- A requirement that students explain or justify their solutions.
+- A method for checking the accuracy of group work.
+- A short reporting or discussion activity.
+
+PHASE 5: INDEPENDENT PRACTICE — YOU DO ALONE
+
+Include:
+- Actual questions aligned with the objectives.
+- Progression from accessible questions to more demanding ones.
+- A suitable number of questions for the available time.
+- Independent evidence of individual understanding.
+- Clear expectations for showing working.
+
+PHASE 6: ERROR ANALYSIS AND MATHEMATICAL REASONING
+
+Where appropriate, present a realistic incorrect solution.
+
+Show:
+- The original problem.
+- The student's incorrect working.
+- The exact step where the mistake occurs.
+- Why the reasoning is incorrect.
+- The corrected working.
+- The correct answer.
+- A question asking students how to avoid the mistake.
+
+Do not state that a hypothetical student obtained an incorrect answer without showing the working that produced it.
+
+PHASE 7: CLOSURE AND EXIT ASSESSMENT
+
+Include:
+- A concise review of the main concept.
+- One question that assesses the key skill.
+- One reasoning or explanation question when appropriate.
+- A brief opportunity for students to identify what they learned.
+- A clear connection to the next lesson where relevant.
+
+All phases must contain meaningful instructional detail.
+
+Avoid repetitive wording such as "The teacher explains" in every bullet without describing what is explained or how learning is developed.
+
+Use professional, teacher-neutral language and practical, actionable instructions.
+
+========================================================
+7. ENFORCE A REALISTIC 90-MINUTE LESSON
+========================================================
+
+For a Mathematics lesson with a duration of 90 minutes, every phase must have a clearly defined duration.
+
+The sum of all phase durations must equal exactly 90 minutes.
+
+The generator must validate:
+- Total lesson duration.
+- Duration of each main phase.
+- Duration of every timed subphase.
+- No accidental overlapping or double-counting.
+- No subphase duration exceeding its parent phase.
+- No missing or contradictory timing information.
+
+The existing lesson contains examples where a phase is labeled as 20 minutes but its internal activities total 35 minutes, and a closure labeled as 10 minutes contains subactivities totaling 16 minutes.
+
+Prevent these errors programmatically.
+
+Use the following default 90-minute structure when appropriate:
+
+1. Diagnostic starter and connection: 8 minutes.
+2. Objective and prerequisite review: 5 minutes.
+3. Explicit teaching and modeling: 15 minutes.
+4. Guided practice: 15 minutes.
+5. Collaborative practice: 15 minutes.
+6. Independent practice: 17 minutes.
+7. Error analysis and feedback: 8 minutes.
+8. Exit ticket and closure: 7 minutes.
+
+Total: 90 minutes.
+
+These allocations are defaults, not rigid rules. The engine may adjust them to match the topic and instructional demands, provided the total remains exactly 90 minutes and every phase is feasible.
+
+If the selected lesson duration is not 90 minutes, calculate the phase allocations for the actual duration instead of forcing a 90-minute structure.
+
+========================================================
+8. STRENGTHEN LEARNING OBJECTIVES
+========================================================
+
+Generate measurable Mathematics objectives that correspond directly to the selected curriculum outcomes.
+
+Each objective must specify:
+- A measurable student action.
+- The mathematical skill or content.
+- The conditions under which the student performs the task.
+- A measurable criterion for success.
+
+Use a consistent behavioral-objective structure:
+
+Condition + Student performance + Criterion.
+
+Where appropriate, use one shared condition for all objectives, followed by distinct measurable performances and criteria.
+
+Avoid vague verbs such as:
+- Understand.
+- Know.
+- Appreciate.
+- Become familiar with.
+
+Prefer observable verbs such as:
+- Calculate.
+- Simplify.
+- Compare.
+- Represent.
+- Formulate.
+- Explain.
+- Justify.
+- Identify.
+- Analyze.
+- Solve.
+
+Select verbs that are appropriate for the grade and curriculum outcomes.
+
+Do not generate objectives that are never taught or assessed.
+
+Do not claim that students have mastered a skill solely because the lesson includes an explanation of it.
+
+========================================================
+9. ALIGN OBJECTIVES, TEACHING, WORKSHEETS, AND ASSESSMENT
+========================================================
+
+Implement a Mathematics lesson-alignment check.
+
+For every objective, identify:
+
+1. The relevant curriculum outcome.
+2. The teaching activity that develops the skill.
+3. The worked example or demonstration.
+4. The guided-practice question.
+5. The independent-practice question.
+6. The worksheet items.
+7. The assessment item.
+8. The mastery criterion.
+
+Every objective must have adequate instructional coverage and evidence of learning.
+
+Flag objectives that have no corresponding teaching or assessment.
+
+Flag activities that do not support any objective.
+
+Do not allow a lesson to be marked fully aligned when these relationships are missing.
+
+The worksheet and exit ticket must assess the skills actually taught in that specific lesson.
+
+If a lesson teaches nested expressions, its exit ticket should assess nested expressions rather than unrelated percentages or ratios.
+
+If a lesson covers multiple concepts, the assessment should reflect the intended balance of those concepts.
+
+========================================================
+10. GENERATE COMPLETE AND USABLE MATHEMATICS WORKSHEETS
+========================================================
+
+Every generated worksheet must be ready for classroom use without requiring the teacher to invent missing questions.
+
+Include:
+- School name where the existing template supports it.
+- Class or standard.
+- Subject.
+- Topic.
+- Date or lesson identifier where applicable.
+- Student name and date fields.
+- Clear instructions.
+- Numbered questions.
+- Adequate working space.
+- Appropriate mathematical notation.
+- Appropriate difficulty progression.
+- Marks or points where relevant.
+- A separate answer key for the teacher.
+
+Include a sensible combination of:
+- Basic skill questions.
+- Intermediate application questions.
+- More challenging reasoning questions.
+- Error-analysis questions when appropriate.
+
+The worksheet must contain complete questions, not generic placeholders.
+
+All answers must be recalculated and checked against the displayed questions.
+
+Do not repeat the same worksheet across different lesson dates unless the lesson is explicitly a revision session using that worksheet.
+
+When generating multiple lessons for a week, vary the questions according to the learning progression.
+
+Ensure the worksheet can be exported and printed without losing mathematical symbols, exponents, fractions, tables, or working space.
+
+========================================================
+11. CORRECT EXIT TICKET GENERATION
+========================================================
+
+Exit tickets must be specific to the selected lesson.
+
+Generate a short assessment that provides evidence for the main learning objectives.
+
+Where appropriate, include:
+
+Question 1: A direct application of the key mathematical skill.
+
+Question 2: An explanation, justification, comparison, or error-analysis task.
+
+Question 3: An extension question only when the duration and lesson objectives justify it.
+
+For every exit ticket:
+- Include the exact question.
+- Include the correct answer in the teacher key.
+- Include the working or reasoning required.
+- Specify the marks.
+- State the mastery threshold.
+- Identify the action to take when students do not meet the threshold.
+
+Make the marks and mastery criteria consistent.
+
+For example, if a ticket contains 4 marks and the mastery threshold is 75%, the threshold is 3 out of 4 marks.
+
+Do not claim that students have reached 85% mastery based on an assessment that cannot reasonably measure that percentage.
+
+Use the actual results after the lesson to determine whether students achieved the intended outcomes.
+
+Do not automatically reuse an exit ticket across multiple dates.
+
+========================================================
+12. MAKE DIFFERENTIATION SPECIFIC AND ACTIONABLE
+========================================================
+
+Do not generate generic statements such as:
+
+"Provide extra support for struggling learners."
+
+Instead, specify the support, task, and expected result.
+
+For learners requiring support:
+- Reduce the number of operations initially.
+- Use simpler expressions.
+- Highlight grouping symbols.
+- Provide a partially completed example.
+- Use a step-by-step checklist.
+- Include guided prompts.
+- Allow additional practice before moving to nested expressions.
+
+For learners working at the expected level:
+- Provide problems matching the lesson objectives.
+- Require correct working and explanations.
+- Include individual practice.
+
+For advanced learners:
+- Introduce more complex but appropriate expressions.
+- Ask students to identify and correct errors.
+- Require comparisons of different solution methods.
+- Include mathematical reasoning or problem formulation.
+
+For learners who benefit from language support:
+- Explain key mathematical vocabulary.
+- Provide sentence frames for mathematical explanations.
+- Use visual representations when appropriate.
+
+Every differentiation strategy must relate directly to the lesson's mathematical content.
+
+Avoid copying identical differentiation sections across unrelated lessons.
+
+========================================================
+13. IMPROVE MATHEMATICS CONTENT NOTES
+========================================================
+
+Content Notes must provide accurate, concise, student-friendly explanations suitable for students to copy into their exercise books.
+
+Include:
+- The key definition or rule.
+- A clearly explained procedure.
+- At least one complete example when appropriate.
+- A short explanation of common errors.
+- A useful summary.
+
+Separate student-facing notes from teacher-only guidance.
+
+Do not place lengthy administrative commentary, vague teaching advice, or unsupported curriculum claims in the student notes.
+
+Use readable formatting, correctly rendered symbols, and appropriate examples for Standard 6.
+
+========================================================
+14. IMPROVE RESOURCES AND BELIZEAN CONTEXTS
+========================================================
+
+Generate resources that support the selected Mathematics outcomes.
+
+Use meaningful local contexts where they improve learning, such as:
+- Belizean dollars.
+- School fundraising.
+- Shop purchases and discounts.
+- Cooperative budgeting.
+- Transport costs.
+- Agricultural production.
+- Tourism.
+- Water use.
+- Community projects.
+
+Do not insert a local context merely to make a question appear relevant.
+
+Ensure the context is mathematically coherent and age-appropriate.
+
+For financial questions:
+- State the currency clearly.
+- Ensure totals and change are correct.
+- Check decimal places and rounding where relevant.
+
+For ratio questions:
+- Identify the quantities being compared.
+- Keep units clear.
+- Check that calculations match the stated relationship.
+
+For exponents:
+- Distinguish repeated multiplication from multiplication by the exponent.
+- Check all exponent calculations.
+
+For order of operations:
+- Check grouping, precedence, and arithmetic.
+
+Use visuals only when they genuinely support the mathematical task.
+
+Do not generate decorative images that obscure mathematical information.
+
+========================================================
+15. FIX REPETITION AND CROSS-DATE CONTAMINATION
+========================================================
+
+When generating a series of Mathematics lessons:
+
+1. Give each lesson a distinct instructional purpose.
+2. Use the previous lesson's learning evidence to inform the next lesson when such evidence is available.
+3. Develop skills progressively.
+4. Avoid duplicating worksheets, worked examples, and exit tickets without an instructional reason.
+5. Preserve the selected week, topic, and date.
+6. Do not pull questions from another class, subject, cycle, or week.
+7. Do not use previous lesson content as the main focus unless the current lesson explicitly calls for revision or remediation.
+
+If previous student assessment data is unavailable, do not invent it.
+
+Instead, use a diagnostic check to establish students' readiness.
+
+========================================================
+16. MAKE POST-TEACHING REFLECTIONS EVIDENCE-BASED
+========================================================
+
+Do not generate a completed reflection that pretends the lesson has already occurred.
+
+Provide a clearly labeled editable reflection section with prompts such as:
+
+- Which objectives did students achieve?
+- What evidence supports this conclusion?
+- Which errors or misconceptions were observed?
+- Which students or groups require additional support?
+- Which teaching strategy worked particularly well?
+- What should be changed in the next lesson?
+
+If the system has actual recorded assessment results, it may summarize those results accurately.
+
+If results are unavailable, leave the reflection as a teacher-completion section.
+
+Never fabricate student performance, names, scores, or classroom events.
+
+========================================================
+17. PROFESSIONAL FORMATTING AND EXPORT
+========================================================
+
+Improve Mathematics-specific formatting without redesigning the entire application.
+
+The final plan must:
+- Use clear section headings.
+- Use consistent fonts and spacing.
+- Present lesson procedures as readable bullet points.
+- Keep questions separate from answer keys.
+- Display mathematical expressions correctly.
+- Avoid raw HTML or Markdown symbols.
+- Avoid malformed tables.
+- Prevent text overflow and broken page layouts.
+- Keep teacher notes distinct from student-facing material.
+- Use consistent labels for lesson phases and timings.
+
+Verify that mathematical notation survives:
+- On-screen rendering.
+- Word export.
+- PDF export.
+- PowerPoint export.
+- Worksheet export.
+- Print preview.
+
+Use appropriate math-safe formatting or rendering methods already supported by the project.
+
+Do not claim exports are fixed without testing them.
+
+========================================================
+18. ADD AUTOMATED MATHEMATICS QUALITY CHECKS
+========================================================
+
+Implement validation before a generated Mathematics lesson is saved or displayed as complete.
+
+At minimum, validate:
+
+A. Curriculum alignment:
+- Selected class.
+- Selected subject.
+- Selected topic and subtopic.
+- Selected cycle and week.
+- Existing curriculum outcomes.
+
+B. Mathematical correctness:
+- Valid notation.
+- Correct calculations.
+- Correct answer keys.
+- Correct worked examples.
+- Correct units and currency where applicable.
+
+C. Instructional completeness:
+- Measurable objectives.
+- Actual teaching procedures.
+- Complete worked examples.
+- Guided practice.
+- Independent practice.
+- Differentiation.
+- Closure.
+- Assessment.
+
+D. Internal consistency:
+- Lesson duration.
+- Phase timing.
+- Objective-to-assessment alignment.
+- Question-to-answer-key alignment.
+- Worksheet-to-lesson alignment.
+- Consistent marks and mastery thresholds.
+
+E. Output quality:
+- No unresolved placeholders.
+- No missing mathematical operators.
+- No empty required sections.
+- No accidental duplicated resources.
+- No corrupted notation in generated exports.
+
+Use explicit validation results such as:
+- PASS
+- WARNING
+- FAIL
+
+A FAIL must identify the precise problem and the affected section.
+
+Do not hide validation errors behind vague messages such as "Alignment Incomplete."
+
+Where safe automatic correction is possible, correct the issue and validate the result again.
+
+If correction would require changing the intended mathematical meaning or curriculum outcome, ask for review instead of silently changing it.
+
+========================================================
+19. TEST THE ACTUAL IMPLEMENTATION
+========================================================
+
+Do not stop after modifying the generation prompt.
+
+Inspect and modify the real code that controls Mathematics generation.
+
+Add or update tests for:
+
+TEST 1: Arithmetic accuracy
+Verify:
+3 × [250 − (4² × 10)] + (2³ × 15) = 390
+
+TEST 2: Nested-expression evaluation
+Verify:
+120 + 4 × [3³ − (5 × 2) + 16 ÷ 2³] = 196
+
+TEST 3: Error-analysis correction
+Verify:
+100 − 4 × (2³ + 2) = 60
+
+TEST 4: Multiplication-symbol preservation
+Verify that expressions such as:
+5 × [2 × (3² + 1)] × 4
+retain every multiplication operator throughout generation and export.
+
+TEST 5: Left-to-right precedence
+Verify that multiplication and division are evaluated from left to right when they occur at the same precedence level.
+
+TEST 6: Timing validation
+Verify that the sum of all lesson-phase durations equals the selected lesson duration and that nested activity timings are consistent.
+
+TEST 7: Objective alignment
+Verify that every learning objective is taught and assessed.
+
+TEST 8: Worksheet and answer-key consistency
+Verify that every answer corresponds to the correct generated question.
+
+TEST 9: Exit-ticket consistency
+Verify that marks, answers, mastery thresholds, and remediation actions agree.
+
+TEST 10: Duplicate-resource detection
+Verify that separate lessons do not accidentally receive identical worksheets and exit tickets when their intended learning differs.
+
+TEST 11: Curriculum isolation
+Verify that Mathematics generation uses the selected class, week, topic, and curriculum outcomes.
+
+TEST 12: Subject isolation
+Verify that Science, Language Arts, Belizean Studies, Health, and other non-Mathematics generation behavior remains unchanged.
+
+TEST 13: Export preservation
+Verify mathematical notation and layout in every export format supported by the application.
+
+Use the project's existing test framework and coding conventions.
+
+Do not introduce a new testing framework unnecessarily.
+
+Run the available tests, type checks, lint checks, and build checks relevant to the changes.
+
+Fix any regressions caused by the implementation.
+
+========================================================
+20. FINAL ACCEPTANCE CRITERIA
+========================================================
+
+The task is complete only when:
+
+1. The Mathematics engine produces lessons aligned with the selected curriculum.
+2. Mathematical notation is complete and unambiguous.
+3. Numerical answers have been independently checked.
+4. Worked examples show all necessary steps.
+5. Lesson development is practical, detailed, and sequential.
+6. Lesson timings are internally consistent.
+7. Objectives are measurable and assessed.
+8. Worksheets contain complete, relevant questions.
+9. Answer keys are accurate.
+10. Exit tickets assess the actual lesson objectives.
+11. Differentiation includes specific tasks and support.
+12. Reflection sections do not fabricate classroom evidence.
+13. Resources are appropriate to the topic and grade.
+14. Duplicate or unrelated content is prevented.
+15. Word, PDF, PowerPoint, and print outputs preserve mathematical notation.
+16. Existing user data and saved plans remain intact.
+17. All non-Mathematics lesson engines continue to function as before.
+18. Relevant tests and build checks pass.
+
+========================================================
+21. REQUIRED FINAL REPORT
+========================================================
+
+After implementation, report:
+
+1. The root causes identified.
+2. The files and components changed.
+3. The specific Mathematics-generation defects corrected.
+4. The mathematical validation approach implemented.
+5. The timing and alignment checks added.
+6. The worksheet and exit-ticket improvements made.
+7. The automated tests executed and their results.
+8. The export formats tested.
+9. Any unresolved defects or limitations.
+10. Confirmation that non-Mathematics engines were preserved and tested.
+
+Be precise. Do not claim that a test passed unless it was actually executed successfully.
+
+If you cannot access or modify a required file, state that limitation clearly.
+
+BEGIN by inspecting the existing codebase and tracing the Mathematics lesson-generation workflow. Then implement, test, and report the corrections.
